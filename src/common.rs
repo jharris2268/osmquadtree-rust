@@ -7,21 +7,57 @@ use core::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::io::{Error,ErrorKind,Result};
 
+#[derive(Debug,Eq,PartialEq,Ord,PartialOrd,Copy,Clone)]
+pub enum Changetype {
+    Normal,
+    Delete,
+    Modify,
+    Create,
+    Removed,
+    Unchanged
+}
+
+impl std::fmt::Display for Changetype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::Normal => "Normal",
+            Self::Delete => "Delete",
+            Self::Modify => "Modify",
+            Self::Create => "Create",
+            Self::Removed => "Removed",
+            Self::Unchanged => "Unchanged"
+        })
+    }
+}
+        
+
+pub fn get_changetype(ct: u64) -> Changetype {
+    match ct {
+        0 => Changetype::Normal,
+        1 => Changetype::Delete,
+        2 => Changetype::Modify,
+        3 => Changetype::Create,
+        4 => Changetype::Removed,
+        5 => Changetype::Unchanged,
+        _ => {panic!("wronge changetype"); }
+    }
+}
+
 #[derive(Debug,Eq)]
 pub struct Common {
     pub id: i64,
-    pub changetype: u64,
+    pub changetype: Changetype,
     pub info: info::Info, 
     pub tags: Vec<tags::Tag>,
     pub quadtree: quadtree::Quadtree,
 }
 
 impl Common {
-    pub fn new(id: i64, ct: u64) -> Common {
+    pub fn new(id: i64, ct: Changetype) -> Common {
         Common{id:id, changetype: ct, info: info::Info::new(), tags: Vec::new(), quadtree: quadtree::Quadtree::new(-1)}
     }
 
-    pub fn read(changetype: u64, strings: &Vec<String>, pbftags: &Vec<read_pbf::PbfTag>, minimal: bool) -> Result<Common> {
+    pub fn read(changetype: Changetype, strings: &Vec<String>, pbftags: &Vec<read_pbf::PbfTag>, minimal: bool) -> Result<Common> {
 
         let mut res = Common::new(0,changetype);
         

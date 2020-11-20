@@ -4,10 +4,13 @@ use std::io::{Error,Result,ErrorKind};
 //use core::cmp::Ordering;
 pub use super::node::Node;
 pub use super::way::Way;
-pub use super::relation::Relation;
+pub use super::relation::{Relation,ElementType,Member};
+pub use super::tags::Tag;
+pub use super::common::Changetype;
 use super::dense::Dense;
-use super::common::PackStringTable;
+use super::common::{PackStringTable,get_changetype};
 use super::write_pbf;
+
 
 
 
@@ -98,18 +101,18 @@ impl PrimitiveBlock {
         Ok(res)
     }
     
-    fn find_changetype(data: &[u8], ischange: bool) -> u64 {
-        if !ischange { return 0; }
+    fn find_changetype(data: &[u8], ischange: bool) -> Changetype {
+        if !ischange { return Changetype::Normal; }
         for x in read_pbf::IterTags::new(&data, 0) {
             match x {
-                read_pbf::PbfTag::Value(10,ct) => return ct,
+                read_pbf::PbfTag::Value(10,ct) => {return get_changetype(ct);},
                 _ => {},
             }
         }
-        0
+        Changetype::Normal
     }
     
-    fn read_group(&mut self, strings: &Vec<String>, changetype: u64, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_group(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
         let mut count=0;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
@@ -124,23 +127,23 @@ impl PrimitiveBlock {
         Ok(count)
     }
     
-    fn read_node(&mut self, strings: &Vec<String>, changetype: u64, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_node(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
         let n = Node::read(changetype, &strings, &data, minimal)?;
         self.nodes.push(n);
         Ok(1)
         
     }
-    fn read_way(&mut self, strings: &Vec<String>, changetype: u64, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_way(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
         let w = Way::read(changetype, &strings, &data, minimal)?;
         self.ways.push(w);
         Ok(1)
     }
-    fn read_relation(&mut self, strings: &Vec<String>, changetype: u64, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_relation(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
         let r = Relation::read(changetype, &strings, &data, minimal)?;
         self.relations.push(r);
         Ok(1)
     }
-    fn read_dense(&mut self, strings: &Vec<String>, changetype: u64, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_dense(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
         let nn = Dense::read(changetype,&strings, &data, minimal)?;
         let nl = nn.len() as u64;
         for n in nn {

@@ -18,7 +18,7 @@ pub mod stringutils;
 pub mod utils;
 pub mod convertblocks;
 pub mod sortblocks;
-
+pub mod read_xml;
 
 #[cfg(test)]
 mod tests {

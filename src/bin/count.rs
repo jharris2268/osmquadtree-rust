@@ -13,7 +13,7 @@ use osmquadtree::node;
 use osmquadtree::way;
 use osmquadtree::relation;
 use osmquadtree::minimal_block;
-
+use osmquadtree::primitive_block::Changetype;
 use osmquadtree::stringutils::StringUtils;
 
 //use osmquadtree::dense;
@@ -26,8 +26,11 @@ use std::thread;
 use std::sync::mpsc;
 
 use std::io::BufReader;
+use std::fmt;
+use std::collections::BTreeMap;
 
 use cpuprofiler::PROFILER;
+use chrono::NaiveDateTime;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -35,6 +38,15 @@ macro_rules! println_stderr(
         r.expect("failed printing to stderr");
     } }
 );
+
+const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%S";
+fn timestamp_string(ts: i64) -> String {
+    let dt = NaiveDateTime::from_timestamp(ts,0);
+    dt.format(TIMEFORMAT).to_string()
+}
+    
+    
+
 
 #[derive(Debug)]
 struct NodeCount {
@@ -97,6 +109,18 @@ impl NodeCount {
     }
         
 }
+
+impl fmt::Display for NodeCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "nodes: {} objects: {} => {} [{} => {}] {{{}, {}, {}, {}}}",
+            self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
+            self.min_lon, self.min_lat, self.max_lon, self.max_lat)
+        
+    }
+}
+    
+    
+
 #[derive(Debug)]        
 struct WayCount {
     num: i64,
@@ -172,6 +196,16 @@ impl WayCount {
     }
     
 }
+
+impl fmt::Display for WayCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ways: {} objects: {} => {} [{} => {}] {{{} refs, {} to {}. Longest: {}}}",
+            self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
+            self.num_refs, self.min_ref, self.max_ref, self.max_refs_len)
+        
+    }
+}
+
 #[derive(Debug)]
 struct RelationCount {
     num: i64,
@@ -233,6 +267,15 @@ impl RelationCount {
     }
 }
 
+impl fmt::Display for RelationCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "relation. {} object. {} => {} [{} => {}] {{Longest: {}, {} empties.}}",
+            self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
+            self.max_mems_len, self.num_empties)
+        
+    }
+}
+    
 #[derive(Debug)]
 struct Count {
     node: NodeCount,
@@ -274,7 +317,66 @@ impl Count {
         self.relation.add_other(&other.relation);
     }
 }
-
+impl fmt::Display for Count {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}\n{}\n{}", self.node, self.way, self.relation)
+    }
+}
+    
+    
+#[derive(Debug)]
+struct CountChange {
+    node: BTreeMap<Changetype,NodeCount>,
+    way: BTreeMap<Changetype,WayCount>,
+    relation: BTreeMap<Changetype,RelationCount>,
+}
+impl CountChange {
+    fn new() -> CountChange {
+        CountChange{node: BTreeMap::new(), way: BTreeMap::new(), relation: BTreeMap::new()}
+    }
+    
+    fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
+        for nd in &bl.nodes {
+            if !self.node.contains_key(&nd.common.changetype) {
+                self.node.insert(nd.common.changetype, NodeCount::new());
+            }
+            self.node.get_mut(&nd.common.changetype).unwrap().add(&nd);
+        }
+        for wy in &bl.ways {
+            if !self.way.contains_key(&wy.common.changetype) {
+                self.way.insert(wy.common.changetype, WayCount::new());
+            }
+            self.way.get_mut(&wy.common.changetype).unwrap().add(&wy);
+            
+        }
+        for rl in &bl.relations {
+            if !self.relation.contains_key(&rl.common.changetype) {
+                self.relation.insert(rl.common.changetype, RelationCount::new());
+            }
+            self.relation.get_mut(&rl.common.changetype).unwrap().add(&rl);
+            
+        }
+    }
+    
+    
+}
+impl fmt::Display for CountChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut p=Vec::new();
+        for (a,b) in &self.node {
+            p.push(format!("{} {}", a, b));
+        }
+        for (a,b) in &self.way {
+            p.push(format!("{} {}", a, b));
+        }
+        for (a,b) in &self.relation {
+            p.push(format!("{} {}", a, b));
+        }
+        
+        write!(f, "{}",  p.join("\n"))
+        
+    }
+}
 fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64)*1.0 + (dur.subsec_nanos() as f64)*0.000000001
 }
@@ -393,61 +495,69 @@ fn main() {
         PROFILER.lock().unwrap().start(prof.clone()).expect("couldn't start");
     }
     
-    let f = File::open(fname).expect("file not present");
+    let f = File::open(&fname).expect("file not present");
     let mut fbuf = BufReader::new(f);
    
     
-    let mut cc = Count::new();
-    if numchan == 0 {
+    
+    if fname.ends_with(".osc") {
+        let mut cn = CountChange::new();
+        let data = osmquadtree::read_xml::read_xml_change(fbuf).expect("failed to read osc");
         
-        cc = count_all(crate::read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal);
+        cn.add_primitive(&data);
+        println!("{}", cn);
+    } else if fname.ends_with(".osc.gz") {
+        let mut cn = CountChange::new();
+        let gzbuf = BufReader::new(flate2::bufread::GzDecoder::new(fbuf));
+        //Box::new(gzbuf) as Box<dyn std::io::BufRead>
+        let data = osmquadtree::read_xml::read_xml_change(gzbuf).expect("failed to read osc");
         
-    } else if numchan > 8 {
-        panic!("numchan must be between 0 & 8");
+        cn.add_primitive(&data);
+        println!("{}", cn);
     } else {
-    
-        let mut senders = Vec::new();
-        let mut results = Vec::new();
+        let mut cc = Count::new();
+        if numchan == 0 {
         
-        for i in 0..numchan {
-            let (s,r) = mpsc::sync_channel(1);
-            senders.push(s);
-            results.push(thread::spawn(move || count_all(r.iter(), i as i64, minimal)));
-        }
+            cc = count_all(read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal);
         
+        } else if numchan > 8 {
+            panic!("numchan must be between 0 & 8");
+        } else {
         
-        for (i,fb) in crate::read_file_block::ReadFileBlocks::new(&mut fbuf).enumerate() {
-            senders[i%numchan].send(fb).unwrap();
-        }        
-        for s in senders {
-            drop(s);
-        }
-        
-        
-        for r in results {
-            match r.join() {
-                Ok(cci) => cc.add_other(&cci),
-                Err(e) => println!("?? {:?}", e),
+            let mut senders = Vec::new();
+            let mut results = Vec::new();
+            
+            for i in 0..numchan {
+                let (s,r) = mpsc::sync_channel(1);
+                senders.push(s);
+                results.push(thread::spawn(move || count_all(r.iter(), i as i64, minimal)));
             }
+            
+            
+            for (i,fb) in read_file_block::ReadFileBlocks::new(&mut fbuf).enumerate() {
+                senders[i%numchan].send(fb).unwrap();
+            }        
+            for s in senders {
+                drop(s);
+            }
+            
+            
+            for r in results {
+                match r.join() {
+                    Ok(cci) => cc.add_other(&cci),
+                    Err(e) => println!("?? {:?}", e),
+                }
+            }
+            
         }
-        
+        println!("{}", cc);
     }
-    
+        
     if prof.len()>0 {
         PROFILER.lock().unwrap().stop().expect("couldn't stop");
     }
     
     
-    println!("nodes: {} objects: {} => {} [{} => {}] {{{}, {}, {}, {}}}",
-            cc.node.num, cc.node.min_id, cc.node.max_id, cc.node.min_ts, cc.node.max_ts,
-            cc.node.min_lon, cc.node.min_lat, cc.node.max_lon, cc.node.max_lat);
     
-    println!("ways: {} objects: {} => {} [{} => {}] {{{} refs, {} to {}. Longest: {}}}",
-            cc.way.num, cc.way.min_id, cc.way.max_id, cc.way.min_ts, cc.way.max_ts,
-            cc.way.num_refs, cc.way.min_ref, cc.way.max_ref, cc.way.max_refs_len);
-            
-    println!("relation. {} object. {} => {} [{} => {}] {{Longest: {}, {} empties.}}",
-            cc.relation.num, cc.relation.min_id, cc.relation.max_id, cc.relation.min_ts, cc.relation.max_ts,
-            cc.relation.max_mems_len, cc.relation.num_empties);
     
 }

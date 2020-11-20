@@ -1,11 +1,11 @@
 use super::read_pbf;
-use super::common;
+use super::common::{Common,Changetype,PackStringTable};
 use super::write_pbf;
 use std::io::{Result,Error,ErrorKind};
 use core::cmp::Ordering;
 #[derive(Debug,Eq)]
 pub struct Relation {
-    pub common: common::Common,
+    pub common: Common,
     pub members: Vec<Member>
 }
 
@@ -37,15 +37,19 @@ pub struct Member {
     mem_type: ElementType,
     mem_ref: i64,
 }
-
-impl Relation {
-    pub fn new(id: i64) -> Relation {
-        Relation{common: common::Common::new(id,0), members: Vec::new()}
+impl Member {
+    pub fn new(role: String, mem_type: ElementType, mem_ref: i64) -> Member {
+        Member{role,mem_type,mem_ref}
     }
-    pub fn read(changetype: u64, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Relation> {
+}
+impl Relation {
+    pub fn new(id: i64, changetype: Changetype) -> Relation {
+        Relation{common: Common::new(id,changetype), members: Vec::new()}
+    }
+    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Relation> {
         
         let tgs = read_pbf::read_all_tags(&data,0);
-        let cc = common::Common::read(changetype, &strings,&tgs, minimal)?;
+        let cc = Common::read(changetype, &strings,&tgs, minimal)?;
         
         let mut res = Relation{common: cc, members: Vec::new()};
         
@@ -86,7 +90,7 @@ impl Relation {
         
         Ok(res)
     }
-    pub fn pack(&self, pack_strings: &mut Box<common::PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
+    pub fn pack(&self, pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
         
         let l = self.common.pack_length(pack_strings, include_qts)

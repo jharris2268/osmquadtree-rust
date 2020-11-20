@@ -2,13 +2,13 @@ use super::node;
 use super::read_pbf;
 use super::quadtree;
 use super::tags;
-use super::common;
+use super::common::{Changetype,PackStringTable};
 use super::write_pbf;
 use std::io::{Result,Error,ErrorKind};
 pub struct Dense {}
 
 impl Dense {
-    pub fn read(changetype: u64, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Vec<node::Node>> {
+    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Vec<node::Node>> {
         
         let mut res = Vec::new();
         
@@ -95,7 +95,7 @@ impl Dense {
         return Ok(res);
     }
     
-    fn pack_info(feats: &[node::Node], pack_strings: &mut Box<common::PackStringTable>) -> Result<Vec<u8>> {
+    fn pack_info(feats: &[node::Node], pack_strings: &mut Box<PackStringTable>) -> Result<Vec<u8>> {
         
         let vs = write_pbf::pack_int(feats.iter().map( |n| { n.common.info.version as u64 }));
         let ts = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.info.timestamp }));
@@ -117,7 +117,7 @@ impl Dense {
     }
         
     
-    pub fn pack(feats: &[node::Node], pack_strings: &mut Box<common::PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
+    pub fn pack(feats: &[node::Node], pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
         let ids = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.id }));
         let lats = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lat }));

@@ -1,5 +1,5 @@
 use super::read_pbf;
-use super::common;
+use super::common::{Common,Changetype,PackStringTable};
 
 use std::io::{Result,};
 use core::cmp::Ordering;
@@ -7,18 +7,18 @@ use super::write_pbf;
 
 #[derive(Debug,Eq)]
 pub struct Way {
-    pub common: common::Common,
+    pub common: Common,
     pub refs: Vec<i64>
 }
 
 impl Way {
-    pub fn new(id: i64) -> Way {
-        Way{common: common::Common::new(id,0), refs: Vec::new()}
+    pub fn new(id: i64, changetype: Changetype) -> Way {
+        Way{common: Common::new(id,changetype), refs: Vec::new()}
     }
-    pub fn read(changetype: u64, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Way> {
+    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Way> {
         
         let tgs = read_pbf::read_all_tags(&data,0);
-        let cc = common::Common::read(changetype, &strings, &tgs, minimal)?;
+        let cc = Common::read(changetype, &strings, &tgs, minimal)?;
         
         let mut w = Way{common: cc, refs: Vec::new()};
         for t in read_pbf::IterTags::new(&data,0) {
@@ -29,7 +29,7 @@ impl Way {
         }
         Ok(w)
     }
-    pub fn pack(&self, pack_strings: &mut Box<common::PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
+    pub fn pack(&self, pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
         let refs = write_pbf::pack_delta_int_ref(self.refs.iter());
         
