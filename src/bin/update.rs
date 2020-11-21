@@ -33,9 +33,6 @@ fn main() {
     }
     
     
-    if op != "initial" {
-        panic!("unknown op {}", op);
-    }
     
     if op == "initial" {
         
@@ -44,6 +41,10 @@ fn main() {
         }
         
         write_index_file(&infn, &outfn, numchan);
+    } else op == "update" {
+        
+        panic!("not impl");
     }
+        
     
 }
