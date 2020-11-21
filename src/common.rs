@@ -9,12 +9,12 @@ use std::io::{Error,ErrorKind,Result};
 
 #[derive(Debug,Eq,PartialEq,Ord,PartialOrd,Copy,Clone)]
 pub enum Changetype {
-    Normal,
-    Delete,
-    Modify,
-    Create,
-    Removed,
-    Unchanged
+    Normal, 
+    Delete, 
+    Remove, 
+    Unchanged, 
+    Modify, 
+    Create
 }
 
 impl std::fmt::Display for Changetype {
@@ -22,10 +22,10 @@ impl std::fmt::Display for Changetype {
         write!(f, "{}", match self {
             Self::Normal => "Normal",
             Self::Delete => "Delete",
+            Self::Remove => "Remove",
+            Self::Unchanged => "Unchanged",
             Self::Modify => "Modify",
             Self::Create => "Create",
-            Self::Removed => "Removed",
-            Self::Unchanged => "Unchanged"
         })
     }
 }
@@ -35,10 +35,10 @@ pub fn get_changetype(ct: u64) -> Changetype {
     match ct {
         0 => Changetype::Normal,
         1 => Changetype::Delete,
-        2 => Changetype::Modify,
-        3 => Changetype::Create,
-        4 => Changetype::Removed,
-        5 => Changetype::Unchanged,
+        2 => Changetype::Remove,
+        3 => Changetype::Unchanged,
+        4 => Changetype::Modify,
+        5 => Changetype::Create,
         _ => {panic!("wronge changetype"); }
     }
 }

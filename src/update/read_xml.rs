@@ -1,11 +1,15 @@
+use std::io::{BufRead,Error,Result,ErrorKind};
+use std::collections::BTreeMap;
+
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
+use osmquadtree::primitive_block::{Node,Way,Relation,Tag,Member,ElementType,Changetype};
+use osmquadtree::utils::Checktime;
+
 use quick_xml::Reader;
 use quick_xml::events::{Event,BytesStart};
-
-use super::primitive_block::{Node,Way,Relation,PrimitiveBlock,Tag,Member,ElementType,Changetype};
-use super::quadtree::Quadtree;
-use std::io::{BufRead,Error,Result,ErrorKind};
-use super::utils::Checktime;
-
 use chrono::NaiveDateTime;
 
 const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
@@ -289,13 +293,62 @@ fn read_relation<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &Byte
     
     
     
+pub struct ChangeBlock {
+    pub nodes: BTreeMap<i64,Node>,
+    pub ways: BTreeMap<i64,Way>,
+    pub relations: BTreeMap<i64,Relation>
+}
+impl ChangeBlock {
+    pub fn new() -> ChangeBlock {
+        ChangeBlock{nodes: BTreeMap::new(), ways: BTreeMap::new(), relations: BTreeMap::new()}
+    }
     
+    pub fn add_node(&mut self, n: Node) -> bool {
+        if !self.nodes.contains_key(&n.common.id) {
+            self.nodes.insert(n.common.id, n);
+            return true;
+        }
+        
+        let curr = self.nodes.get_mut(&n.common.id).unwrap();
+        if n.common.info.version > curr.common.info.version {
+            *curr = n;
+        }
+        false
+    }
+    
+    pub fn add_way(&mut self, w: Way) -> bool {
+        if !self.ways.contains_key(&w.common.id) {
+            self.ways.insert(w.common.id, w);
+            return true;
+        }
+        
+        let curr = self.ways.get_mut(&w.common.id).unwrap();
+        if w.common.info.version > curr.common.info.version {
+            *curr = w;
+        }
+        false
+    }
+    
+    pub fn add_relation(&mut self, r: Relation) -> bool {
+        if !self.relations.contains_key(&r.common.id) {
+            self.relations.insert(r.common.id, r);
+            return true;
+        }
+        
+        let curr = self.relations.get_mut(&r.common.id).unwrap();
+        if r.common.info.version > curr.common.info.version {
+            *curr = r;
+        }
+        false
+    }
+    
+}
     
 
-pub fn read_xml_change<T: BufRead>(inf: T) -> Result<PrimitiveBlock> {
+pub fn read_xml_change<T: BufRead>(inf: T) -> Result<Box<ChangeBlock>> {
     
-    let mut res = PrimitiveBlock::new(0,0);
-    res.quadtree=Quadtree::new(-2);
+    let mut res = Box::new(ChangeBlock::new());
+    
     let mut reader = Reader::from_reader(inf);
     
     let mut buf = Vec::new();
@@ -315,9 +368,9 @@ pub fn read_xml_change<T: BufRead>(inf: T) -> Result<PrimitiveBlock> {
                     b"delete" => { ct = Some(Changetype::Delete); },
                     b"modify" => { ct = Some(Changetype::Modify); },
                     b"create" => { ct = Some(Changetype::Create); },
-                    b"node" => { res.nodes.push(read_node(&mut reader, &mut buf2, e, ct, true)?); },
-                    b"way" => { res.ways.push(read_way(&mut reader, &mut buf2, e, ct, true)?); },
-                    b"relation" => { res.relations.push(read_relation(&mut reader, &mut buf2, e, ct, true)?); },
+                    b"node" => { res.add_node(read_node(&mut reader, &mut buf2, e, ct, true)?); },
+                    b"way" => { res.add_way(read_way(&mut reader, &mut buf2, e, ct, true)?); },
+                    b"relation" => { res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, true)?); },
                     _ => { return Err(Error::new(ErrorKind::Other, format!("unexpected start tag {} {}", std::str::from_utf8(e.name()).expect("?"), reader.buffer_position()))); },
                 }
             },
@@ -327,9 +380,9 @@ pub fn read_xml_change<T: BufRead>(inf: T) -> Result<PrimitiveBlock> {
                     None => {},
                 }
                 match e.name() {
-                    b"node" => { res.nodes.push(read_node(&mut reader, &mut buf2, e, ct, false)?); },
-                    b"way" => { res.ways.push(read_way(&mut reader, &mut buf2, e, ct, false)?); },
-                    b"relation" => { res.relations.push(read_relation(&mut reader, &mut buf2, e, ct, false)?); },
+                    b"node" => { res.add_node(read_node(&mut reader, &mut buf2, e, ct, false)?); },
+                    b"way" => { res.add_way(read_way(&mut reader, &mut buf2, e, ct, false)?); },
+                    b"relation" => { res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, false)?); },
                     _ => { return Err(Error::new(ErrorKind::Other, format!("unexpected empty tag {} {}", std::str::from_utf8(e.name()).expect("?"), reader.buffer_position()))); },
                 }
             },

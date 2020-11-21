@@ -65,7 +65,7 @@ impl MinimalRelation {
 pub struct MinimalBlock {
     pub index: i64,
     pub location: u64,
-    pub quadtree: quadtree::Tuple,
+    pub quadtree: quadtree::Quadtree,
     pub start_date: i64, 
     pub end_date: i64, 
     pub nodes: Vec<MinimalNode>,
@@ -79,7 +79,7 @@ pub struct MinimalBlock {
 impl MinimalBlock {
     pub fn new() -> Box<MinimalBlock> {
         Box::new(MinimalBlock{index:0, location:0,
-            quadtree: quadtree::Tuple::new(0,0,0),
+            quadtree: quadtree::Quadtree::new(-2),
             start_date: 0, end_date: 0,
             nodes: Vec::new(),
             ways: Vec::new(),
@@ -91,7 +91,9 @@ impl MinimalBlock {
         MinimalBlock::read_parts(index,location,data,ischange,true,true,true)
     }
         
-    
+    pub fn len(&self) -> usize {
+        self.nodes.len() + self.ways.len() + self.relations.len()
+    }
     pub fn read_parts(index: i64, location: u64, data: &[u8], ischange: bool, readnodes: bool, readways: bool, readrelations: bool) -> Result<Box<MinimalBlock>, Error> {
         
         let mut res = MinimalBlock::new();
@@ -105,7 +107,7 @@ impl MinimalBlock {
                 read_pbf::PbfTag::Data(1, _) => {},
                 read_pbf::PbfTag::Data(2, d) => groups.push(d),
                 
-                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Tuple::from_integer(read_pbf::unzigzag(qt))?,
+                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(unzigzag(qt)),
                 read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,
                 

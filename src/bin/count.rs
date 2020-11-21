@@ -12,10 +12,11 @@ use osmquadtree::primitive_block;
 use osmquadtree::node;
 use osmquadtree::way;
 use osmquadtree::relation;
+use osmquadtree::common::get_changetype;
 use osmquadtree::minimal_block;
 use osmquadtree::primitive_block::Changetype;
 use osmquadtree::stringutils::StringUtils;
-
+use osmquadtree::update::{read_xml_change,ChangeBlock};
 //use osmquadtree::dense;
 //use osmquadtree::common;
 //use osmquadtree::info;
@@ -275,7 +276,12 @@ impl fmt::Display for RelationCount {
         
     }
 }
-    
+
+trait CountBlocks {
+    fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock);
+    fn add_minimal(&mut self, mb: &minimal_block::MinimalBlock);
+}
+
 #[derive(Debug)]
 struct Count {
     node: NodeCount,
@@ -286,7 +292,13 @@ impl Count {
     fn new() -> Count {
         Count{node: NodeCount::new(), way: WayCount::new(), relation: RelationCount::new()}
     }
-    
+    fn add_other(&mut self, other: &Count) {
+        self.node.add_other(&other.node);
+        self.way.add_other(&other.way);
+        self.relation.add_other(&other.relation);
+    }
+}
+impl CountBlocks for Count {
     fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
         for nd in &bl.nodes {
             self.node.add(&nd);
@@ -310,13 +322,9 @@ impl Count {
             self.relation.add_minimal(&rl);
         }
     }
-    
-    fn add_other(&mut self, other: &Count) {
-        self.node.add_other(&other.node);
-        self.way.add_other(&other.way);
-        self.relation.add_other(&other.relation);
-    }
 }
+
+    
 impl fmt::Display for Count {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}\n{}\n{}", self.node, self.way, self.relation)
@@ -334,7 +342,30 @@ impl CountChange {
     fn new() -> CountChange {
         CountChange{node: BTreeMap::new(), way: BTreeMap::new(), relation: BTreeMap::new()}
     }
-    
+    fn add_changeblock(&mut self, bl: &ChangeBlock) {
+        for (_,nd) in &bl.nodes {
+            if !self.node.contains_key(&nd.common.changetype) {
+                self.node.insert(nd.common.changetype, NodeCount::new());
+            }
+            self.node.get_mut(&nd.common.changetype).unwrap().add(&nd);
+        }
+        for (_,wy) in &bl.ways {
+            if !self.way.contains_key(&wy.common.changetype) {
+                self.way.insert(wy.common.changetype, WayCount::new());
+            }
+            self.way.get_mut(&wy.common.changetype).unwrap().add(&wy);
+            
+        }
+        for (_,rl) in &bl.relations {
+            if !self.relation.contains_key(&rl.common.changetype) {
+                self.relation.insert(rl.common.changetype, RelationCount::new());
+            }
+            self.relation.get_mut(&rl.common.changetype).unwrap().add(&rl);
+            
+        }
+    }
+}
+impl CountBlocks for CountChange {
     fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
         for nd in &bl.nodes {
             if !self.node.contains_key(&nd.common.changetype) {
@@ -358,8 +389,34 @@ impl CountChange {
         }
     }
     
-    
+    fn add_minimal(&mut self, bl: &minimal_block::MinimalBlock) {
+        for nd in &bl.nodes {
+            let ct=get_changetype(nd.changetype as u64);
+            
+            if !self.node.contains_key(&ct) {
+                self.node.insert(ct, NodeCount::new());
+            }
+            self.node.get_mut(&ct).unwrap().add_minimal(&nd);
+        }
+        for wy in &bl.ways {
+            let ct=get_changetype(wy.changetype as u64);
+            if !self.way.contains_key(&ct) {
+                self.way.insert(ct, WayCount::new());
+            }
+            self.way.get_mut(&ct).unwrap().add_minimal(&wy);
+            
+        }
+        for rl in &bl.relations {
+            let ct=get_changetype(rl.changetype as u64);
+            if !self.relation.contains_key(&ct) {
+                self.relation.insert(ct, RelationCount::new());
+            }
+            self.relation.get_mut(&ct).unwrap().add_minimal(&rl);
+            
+        }
+    }    
 }
+
 impl fmt::Display for CountChange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut p=Vec::new();
@@ -382,7 +439,8 @@ fn as_secs(dur: std::time::Duration) -> f64 {
 }
 
 
-fn add_fb(cc: &mut Count, idx: i64, fb: &osmquadtree::read_file_block::FileBlock, minimal: bool, firstthread: bool, lt: &mut std::time::SystemTime, st: &std::time::SystemTime) {
+
+fn add_fb<CT: CountBlocks>(cc: &mut CT, idx: i64, fb: &osmquadtree::read_file_block::FileBlock, minimal: bool, ishchange: bool, firstthread: bool, lt: &mut std::time::SystemTime, st: &std::time::SystemTime) {
     let fbd = fb.data();
                 
     if fb.block_type == "OSMHeader" {
@@ -392,7 +450,7 @@ fn add_fb(cc: &mut Count, idx: i64, fb: &osmquadtree::read_file_block::FileBlock
         //cc.node.num += fbd.len() as i64;
         
         if minimal {
-            match minimal_block::MinimalBlock::read(idx, fb.pos+fb.len, &fbd, false) {
+            match minimal_block::MinimalBlock::read(idx, fb.pos+fb.len, &fbd, ishchange) {
                 Ok(mb) => {
                     if firstthread {
                         let lm=as_secs(lt.elapsed().unwrap());
@@ -411,7 +469,7 @@ fn add_fb(cc: &mut Count, idx: i64, fb: &osmquadtree::read_file_block::FileBlock
         } else {
         
         
-            match primitive_block::PrimitiveBlock::read(idx, fb.pos+fb.len, &fbd, false, minimal) {
+            match primitive_block::PrimitiveBlock::read(idx, fb.pos+fb.len, &fbd, ishchange, minimal) {
                 Ok(pb) => {
                     if firstthread {
                         let lm=as_secs(lt.elapsed().unwrap());
@@ -434,18 +492,18 @@ fn add_fb(cc: &mut Count, idx: i64, fb: &osmquadtree::read_file_block::FileBlock
     
     
 
-fn count_all<I>(recv: I, idx: i64, minimal: bool) -> Count
+fn count_all<I, CT: CountBlocks>(mut cc: CT, recv: I, idx: i64, minimal: bool, ischange: bool) -> CT
 where I: Iterator<Item=osmquadtree::read_file_block::FileBlock>,
 {
     let firstthread=idx==0;
     let mut idx=idx;
-    let mut cc = Count::new();
+    //let mut cc = Count::new();
     
     let st = std::time::SystemTime::now();
     let mut lt = std::time::SystemTime::now();
 
     for fb in recv {
-        add_fb(&mut cc, idx, &fb, minimal, firstthread, &mut lt, &st);
+        add_fb(&mut cc, idx, &fb, minimal, ischange, firstthread, &mut lt, &st);
         idx+=4;
         
     }
@@ -502,23 +560,28 @@ fn main() {
     
     if fname.ends_with(".osc") {
         let mut cn = CountChange::new();
-        let data = osmquadtree::read_xml::read_xml_change(fbuf).expect("failed to read osc");
+        let data = read_xml_change(fbuf).expect("failed to read osc");
         
-        cn.add_primitive(&data);
+        cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".osc.gz") {
         let mut cn = CountChange::new();
         let gzbuf = BufReader::new(flate2::bufread::GzDecoder::new(fbuf));
         //Box::new(gzbuf) as Box<dyn std::io::BufRead>
-        let data = osmquadtree::read_xml::read_xml_change(gzbuf).expect("failed to read osc");
+        let data = read_xml_change(gzbuf).expect("failed to read osc");
         
-        cn.add_primitive(&data);
+        cn.add_changeblock(&data);
+        println!("{}", cn);
+    } else if fname.ends_with(".pbfc") {
+        let mut cn = CountChange::new();
+        cn = count_all(cn, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal, true);
         println!("{}", cn);
     } else {
+        
         let mut cc = Count::new();
         if numchan == 0 {
-        
-            cc = count_all(read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal);
+            
+            cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal, false);
         
         } else if numchan > 8 {
             panic!("numchan must be between 0 & 8");
@@ -530,7 +593,7 @@ fn main() {
             for i in 0..numchan {
                 let (s,r) = mpsc::sync_channel(1);
                 senders.push(s);
-                results.push(thread::spawn(move || count_all(r.iter(), i as i64, minimal)));
+                results.push(thread::spawn(move || count_all(Count::new(), r.iter(), i as i64, minimal,false)));
             }
             
             
