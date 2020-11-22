@@ -2,28 +2,9 @@ extern crate osmquadtree;
 use std::env;
 
 use osmquadtree::stringutils::StringUtils;
+use osmquadtree::utils::parse_timestamp;
 use osmquadtree::sortblocks::{find_groups,sort_blocks, sort_blocks_inmem};
-use std::io::{Error,ErrorKind,Result};
 
-use chrono::NaiveDateTime;
-
-const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%S";
-const TIMEFORMAT_ALT: &str = "%Y-%m-%dT%H-%M-%S";
-
-
-fn parse_timestamp(ts: &str) -> Result<i64> {
-    //println!("ts: {}, TIMEFORMAT: {}, TIMEFORMAT_ALT: {}", ts, TIMEFORMAT, TIMEFORMAT_ALT);
-    match NaiveDateTime::parse_from_str(ts, TIMEFORMAT) {
-        Ok(tm) => {return Ok(tm.timestamp()); },
-        Err(e) => {println!("{:?}", e)}
-    }
-    
-    match NaiveDateTime::parse_from_str(ts, TIMEFORMAT_ALT) {
-        Ok(tm) => {return Ok(tm.timestamp()); },
-        Err(e) => {println!("{:?}", e)}
-    }
-    return Err(Error::new(ErrorKind::Other,format!("use \"{}\" or \"{}\"", TIMEFORMAT, TIMEFORMAT_ALT)));
-}
 
 
 fn main() {

@@ -2,7 +2,7 @@ use std::fmt;
 use std::collections::HashMap;
 use super::callback::{CallFinish,CollectResult};
 use std::marker::PhantomData;
-use std::io::Result;
+use std::io::{Result,Error,ErrorKind};
 
 fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64)*1.0 + (dur.subsec_nanos() as f64)*0.000000001
@@ -123,7 +123,7 @@ impl<T> fmt::Display for Timings<T>
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { 
         let mut fs = String::new();
         for (k,v) in &self.timings {
-            fs = format!("{} {}:{:0.1}s", fs, k, v);
+            fs = format!("{}\n{}: {:0.1}s", fs, k, v);
         }
         write!(f, "Timings: {}", fs)
     }
@@ -257,4 +257,34 @@ where   T: CallFinish<ReturnType=Timings<V>>,
         t.add(self.msg.as_str(), self.tm);
         Ok(t)
     }
+}
+
+use chrono::NaiveDateTime;
+
+const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%S";
+const TIMEFORMAT_ALT: &str = "%Y-%m-%dT%H-%M-%S";
+
+
+pub fn parse_timestamp(ts: &str) -> Result<i64> {
+    //println!("ts: {}, TIMEFORMAT: {}, TIMEFORMAT_ALT: {}", ts, TIMEFORMAT, TIMEFORMAT_ALT);
+    match NaiveDateTime::parse_from_str(ts, TIMEFORMAT) {
+        Ok(tm) => {return Ok(tm.timestamp()); },
+        Err(_) => {}//println!("{:?}", e)}
+    }
+    
+    match NaiveDateTime::parse_from_str(ts, TIMEFORMAT_ALT) {
+        Ok(tm) => {return Ok(tm.timestamp()); },
+        Err(e) => {println!("{:?}", e)}
+    }
+    return Err(Error::new(ErrorKind::Other,format!("use \"{}\" or \"{}\"", TIMEFORMAT, TIMEFORMAT_ALT)));
+}
+
+
+pub fn timestamp_string(ts: i64) -> String {
+    let dt = NaiveDateTime::from_timestamp(ts,0);
+    dt.format(TIMEFORMAT).to_string()
+}
+pub fn date_string(ts: i64) -> String {
+    let dt = NaiveDateTime::from_timestamp(ts,0);
+    dt.format("%Y%m%d").to_string()
 }

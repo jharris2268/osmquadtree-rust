@@ -17,6 +17,7 @@ use osmquadtree::minimal_block;
 use osmquadtree::primitive_block::Changetype;
 use osmquadtree::stringutils::StringUtils;
 use osmquadtree::update::{read_xml_change,ChangeBlock};
+use osmquadtree::utils::timestamp_string;
 //use osmquadtree::dense;
 //use osmquadtree::common;
 //use osmquadtree::info;
@@ -31,7 +32,7 @@ use std::fmt;
 use std::collections::BTreeMap;
 
 use cpuprofiler::PROFILER;
-use chrono::NaiveDateTime;
+
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -40,11 +41,7 @@ macro_rules! println_stderr(
     } }
 );
 
-const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%S";
-fn timestamp_string(ts: i64) -> String {
-    let dt = NaiveDateTime::from_timestamp(ts,0);
-    dt.format(TIMEFORMAT).to_string()
-}
+
     
     
 

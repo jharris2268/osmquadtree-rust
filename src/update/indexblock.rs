@@ -11,7 +11,12 @@ use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll
 use osmquadtree::quadtree::Quadtree;
 use osmquadtree::update::ChangeBlock;
 
-type Timings = osmquadtree::utils::Timings<(Vec<Quadtree>,ChangeBlock)>;
+pub enum ResultType {
+    NumTiles(usize),
+    CheckIndexResult((Vec<Quadtree>,ChangeBlock))
+}
+
+type Timings = osmquadtree::utils::Timings<ResultType>;
 
 use std::fs::File;
 use std::io::{Result,Write};
@@ -78,12 +83,13 @@ fn check_index_block(bl: Vec<u8>, changeblock: &ChangeBlock, exnodes: &BTreeSet<
 
 struct WF {
     f: File,
+    nt: usize,
     tm: f64
 }
 
 impl WF {
     pub fn new(outfn: &str) -> WF {
-        WF{f: File::create(outfn).expect("failed to create file"), tm: 0.0}
+        WF{f: File::create(outfn).expect("failed to create file"), nt: 0, tm: 0.0}
     }
 }
 
@@ -96,11 +102,13 @@ impl CallFinish for WF {
         let tx=ThreadTimer::new();
         self.f.write_all(&d).expect("failed to write data");
         self.tm += tx.since();
+        self.nt+=1;
     }
     
     fn finish(&mut self) -> Result<Timings> {
         let mut tms = Timings::new();
         tms.add("write", self.tm);
+        tms.add_other("num_tiles", ResultType::NumTiles(self.nt));
         Ok(tms)
     }
 }
@@ -115,9 +123,9 @@ fn convert_indexblock(i_fb: (usize,FileBlock)) -> Vec<u8> {
     pack_file_block("IndexBlock", &d, true).expect("pack_file_block failed")
 }
 
-pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) {
+pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
     
-    let (tm,br) = 
+    let (mut tm,br) = 
         if numchan == 0 {
             let wf = Box::new(WF::new(outfn));
             let pack = Box::new(CallAll::new(wf, "convert", Box::new(convert_indexblock)));
@@ -136,7 +144,11 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) {
         };
     
     println!("{} bytes: {}", br, tm);
-    
+    match tm.others.pop().unwrap().1 {
+        ResultType::NumTiles(nt) => { return nt; }
+        _ => { panic!("??"); }
+    }
+        
 }
 
 struct CheckIndexFile {
@@ -172,7 +184,7 @@ impl CallFinish for CheckIndexFile {
         
         let cb = self.changeblock.take();
         let qts = std::mem::take(&mut self.quadtrees);
-        t.add_other("result", (qts,cb.unwrap()));
+        t.add_other("result", ResultType::CheckIndexResult((qts,cb.unwrap())));
         Ok(t)
     }
 }
@@ -198,8 +210,10 @@ pub fn check_index_file(indexfn: &str, changeblock: ChangeBlock, exnodes: BTreeS
         if tm.others.len()!=1 {
             panic!("!!");
         }
-        
-        return tm.others.pop().unwrap().1;
+        match tm.others.pop().unwrap().1 {
+            ResultType::CheckIndexResult(r) => {return r;},
+            _ => { panic!("??"); }
+        }
     } else {
         
         panic!("not impl");
