@@ -5,7 +5,7 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::primitive_block::{Node,Way,Relation,Tag,Member,ElementType,Changetype};
+use osmquadtree::elements::{Node,Way,Relation,Tag,Member,Info,ElementType,Changetype};
 use osmquadtree::utils::Checktime;
 
 use quick_xml::Reader;
@@ -56,18 +56,18 @@ fn as_int(v: f64) -> i64 {
 fn read_node<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStart, ct: Option<Changetype>, has_children: bool) -> Result<Node> {
     
     let mut n = Node::new(0, match ct { Some(c) => c, None => Changetype::Normal });
-    
+    let mut info = Info::new();
     for a in e.attributes() {
         match a {
             Ok(kv) => {
                 let val = String::from(std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"));
                 match kv.key {
-                    b"id" => { n.common.id = val.parse().expect("not an int"); },
-                    b"timestamp" => { n.common.info.timestamp = read_timestamp(&val)?; },
-                    b"changeset" => { n.common.info.changeset = val.parse().expect("not an int"); },
-                    b"version" => { n.common.info.version = val.parse().expect("not an int"); },
-                    b"uid" => { n.common.info.user_id = val.parse().expect("not an int"); },
-                    b"user" => { n.common.info.user = val.to_string(); },
+                    b"id" => { n.id = val.parse().expect("not an int"); },
+                    b"timestamp" => { info.timestamp = read_timestamp(&val)?; },
+                    b"changeset" => { info.changeset = val.parse().expect("not an int"); },
+                    b"version" => { info.version = val.parse().expect("not an int"); },
+                    b"uid" => { info.user_id = val.parse().expect("not an int"); },
+                    b"user" => { info.user = val.to_string(); },
                     b"lon" => { n.lon = as_int(val.parse().expect("not a float")); },
                     b"lat" => { n.lat = as_int(val.parse().expect("not a float")); },
                     k => { return Err(Error::new(ErrorKind::Other, format!("unexpected attribute {} {}", std::str::from_utf8(k).expect("?"), val))); },
@@ -76,13 +76,13 @@ fn read_node<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesSta
             Err(_e) => { return Err(Error::new(ErrorKind::Other, format!("failed to read attribute"))); },
         }
     }
-    
+    if info.timestamp != 0  { n.info = Some(info); }
     if has_children {
         loop {
             match reader.read_event(buf) {
                 Ok(Event::Empty(ref e)) => {
                     match e.name() { 
-                        b"tag" => { n.common.tags.push(read_tag(e)?); },
+                        b"tag" => { n.tags.push(read_tag(e)?); },
                         n => { return Err(Error::new(ErrorKind::Other, format!("unexpected empty {}", std::str::from_utf8(n).expect("?")))); },
                     }
                 },
@@ -186,18 +186,18 @@ fn read_member(e: &BytesStart) -> Result<Member> {
 fn read_way<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStart, ct: Option<Changetype>, has_children: bool) -> Result<Way> {
     
     let mut w = Way::new(0, match ct { Some(c) => c, None => Changetype::Normal });
-    
+    let mut info = Info::new();
     for a in e.attributes() {
         match a {
             Ok(kv) => {
                 let val = String::from(std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"));
                 match kv.key {
-                    b"id" => { w.common.id = val.parse().expect("not an int"); },
-                    b"timestamp" => { w.common.info.timestamp = read_timestamp(&val)?; },
-                    b"changeset" => {w.common.info.changeset = val.parse().expect("not an int"); },
-                    b"version" => { w.common.info.version = val.parse().expect("not an int"); },
-                    b"uid" => { w.common.info.user_id = val.parse().expect("not an int"); },
-                    b"user" => { w.common.info.user = val.to_string(); },
+                    b"id" => { w.id = val.parse().expect("not an int"); },
+                    b"timestamp" => { info.timestamp = read_timestamp(&val)?; },
+                    b"changeset" => {info.changeset = val.parse().expect("not an int"); },
+                    b"version" => { info.version = val.parse().expect("not an int"); },
+                    b"uid" => { info.user_id = val.parse().expect("not an int"); },
+                    b"user" => { info.user = val.to_string(); },
                     
                     k => { return Err(Error::new(ErrorKind::Other, format!("unexpected attribute {} {}", std::str::from_utf8(k).expect("?"), val))); },
                 }
@@ -205,13 +205,13 @@ fn read_way<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStar
             Err(_e) => return Err(Error::new(ErrorKind::Other, format!("failed to read attribute")))
         }
     }
-    
+    if info.timestamp != 0 { w.info = Some(info); }
     if has_children {
         loop {
             match reader.read_event(buf) {
                 Ok(Event::Empty(ref e)) => {
                     match e.name() { 
-                        b"tag" => { w.common.tags.push(read_tag(e)?); },
+                        b"tag" => { w.tags.push(read_tag(e)?); },
                         b"nd" => { w.refs.push(read_ref(e)?); },
                         n => { return Err(Error::new(ErrorKind::Other, format!("unexpected empty {}", std::str::from_utf8(n).expect("?")))); },
                     }
@@ -240,18 +240,18 @@ fn read_way<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStar
 fn read_relation<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStart, ct: Option<Changetype>, has_children: bool) -> Result<Relation> {
     
     let mut r = Relation::new(0, match ct { Some(c) => c, None => Changetype::Normal });
-    
+    let mut info = Info::new();
     for a in e.attributes() {
         match a {
             Ok(kv) => {
                 let val = String::from(std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"));
                 match kv.key {
-                    b"id" => { r.common.id = val.parse().expect("not an int"); },
-                    b"timestamp" => { r.common.info.timestamp = read_timestamp(&val)?; },
-                    b"changeset" => { r.common.info.changeset = val.parse().expect("not an int"); },
-                    b"version" => { r.common.info.version = val.parse().expect("not an int"); },
-                    b"uid" => { r.common.info.user_id = val.parse().expect("not an int"); },
-                    b"user" => { r.common.info.user = val.to_string(); },
+                    b"id" => { r.id = val.parse().expect("not an int"); },
+                    b"timestamp" => { info.timestamp = read_timestamp(&val)?; },
+                    b"changeset" => { info.changeset = val.parse().expect("not an int"); },
+                    b"version" => { info.version = val.parse().expect("not an int"); },
+                    b"uid" => { info.user_id = val.parse().expect("not an int"); },
+                    b"user" => { info.user = val.to_string(); },
                    
                     k => { return Err(Error::new(ErrorKind::Other, format!("unexpected attribute {} {}", std::str::from_utf8(k).expect("?"), val))); },
                 }
@@ -259,13 +259,14 @@ fn read_relation<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &Byte
             Err(_e) => return Err(Error::new(ErrorKind::Other, format!("failed to read attribute")))
         }
     }
+    if info.timestamp != 0 { r.info = Some(info); }
     
     if has_children {
         loop {
             match reader.read_event(buf) {
                 Ok(Event::Empty(ref e)) => {
                     match e.name() { 
-                        b"tag" => { r.common.tags.push(read_tag(e)?); },
+                        b"tag" => { r.tags.push(read_tag(e)?); },
                         b"member" => { r.members.push(read_member(e)?); },
                         n => { return Err(Error::new(ErrorKind::Other, format!("unexpected empty {}", std::str::from_utf8(n).expect("?")))); },
                     }
@@ -304,39 +305,39 @@ impl ChangeBlock {
     }
     
     pub fn add_node(&mut self, n: Node) -> bool {
-        if !self.nodes.contains_key(&n.common.id) {
-            self.nodes.insert(n.common.id, n);
+        if !self.nodes.contains_key(&n.id) {
+            self.nodes.insert(n.id, n);
             return true;
         }
         
-        let curr = self.nodes.get_mut(&n.common.id).unwrap();
-        if n.common.info.version > curr.common.info.version {
+        let curr = self.nodes.get_mut(&n.id).unwrap();
+        if n.info.as_ref().unwrap().version > curr.info.as_ref().unwrap().version {
             *curr = n;
         }
         false
     }
     
     pub fn add_way(&mut self, w: Way) -> bool {
-        if !self.ways.contains_key(&w.common.id) {
-            self.ways.insert(w.common.id, w);
+        if !self.ways.contains_key(&w.id) {
+            self.ways.insert(w.id, w);
             return true;
         }
         
-        let curr = self.ways.get_mut(&w.common.id).unwrap();
-        if w.common.info.version > curr.common.info.version {
+        let curr = self.ways.get_mut(&w.id).unwrap();
+        if w.info.as_ref().unwrap().version > curr.info.as_ref().unwrap().version {
             *curr = w;
         }
         false
     }
     
     pub fn add_relation(&mut self, r: Relation) -> bool {
-        if !self.relations.contains_key(&r.common.id) {
-            self.relations.insert(r.common.id, r);
+        if !self.relations.contains_key(&r.id) {
+            self.relations.insert(r.id, r);
             return true;
         }
         
-        let curr = self.relations.get_mut(&r.common.id).unwrap();
-        if r.common.info.version > curr.common.info.version {
+        let curr = self.relations.get_mut(&r.id).unwrap();
+        if r.info.as_ref().unwrap().version > curr.info.as_ref().unwrap().version {
             *curr = r;
         }
         false

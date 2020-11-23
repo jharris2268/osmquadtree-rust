@@ -5,7 +5,7 @@ use std::env;
 use osmquadtree::utils::{ConsumeAll,ReplaceNoneWithTimings,MergeTimings};
 use osmquadtree::callback::{CallFinish,Callback,CallbackSync,CallbackMerge};
 use osmquadtree::read_file_block::{FileBlock,read_all_blocks};
-use osmquadtree::primitive_block::{PrimitiveBlock};
+use osmquadtree::elements::{PrimitiveBlock};
 use osmquadtree::stringutils::StringUtils;
 use osmquadtree::sortblocks::sortblocks::{AddQuadtree,make_packprimblock,make_unpackprimblock,WriteFile};
 use osmquadtree::sortblocks::{Timings,OtherData};

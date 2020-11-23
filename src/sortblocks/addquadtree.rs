@@ -11,13 +11,13 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::primitive_block::PrimitiveBlock;
+use osmquadtree::elements::PrimitiveBlock;
 use osmquadtree::read_file_block::{ReadFileBlocks,FileBlock};
 
 use osmquadtree::callback::{CallFinish,};
-use osmquadtree::relation::ElementType;
-use osmquadtree::minimal_block::QuadtreeBlock;
-use osmquadtree::quadtree::Quadtree;
+use osmquadtree::elements::ElementType;
+use osmquadtree::elements::minimal_block::QuadtreeBlock;
+use osmquadtree::elements::Quadtree;
 use osmquadtree::utils::{Checktime,CallAll};
 
 use super::{Timings,};
@@ -141,8 +141,8 @@ impl<T> CallFinish for AddQuadtree<T>
             match &self.curr { 
                 None => { panic!("ran out of qts"); },
                 Some((ty,id,qt)) => {
-                    if *ty==ElementType::Node && *id == n.common.id {
-                        n.common.quadtree = *qt;
+                    if *ty==ElementType::Node && *id == n.id {
+                        n.quadtree = *qt;
                         self.curr = self.qts.next();
                     } else {
                         panic!("out of sync");
@@ -156,8 +156,8 @@ impl<T> CallFinish for AddQuadtree<T>
             match &self.curr { 
                 None => { panic!("ran out of qts"); },
                 Some((ty,id,qt)) => {
-                    if *ty==ElementType::Way && *id == w.common.id {
-                        w.common.quadtree = *qt;
+                    if *ty==ElementType::Way && *id == w.id {
+                        w.quadtree = *qt;
                         self.curr = self.qts.next();
                     } else {
                         panic!("out of sync");
@@ -172,10 +172,10 @@ impl<T> CallFinish for AddQuadtree<T>
                 None => { panic!("ran out of qts"); },
                 Some((ty,id,qt)) => {
                     if *ty==ElementType::Relation {
-                        if *id > r.common.id {
-                            r.common.quadtree = Quadtree::new(0);
-                        } else if *id == r.common.id {
-                            r.common.quadtree = *qt;
+                        if *id > r.id {
+                            r.quadtree = Quadtree::new(0);
+                        } else if *id == r.id {
+                            r.quadtree = *qt;
                             self.curr = self.qts.next();
                         } else {
                             panic!("out of sync");

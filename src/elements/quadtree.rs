@@ -1,6 +1,11 @@
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
+
 use std::fmt;
 use std::io::{Error,ErrorKind,Result};
-use super::read_pbf;
+use osmquadtree::read_pbf;
 
 
 use std::f64::consts::PI;
@@ -136,6 +141,11 @@ impl Quadtree {
     pub fn new(i: i64) -> Quadtree {
         Quadtree(i)
     }
+    
+    pub fn empty() -> Quadtree {
+        Quadtree(-2)
+    }
+    
     pub fn calculate(bbox: &Bbox, maxlevel: usize, buffer: f64) -> Quadtree {
         Quadtree(make_quad_tree_floating(
             coordinate_as_float(bbox.minlon), coordinate_as_float(bbox.minlat),

@@ -8,7 +8,7 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::primitive_block::PrimitiveBlock;
+use osmquadtree::elements::PrimitiveBlock;
 use osmquadtree::read_file_block::{pack_file_block};
 use osmquadtree::callback::{CallFinish,};
 use osmquadtree::utils::{Checktime,CallAll};

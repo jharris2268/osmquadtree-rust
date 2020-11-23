@@ -1,5 +1,5 @@
 use super::read_pbf;
-use super::quadtree;
+use super::elements::quadtree;
 
 use std::io::{Result,Error,ErrorKind};
 
@@ -25,7 +25,7 @@ impl IndexItem {
                 read_pbf::PbfTag::Data(1, d) => res.quadtree = quadtree::Tuple::read(&d)?,
                 read_pbf::PbfTag::Value(2, isc) => res.is_change = isc!=0,
                 read_pbf::PbfTag::Value(3, l) => res.length = l,
-                read_pbf::PbfTag::Value(4, qt)=> res.quadtree = quadtree::Tuple::from_integer(read_pbf::unzigzag(qt))?,
+                read_pbf::PbfTag::Value(4, qt)=> res.quadtree = quadtree::Tuple::from_integer(read_pbf::un_zig_zag(qt))?,
                 _ => return Err(Error::new(ErrorKind::Other,format!("IndexItem unexpected item: {:?}",x))),
             }
         }
@@ -47,10 +47,10 @@ fn read_header_bbox(data: &[u8]) -> Result<Vec<i64>> {
     let xx = read_pbf::read_all_tags(&data, 0);
     for x in xx {
         match x {
-            read_pbf::PbfTag::Value(1, minlon) => bbox[0] = read_pbf::unzigzag(minlon)/1000, //left
-            read_pbf::PbfTag::Value(2, minlat) => bbox[2] = read_pbf::unzigzag(minlat)/1000, //right
-            read_pbf::PbfTag::Value(3, maxlon) => bbox[3] = read_pbf::unzigzag(maxlon)/1000, //top
-            read_pbf::PbfTag::Value(4, maxlat) => bbox[1] = read_pbf::unzigzag(maxlat)/1000, //bottom
+            read_pbf::PbfTag::Value(1, minlon) => bbox[0] = read_pbf::un_zig_zag(minlon)/1000, //left
+            read_pbf::PbfTag::Value(2, minlat) => bbox[2] = read_pbf::un_zig_zag(minlat)/1000, //right
+            read_pbf::PbfTag::Value(3, maxlon) => bbox[3] = read_pbf::un_zig_zag(maxlon)/1000, //top
+            read_pbf::PbfTag::Value(4, maxlat) => bbox[1] = read_pbf::un_zig_zag(maxlat)/1000, //bottom
             _ => return Err(Error::new(ErrorKind::Other,"unexpected item")),
         }
     }

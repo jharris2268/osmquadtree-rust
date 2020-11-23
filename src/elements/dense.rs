@@ -1,11 +1,17 @@
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
 use super::node;
-use super::read_pbf;
+use osmquadtree::read_pbf;
 use super::quadtree;
 use super::tags;
+use super::info::Info;
 use super::common::{Changetype,PackStringTable};
-use super::write_pbf;
+use osmquadtree::write_pbf;
 use std::io::{Result,Error,ErrorKind};
 pub struct Dense {}
+
 
 impl Dense {
     pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Vec<node::Node>> {
@@ -71,17 +77,18 @@ impl Dense {
             let mut nd = node::Node::new(ids[i], changetype);
             if lats.len()>0 { nd.lat = lats[i]; }
             if lons.len()>0 { nd.lon = lons[i]; }
-            if qts.len()>0 { nd.common.quadtree = quadtree::Quadtree::new(qts[i]); }
+            if qts.len()>0 { nd.quadtree = quadtree::Quadtree::new(qts[i]); }
             if !minimal {
-                if vs.len()>0 { nd.common.info.version = vs[i] as i64; }
-                if ts.len()>0 { nd.common.info.timestamp = ts[i]; }
-                if cs.len()>0 { nd.common.info.changeset = cs[i]; }
-                if ui.len()>0 { nd.common.info.user_id = ui[i]; }
-                if us.len()>0 { nd.common.info.user = strings[us[i] as usize].clone(); }
-            
+                let mut info = Info::new();
+                if vs.len()>0 { info.version = vs[i] as i64; }
+                if ts.len()>0 { info.timestamp = ts[i]; }
+                if cs.len()>0 { info.changeset = cs[i]; }
+                if ui.len()>0 { info.user_id = ui[i]; }
+                if us.len()>0 { info.user = strings[us[i] as usize].clone(); }
+                nd.info = Some(info);
             
                 while kvs_idx < kvs.len() && kvs[kvs_idx]!=0 {
-                    nd.common.tags.push(
+                    nd.tags.push(
                         tags::Tag::new(
                             strings[kvs[kvs_idx] as usize].clone(),
                             strings[kvs[kvs_idx+1] as usize].clone()));
@@ -97,11 +104,40 @@ impl Dense {
     
     fn pack_info(feats: &[node::Node], pack_strings: &mut Box<PackStringTable>) -> Result<Vec<u8>> {
         
-        let vs = write_pbf::pack_int(feats.iter().map( |n| { n.common.info.version as u64 }));
-        let ts = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.info.timestamp }));
-        let cs = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.info.changeset }));
-        let ui = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.info.user_id }));
-        let us = write_pbf::pack_delta_int(feats.iter().map( |n| { pack_strings.call(&n.common.info.user) as i64 }));
+        let mut vsv = Vec::with_capacity(feats.len());
+        let mut tsv = Vec::with_capacity(feats.len());
+        let mut csv = Vec::with_capacity(feats.len());
+        let mut uiv = Vec::with_capacity(feats.len());
+        let mut usv = Vec::with_capacity(feats.len());
+        for n in feats {
+            match &n.info {
+                Some(info) => {
+                    vsv.push(info.version as u64);
+                    tsv.push(info.timestamp);
+                    csv.push(info.changeset);
+                    uiv.push(info.user_id);
+                    usv.push(pack_strings.call(&info.user) as i64);
+                },
+                None => {
+                    vsv.push(0);
+                    tsv.push(0);
+                    csv.push(0);
+                    uiv.push(0);
+                    usv.push(0);
+                }
+            }
+        }
+        let vs = write_pbf::pack_int_ref(vsv.iter());
+        let ts = write_pbf::pack_delta_int_ref(tsv.iter());
+        let cs = write_pbf::pack_delta_int_ref(csv.iter());
+        let ui = write_pbf::pack_delta_int_ref(uiv.iter());
+        let us = write_pbf::pack_delta_int_ref(usv.iter());
+        
+        /*let vs = write_pbf::pack_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).version as u64 }));
+        let ts = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).timestamp }));
+        let cs = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).changeset }));
+        let ui = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).user_id }));
+        let us = write_pbf::pack_delta_int(feats.iter().map( |n| { pack_strings.call(&n.info.as_ref().unwrap_or_else(default_info).user) as i64 }));*/
         
         let l =   write_pbf::data_length(1,vs.len()) + write_pbf::data_length(2,cs.len())
                 + write_pbf::data_length(3,ts.len()) + write_pbf::data_length(4,ui.len())
@@ -119,25 +155,26 @@ impl Dense {
     
     pub fn pack(feats: &[node::Node], pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
-        let ids = write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.id }));
+        let ids = write_pbf::pack_delta_int(feats.iter().map( |n| { n.id }));
         let lats = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lat }));
         let lons = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lon }));
         
         let mut qts: Option<Vec<u8>> = None;
         if include_qts {
-            qts=Some(write_pbf::pack_delta_int(feats.iter().map( |n| { n.common.quadtree.as_int() })));
+            qts=Some(write_pbf::pack_delta_int(feats.iter().map( |n| { n.quadtree.as_int() })));
         }
         
         
         
         let mut tl = 0;
         for f in feats {
-            tl += 1 + 2*f.common.tags.len();
+            tl += 1 + 2*f.tags.len();
         }
+        
         let mut tgs = Vec::with_capacity(tl);
         for f in feats { 
-            let kk: Vec<u64> = f.common.tags.iter().map(|t| { pack_strings.call(&t.key) }).collect();
-            let vv: Vec<u64> = f.common.tags.iter().map(|t| { pack_strings.call(&t.val) }).collect();
+            let kk: Vec<u64> = f.tags.iter().map(|t| { pack_strings.call(&t.key) }).collect();
+            let vv: Vec<u64> = f.tags.iter().map(|t| { pack_strings.call(&t.val) }).collect();
             
             for (k,v) in kk.iter().zip(vv) {
                 tgs.push(*k);
@@ -147,7 +184,10 @@ impl Dense {
                 tgs.push(pack_strings.call(&t.key));
                 tgs.push(pack_strings.call(&t.val));
             }*/
-            pack_strings.call(&f.common.info.user);
+            match &f.info {
+                Some(info) => { pack_strings.call(&info.user); },
+                None => {}
+            }
             tgs.push(0);
         }
         let infs = Self::pack_info(feats, pack_strings)?;

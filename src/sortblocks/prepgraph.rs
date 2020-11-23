@@ -10,9 +10,9 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::quadtree::Quadtree;
+use osmquadtree::elements::Quadtree;
 use osmquadtree::sortblocks::quadtreetree::{QuadtreeTree,find_tree_groups};
-use osmquadtree::minimal_block::QuadtreeBlock;
+use osmquadtree::elements::QuadtreeBlock;
 use osmquadtree::read_file_block::{FileBlock,ReadFileBlocks};
 use osmquadtree::callback::{CallbackSync,CallFinish,Callback,CallbackMerge};
 use osmquadtree::utils::{Checktime,ReplaceNoneWithTimings,CallAll,MergeTimings,Timer};

@@ -1,18 +1,23 @@
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
+use osmquadtree::read_pbf;
+use osmquadtree::write_pbf;
+
 use super::quadtree;
-use super::read_pbf;
-use std::io::{Error,Result,ErrorKind};
-//use core::cmp::Ordering;
+
 pub use super::node::Node;
 pub use super::way::Way;
 pub use super::relation::{Relation,ElementType,Member};
 pub use super::tags::Tag;
 pub use super::common::Changetype;
+pub use super::info::Info;
+
 use super::dense::Dense;
 use super::common::{PackStringTable,get_changetype};
-use super::write_pbf;
 
-
-
+use std::io::{Error,Result,ErrorKind};
 
 
 #[derive(Debug)]
@@ -82,7 +87,7 @@ impl PrimitiveBlock {
                 },
                 read_pbf::PbfTag::Data(2, d) => groups.push(d),
                 
-                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(read_pbf::unzigzag(qt)),
+                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(read_pbf::un_zig_zag(qt)),
                 read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,
                 

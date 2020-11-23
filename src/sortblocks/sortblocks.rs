@@ -8,8 +8,8 @@ mod osmquadtree {
 }
 
 use osmquadtree::callback::{Callback,CallbackSync,CallbackMerge,CallFinish};
-use osmquadtree::quadtree::Quadtree;
-use osmquadtree::primitive_block::{PrimitiveBlock,Node,Way,Relation};
+use osmquadtree::elements::{Quadtree,PrimitiveBlock,Node,Way,Relation};
+
 use osmquadtree::utils::{Timer,MergeTimings,ReplaceNoneWithTimings,Checktime};
 use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unpack_file_block,pack_file_block};
 use osmquadtree::sortblocks::{QuadtreeTree,Timings,OtherData};
@@ -46,17 +46,17 @@ impl<'a> SortBlocks {
     }
     
     fn add_node(&mut self, n: Node) {
-        let t = self.get_block(n.common.quadtree);
+        let t = self.get_block(n.quadtree);
         t.nodes.push(n);
     }
     
     fn add_way(&mut self, w: Way) {
-        let t = self.get_block(w.common.quadtree);
+        let t = self.get_block(w.quadtree);
         t.ways.push(w);
     }
     
     fn add_relation(&mut self, r: Relation) {
-        let t = self.get_block(r.common.quadtree);
+        let t = self.get_block(r.quadtree);
         t.relations.push(r);
     }
     
@@ -313,7 +313,7 @@ impl<'a, T> CollectTemp<T>
     
     fn add_node(&mut self, n: Node) -> Option<PrimitiveBlock> {
         let l=self.limit;
-        let t = self.get_block(n.common.quadtree);
+        let t = self.get_block(n.quadtree);
         t.nodes.push(n);
         if t.nodes.len()+8*t.ways.len()+20*t.relations.len() >= l {
             return Some(std::mem::replace(t, PrimitiveBlock::new(t.index,0)));
@@ -323,7 +323,7 @@ impl<'a, T> CollectTemp<T>
     
     fn add_way(&mut self, w: Way) -> Option<PrimitiveBlock> {
         let l=self.limit;
-        let t = self.get_block(w.common.quadtree);
+        let t = self.get_block(w.quadtree);
         t.ways.push(w);
         if t.nodes.len()+8*t.ways.len()+20*t.relations.len() >= l {
             return Some(std::mem::replace(t, PrimitiveBlock::new(t.index,0)));
@@ -333,7 +333,7 @@ impl<'a, T> CollectTemp<T>
     
     fn add_relation(&mut self, r: Relation) -> Option<PrimitiveBlock> {
         let l=self.limit;
-        let t = self.get_block(r.common.quadtree);
+        let t = self.get_block(r.quadtree);
         t.relations.push(r);
         //self.check_tile(t)
         if t.nodes.len()+8*t.ways.len()+20*t.relations.len() >= l {

@@ -8,13 +8,13 @@ use osmquadtree::read_file_block;
 use osmquadtree::read_pbf;
 use osmquadtree::header_block;
 //use osmquadtree::quadtree;
-use osmquadtree::primitive_block;
-use osmquadtree::node;
-use osmquadtree::way;
-use osmquadtree::relation;
-use osmquadtree::common::get_changetype;
-use osmquadtree::minimal_block;
-use osmquadtree::primitive_block::Changetype;
+use osmquadtree::elements::primitive_block;
+use osmquadtree::elements::node;
+use osmquadtree::elements::way;
+use osmquadtree::elements::relation;
+use osmquadtree::elements::common::get_changetype;
+use osmquadtree::elements::minimal_block;
+use osmquadtree::elements::primitive_block::Changetype;
 use osmquadtree::stringutils::StringUtils;
 use osmquadtree::update::{read_xml_change,ChangeBlock};
 use osmquadtree::utils::timestamp_string;
@@ -64,11 +64,16 @@ impl NodeCount {
     }
     fn add(&mut self, nd: &node::Node) {
         self.num += 1;
-        if self.min_id==-1 || nd.common.id < self.min_id { self.min_id = nd.common.id; }
-        if self.max_id==-1 || nd.common.id > self.max_id { self.max_id = nd.common.id; }
+        if self.min_id==-1 || nd.id < self.min_id { self.min_id = nd.id; }
+        if self.max_id==-1 || nd.id > self.max_id { self.max_id = nd.id; }
         
-        if self.min_ts==-1 || nd.common.info.timestamp < self.min_ts { self.min_ts = nd.common.info.timestamp; }
-        if self.max_ts==-1 || nd.common.info.timestamp > self.max_ts { self.max_ts = nd.common.info.timestamp; }
+        match &nd.info {
+            Some(info) => {
+                if self.min_ts==-1 || info.timestamp < self.min_ts { self.min_ts = info.timestamp; }
+                if self.max_ts==-1 || info.timestamp > self.max_ts { self.max_ts = info.timestamp; }
+            },
+            None => {}
+        }
         
         if nd.lon < self.min_lon { self.min_lon = nd.lon; }
         if nd.lon > self.max_lon { self.max_lon = nd.lon; }
@@ -138,11 +143,16 @@ impl WayCount {
     }
     fn add(&mut self, wy: &way::Way) {
         self.num += 1;
-        if self.min_id==-1 || wy.common.id < self.min_id { self.min_id = wy.common.id; }
-        if self.max_id==-1 || wy.common.id > self.max_id { self.max_id = wy.common.id; }
+        if self.min_id==-1 || wy.id < self.min_id { self.min_id = wy.id; }
+        if self.max_id==-1 || wy.id > self.max_id { self.max_id = wy.id; }
         
-        if self.min_ts==-1 || wy.common.info.timestamp < self.min_ts { self.min_ts = wy.common.info.timestamp; }
-        if self.max_ts==-1 || wy.common.info.timestamp > self.max_ts { self.max_ts = wy.common.info.timestamp; }
+        match &wy.info {
+            Some(info) => {
+                if self.min_ts==-1 || info.timestamp < self.min_ts { self.min_ts = info.timestamp; }
+                if self.max_ts==-1 || info.timestamp > self.max_ts { self.max_ts = info.timestamp; }
+            },
+            None => {}
+        }
         
         self.num_refs += wy.refs.len() as i64;
         if self.max_refs_len==-1 || wy.refs.len() as i64>self.max_refs_len { self.max_refs_len = wy.refs.len() as i64; }
@@ -222,11 +232,16 @@ impl RelationCount {
     }
     fn add(&mut self, rl: &relation::Relation) {
         self.num += 1;
-        if self.min_id==-1 || rl.common.id < self.min_id { self.min_id = rl.common.id; }
-        if self.max_id==-1 || rl.common.id > self.max_id { self.max_id = rl.common.id; }
+        if self.min_id==-1 || rl.id < self.min_id { self.min_id = rl.id; }
+        if self.max_id==-1 || rl.id > self.max_id { self.max_id = rl.id; }
         
-        if self.min_ts==-1 || rl.common.info.timestamp < self.min_ts { self.min_ts = rl.common.info.timestamp; }
-        if self.max_ts==-1 || rl.common.info.timestamp > self.max_ts { self.max_ts = rl.common.info.timestamp; }
+        match &rl.info {
+            Some(info) => {
+                if self.min_ts==-1 || info.timestamp < self.min_ts { self.min_ts = info.timestamp; }
+                if self.max_ts==-1 || info.timestamp > self.max_ts { self.max_ts = info.timestamp; }
+            },
+            None => {}
+        }
         
         if rl.members.len() == 0 { self.num_empties += 1; }
         self.num_mems += rl.members.len() as i64;
@@ -341,23 +356,23 @@ impl CountChange {
     }
     fn add_changeblock(&mut self, bl: &ChangeBlock) {
         for (_,nd) in &bl.nodes {
-            if !self.node.contains_key(&nd.common.changetype) {
-                self.node.insert(nd.common.changetype, NodeCount::new());
+            if !self.node.contains_key(&nd.changetype) {
+                self.node.insert(nd.changetype, NodeCount::new());
             }
-            self.node.get_mut(&nd.common.changetype).unwrap().add(&nd);
+            self.node.get_mut(&nd.changetype).unwrap().add(&nd);
         }
         for (_,wy) in &bl.ways {
-            if !self.way.contains_key(&wy.common.changetype) {
-                self.way.insert(wy.common.changetype, WayCount::new());
+            if !self.way.contains_key(&wy.changetype) {
+                self.way.insert(wy.changetype, WayCount::new());
             }
-            self.way.get_mut(&wy.common.changetype).unwrap().add(&wy);
+            self.way.get_mut(&wy.changetype).unwrap().add(&wy);
             
         }
         for (_,rl) in &bl.relations {
-            if !self.relation.contains_key(&rl.common.changetype) {
-                self.relation.insert(rl.common.changetype, RelationCount::new());
+            if !self.relation.contains_key(&rl.changetype) {
+                self.relation.insert(rl.changetype, RelationCount::new());
             }
-            self.relation.get_mut(&rl.common.changetype).unwrap().add(&rl);
+            self.relation.get_mut(&rl.changetype).unwrap().add(&rl);
             
         }
     }
@@ -365,23 +380,23 @@ impl CountChange {
 impl CountBlocks for CountChange {
     fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
         for nd in &bl.nodes {
-            if !self.node.contains_key(&nd.common.changetype) {
-                self.node.insert(nd.common.changetype, NodeCount::new());
+            if !self.node.contains_key(&nd.changetype) {
+                self.node.insert(nd.changetype, NodeCount::new());
             }
-            self.node.get_mut(&nd.common.changetype).unwrap().add(&nd);
+            self.node.get_mut(&nd.changetype).unwrap().add(&nd);
         }
         for wy in &bl.ways {
-            if !self.way.contains_key(&wy.common.changetype) {
-                self.way.insert(wy.common.changetype, WayCount::new());
+            if !self.way.contains_key(&wy.changetype) {
+                self.way.insert(wy.changetype, WayCount::new());
             }
-            self.way.get_mut(&wy.common.changetype).unwrap().add(&wy);
+            self.way.get_mut(&wy.changetype).unwrap().add(&wy);
             
         }
         for rl in &bl.relations {
-            if !self.relation.contains_key(&rl.common.changetype) {
-                self.relation.insert(rl.common.changetype, RelationCount::new());
+            if !self.relation.contains_key(&rl.changetype) {
+                self.relation.insert(rl.changetype, RelationCount::new());
             }
-            self.relation.get_mut(&rl.common.changetype).unwrap().add(&rl);
+            self.relation.get_mut(&rl.changetype).unwrap().add(&rl);
             
         }
     }

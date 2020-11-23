@@ -4,7 +4,7 @@ pub mod quadtreetree;
 pub mod writepbf;
 pub mod addquadtree;
 
-use super::primitive_block::PrimitiveBlock;
+use super::elements::PrimitiveBlock;
 
 
 pub enum OtherData {

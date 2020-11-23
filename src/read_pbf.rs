@@ -27,7 +27,7 @@ pub fn read_uint32(data: &[u8], pos: usize) -> io::Result<(u64,usize)> {
     Ok((res, pos+4))
 }
     
-pub fn unzigzag(uv: u64) -> i64 {
+pub fn un_zig_zag(uv: u64) -> i64 {
     let x = (uv>>1) as i64;
     if (uv&1) != 0 {
         return x^-1;
@@ -153,7 +153,7 @@ impl Iterator for DeltaPackedInt<'_> {
     fn next(&mut self) -> Option<i64> {
         if self.pos < self.data.len() {
             let (t,npos) = read_uint(&self.data, self.pos);
-            let p = unzigzag(t);
+            let p = un_zig_zag(t);
             self.curr += p;
             
             self.pos = npos;
@@ -230,7 +230,7 @@ pub fn read_delta_packed_int(data: &[u8]) -> Vec<i64> {
     let mut pos = 0;
     while pos < data.len() {
         let (t,npos) = read_uint(&data, pos);
-        let p = unzigzag(t);
+        let p = un_zig_zag(t);
         curr += p;
         res.push(curr);
         pos = npos;

@@ -2,13 +2,13 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::minimal_block::MinimalBlock;
+use osmquadtree::elements::{MinimalBlock,Quadtree};
 use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
-use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,unzigzag};
+use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
 use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock};
 use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
 use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
-use osmquadtree::quadtree::Quadtree;
+
 use osmquadtree::update::ChangeBlock;
 
 pub enum ResultType {
@@ -46,7 +46,7 @@ fn check_index_block(bl: Vec<u8>, changeblock: &ChangeBlock, exnodes: &BTreeSet<
     let mut qt = Quadtree::new(-2);
     for tg in IterTags::new(&bl, 0) {
         match tg {
-            PbfTag::Value(1, q) => qt = Quadtree::new(unzigzag(q)),
+            PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {
                 for n in DeltaPackedInt::new(&nn) {
                     if changeblock.nodes.contains_key(&n) {

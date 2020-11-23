@@ -1,12 +1,26 @@
-use super::read_pbf;
-use super::common::{Common,Changetype,PackStringTable};
-use super::write_pbf;
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
+use osmquadtree::read_pbf;
+use osmquadtree::write_pbf;
+
+use super::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable};
+use super::info::Info;
+use super::tags::Tag;
+use super::quadtree::Quadtree;
+
 use std::io::{Result,Error,ErrorKind};
 use core::cmp::Ordering;
+
 #[derive(Debug,Eq)]
 pub struct Relation {
-    pub common: Common,
-    pub members: Vec<Member>
+    pub id: i64,
+    pub changetype: Changetype,
+    pub info: Option<Info>, 
+    pub tags: Vec<Tag>,
+    pub members: Vec<Member>,
+    pub quadtree: Quadtree,
 }
 
 #[derive(Debug,Eq,PartialEq,Clone,Ord,PartialOrd)]
@@ -44,20 +58,23 @@ impl Member {
 }
 impl Relation {
     pub fn new(id: i64, changetype: Changetype) -> Relation {
-        Relation{common: Common::new(id,changetype), members: Vec::new()}
+        Relation{id: id, changetype: changetype, info: None, tags: Vec::new(), members: Vec::new(), quadtree: Quadtree::empty()}
     }
     pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Relation> {
         
-        let tgs = read_pbf::read_all_tags(&data,0);
-        let cc = Common::read(changetype, &strings,&tgs, minimal)?;
+        let mut rel = Relation::new(0,changetype);
         
-        let mut res = Relation{common: cc, members: Vec::new()};
+        let tgs = read_pbf::read_all_tags(&data,0);
+        //let mut rem=Vec::new();
+        //(rel.id, rel.info, rel.tags, rel.quadtree, rem) = read_common(&strings,&tgs, minimal)?;
+        let mut zz = read_common(&strings, &tgs, minimal)?;
+        rel.id = zz.0; rel.info = zz.1.take(); rel.tags = std::mem::take(&mut zz.2); rel.quadtree = zz.3;
         
         let mut roles = Vec::new();
         let mut refs = Vec::new();
         let mut types = Vec::new();
         
-        for t in read_pbf::IterTags::new(&data,0) {
+        for t in zz.4 {
             match t {
                 read_pbf::PbfTag::Data(8, d) => {
                     if !minimal {
@@ -76,28 +93,28 @@ impl Relation {
         if types.len()!=0 {
             for i in 0..types.len() {
                 if minimal {
-                    res.members.push(Member{role: String::from(""), mem_type: make_elementtype(types[i]), mem_ref: refs[i]});
+                    rel.members.push(Member{role: String::from(""), mem_type: make_elementtype(types[i]), mem_ref: refs[i]});
                 } else {
                     let m = Member{
                         role: strings[roles[i] as usize].clone(),
                         mem_type: make_elementtype(types[i]),
                         mem_ref: refs[i],
                     };
-                    res.members.push(m);
+                    rel.members.push(m);
                 }
             }
         }
         
-        Ok(res)
+        Ok(rel)
     }
     pub fn pack(&self, pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
         
-        let l = self.common.pack_length(pack_strings, include_qts)
+        let l = pack_length(&self.tags, pack_strings, include_qts)
             + self.members.len()*10 + 6;
         
         let mut res = Vec::with_capacity(l);
-        self.common.pack_head(&mut res,pack_strings)?;
+        pack_head(&self.id, &self.info, &self.tags, &mut res,pack_strings)?;
         
         if !self.members.is_empty() {
             let roles = write_pbf::pack_int(self.members.iter().map( |m| { pack_strings.call(&m.role) }));
@@ -108,7 +125,7 @@ impl Relation {
             write_pbf::pack_data(&mut res, 9, &refs);
             write_pbf::pack_data(&mut res, 10, &types);
         }
-        self.common.pack_tail(&mut res, include_qts)?;
+        pack_tail(&self.quadtree, &mut res, include_qts)?;
         Ok(res)
         
         //Err(Error::new(ErrorKind::Other, "not impl"))
@@ -116,17 +133,17 @@ impl Relation {
 }
 impl Ord for Relation {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.common.cmp(&other.common)
+        common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)
     }
 }
 impl PartialOrd for Relation {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        Some(common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype))
     }
 }
 
 impl PartialEq for Relation {
     fn eq(&self, other: &Self) -> bool {
-        self.common.eq(&other.common)
+        common_eq(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)
     }
 }  

@@ -7,7 +7,7 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::quadtree::Quadtree;
+use osmquadtree::elements::Quadtree;
 use osmquadtree::utils::Checktime;
 
 #[derive(Copy, Clone)]

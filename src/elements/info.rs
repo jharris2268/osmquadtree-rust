@@ -1,6 +1,10 @@
-use super::read_pbf;
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
+use osmquadtree::read_pbf;
 use super::common;  
-use super::write_pbf;
+use osmquadtree::write_pbf;
 use std::io::{Error,Result,ErrorKind};
 
 #[derive(Debug,Eq,PartialEq)]

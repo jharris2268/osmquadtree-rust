@@ -16,10 +16,10 @@ use osmquadtree::read_pbf;
 use osmquadtree::write_pbf;
 use osmquadtree::header_block;
 
-use osmquadtree::minimal_block;
-use osmquadtree::minimal_block::{MinimalNode,MinimalBlock};
+use osmquadtree::elements::minimal_block;
+use osmquadtree::elements::{MinimalNode,MinimalBlock};
 use osmquadtree::callback::{CallFinish, Callback,CallbackSync,CallbackMerge};
-use osmquadtree::quadtree::{Bbox,Quadtree};
+use osmquadtree::elements::{Bbox,Quadtree};
 
 use osmquadtree::stringutils::{StringUtils};
 use osmquadtree::utils::{Checktime,Timer,MergeTimings,ReplaceNoneWithTimings,CallAll};
@@ -102,7 +102,7 @@ impl WayNodeTile {
         for tg in read_pbf::IterTags::new(&data[..], 0) {
             match tg {
                 read_pbf::PbfTag::Value(1, k) => {
-                    if read_pbf::unzigzag(k) != self.key {
+                    if read_pbf::un_zig_zag(k) != self.key {
                         return Err(io::Error::new(ErrorKind::Other,"wrong key"));
                     }
                 },
@@ -1508,7 +1508,7 @@ fn read_quadtree_block_ways(data: Vec<u8>, res: &mut Box<QuadtreeSplit>) {
                                 
                                 match z {
                                     read_pbf::PbfTag::Value(1, v) => { i = v as i64; },
-                                    read_pbf::PbfTag::Value(20, v) => { q = Quadtree::new(read_pbf::unzigzag(v)); }
+                                    read_pbf::PbfTag::Value(20, v) => { q = Quadtree::new(read_pbf::un_zig_zag(v)); }
                                     _ => {}
                                 }
                                 

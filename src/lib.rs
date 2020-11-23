@@ -2,23 +2,14 @@ pub mod read_pbf;
 pub mod read_file_block;
 pub mod write_pbf;
 pub mod header_block;
-pub mod quadtree;
-pub mod primitive_block;
-pub mod minimal_block;
 
-pub mod node;
-pub mod way;
-pub mod relation;
-pub mod dense;
-pub mod common;
-pub mod info;
-pub mod tags;
 pub mod callback;
 pub mod stringutils;
 pub mod utils;
 pub mod convertblocks;
 pub mod sortblocks;
 pub mod update;
+pub mod elements;
 
 #[cfg(test)]
 mod tests {

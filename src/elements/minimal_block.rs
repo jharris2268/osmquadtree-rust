@@ -1,66 +1,138 @@
+mod osmquadtree {
+    pub use super::super::super::*;
+}
+
 use super::quadtree;
 use super::quadtree::Quadtree;
-use super::read_pbf;
-use super::read_pbf::{PbfTag,IterTags,unzigzag,read_delta_packed_int};
-use super::write_pbf;
+use super::common::{Changetype,get_changetype};
+use osmquadtree::read_pbf;
+use osmquadtree::read_pbf::{PbfTag,IterTags,un_zig_zag,read_delta_packed_int};
+use osmquadtree::write_pbf;
 //use std::error::Error;
 use std::io;
 use std::io::{Error,ErrorKind};
+use std::cmp::Ordering;
 
 
-
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq)]
 pub struct MinimalNode {
-    pub changetype: u32,
+    pub changetype: Changetype,
     pub id: i64,
     pub version: u32,
     pub timestamp: i64,
-    pub quadtree: i64,
+    pub quadtree: Quadtree,
     pub lon: i32,
     pub lat: i32,
 }
 
 impl MinimalNode {
     pub fn new() -> MinimalNode {
-        MinimalNode{changetype:0,id:0,version:0,timestamp:0,quadtree:-1,lon:0,lat:0}
+        MinimalNode{changetype:Changetype::Normal,id:0,version:0,timestamp:0,quadtree:Quadtree::empty(),lon:0,lat:0}
+    }
+}
+impl Ord for MinimalNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let a = self.id.cmp(&other.id);
+        if a != Ordering::Equal { return a; }
+        
+        let b = self.version.cmp(&other.version);
+        if b != Ordering::Equal { return b; }
+        
+        self.changetype.cmp(&other.changetype)
     }
 }
 
+impl PartialOrd for MinimalNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
 
-#[derive(Debug)]
+impl PartialEq for MinimalNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.id==other.id && self.version==other.version && self.changetype==other.changetype
+    }
+}  
+
+
+#[derive(Debug,Eq)]
 pub struct MinimalWay {
-    pub changetype: u32,
+    pub changetype: Changetype,
     pub id: i64,
     pub version: u32,
     pub timestamp: i64,
-    pub quadtree: i64,
+    pub quadtree: Quadtree,
     pub refs_data: Vec<u8>,
     
 }
 impl MinimalWay {
     pub fn new() -> MinimalWay {
-        MinimalWay{changetype:0,id:0,version:0,timestamp:0,quadtree:-1,refs_data: Vec::new()}
+        MinimalWay{changetype:Changetype::Normal,id:0,version:0,timestamp:0,quadtree:Quadtree::empty(),refs_data: Vec::new()}
+    }
+}
+impl Ord for MinimalWay {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let a = self.id.cmp(&other.id);
+        if a != Ordering::Equal { return a; }
+        
+        let b = self.version.cmp(&other.version);
+        if b != Ordering::Equal { return b; }
+        
+        self.changetype.cmp(&other.changetype)
     }
 }
 
+impl PartialOrd for MinimalWay {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
 
-#[derive(Debug)]
+impl PartialEq for MinimalWay {
+    fn eq(&self, other: &Self) -> bool {
+        self.id==other.id && self.version==other.version && self.changetype==other.changetype
+    }
+}  
+
+#[derive(Debug,Eq)]
 pub struct MinimalRelation {
-    pub changetype: u32,
+    pub changetype: Changetype,
     pub id: i64,
     pub version: u32,
     pub timestamp: i64,
-    pub quadtree: i64,
+    pub quadtree: Quadtree,
     pub types_data: Vec<u8>,
     pub refs_data: Vec<u8>,
 }
 
 impl MinimalRelation {
     pub fn new() -> MinimalRelation {
-        MinimalRelation{changetype:0,id:0,version:0,timestamp:0,quadtree:-1,types_data: Vec::new(), refs_data: Vec::new()}
+        MinimalRelation{changetype:Changetype::Normal,id:0,version:0,timestamp:0,quadtree:Quadtree::empty(),types_data: Vec::new(), refs_data: Vec::new()}
+    }
+}
+impl Ord for MinimalRelation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let a = self.id.cmp(&other.id);
+        if a != Ordering::Equal { return a; }
+        
+        let b = self.version.cmp(&other.version);
+        if b != Ordering::Equal { return b; }
+        
+        self.changetype.cmp(&other.changetype)
     }
 }
 
+impl PartialOrd for MinimalRelation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
+
+impl PartialEq for MinimalRelation {
+    fn eq(&self, other: &Self) -> bool {
+        self.id==other.id && self.version==other.version && self.changetype==other.changetype
+    }
+}  
 #[derive(Debug)]
 pub struct MinimalBlock {
     pub index: i64,
@@ -107,7 +179,7 @@ impl MinimalBlock {
                 read_pbf::PbfTag::Data(1, _) => {},
                 read_pbf::PbfTag::Data(2, d) => groups.push(d),
                 
-                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(unzigzag(qt)),
+                read_pbf::PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(un_zig_zag(qt)),
                 read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,
                 
@@ -126,18 +198,18 @@ impl MinimalBlock {
         Ok(res)
     }
     
-    fn find_changetype(data: &[u8], ischange: bool) -> u64 {
-        if !ischange { return 0; }
+    fn find_changetype(data: &[u8], ischange: bool) -> Changetype {
+        if !ischange { return Changetype::Normal; }
         for x in read_pbf::IterTags::new(&data, 0) {
             match x {
-                read_pbf::PbfTag::Value(10,ct) => return ct,
+                read_pbf::PbfTag::Value(10,ct) => return get_changetype(ct),
                 _ => {},
             }
         }
-        0
+        Changetype::Normal
     }
     
-    fn read_group(&mut self, changetype: u64, data: &[u8], readnodes: bool, readways: bool, readrelations: bool) -> Result<u64,Error> {
+    fn read_group(&mut self, changetype: Changetype, data: &[u8], readnodes: bool, readways: bool, readrelations: bool) -> Result<u64,Error> {
         let mut count=0;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
@@ -168,9 +240,9 @@ impl MinimalBlock {
         Ok(count)
     }
     
-    fn read_node(&mut self, changetype: u64, data: &[u8]) -> Result<u64,Error> {
+    fn read_node(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64,Error> {
         let mut nd = MinimalNode::new();
-        nd.changetype = changetype as u32;
+        nd.changetype = changetype;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
                 read_pbf::PbfTag::Value(1,i) => nd.id = i as i64,
@@ -185,7 +257,7 @@ impl MinimalBlock {
                 },
                 read_pbf::PbfTag::Value(7,i) => nd.lat = i as i32,
                 read_pbf::PbfTag::Value(8,i) => nd.lon = i as i32,
-                read_pbf::PbfTag::Value(20,i) => nd.quadtree = read_pbf::unzigzag(i),
+                read_pbf::PbfTag::Value(20,i) => nd.quadtree = Quadtree::new(read_pbf::un_zig_zag(i)),
                 _ => {},
             }
         }
@@ -194,9 +266,9 @@ impl MinimalBlock {
         Ok(1)
         
     }
-    fn read_way(&mut self, changetype: u64, data: &[u8]) -> Result<u64,Error> {
+    fn read_way(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64,Error> {
         let mut wy = MinimalWay::new();
-        wy.changetype = changetype as u32;
+        wy.changetype = changetype;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
                 read_pbf::PbfTag::Value(1,i) => wy.id = i as i64,
@@ -210,7 +282,7 @@ impl MinimalBlock {
                     }
                 },
                 read_pbf::PbfTag::Data(8,d) => wy.refs_data = d.to_vec(),
-                read_pbf::PbfTag::Value(20,i) => wy.quadtree = read_pbf::unzigzag(i),
+                read_pbf::PbfTag::Value(20,i) => wy.quadtree = Quadtree::new(read_pbf::un_zig_zag(i)),
                 _ => {},
             }
         }
@@ -218,9 +290,9 @@ impl MinimalBlock {
         self.ways.push(wy);
         Ok(1)
     }
-    fn read_relation(&mut self, changetype: u64, data: &[u8]) -> Result<u64,Error> {
+    fn read_relation(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64,Error> {
         let mut rl = MinimalRelation::new();
-        rl.changetype = changetype as u32;
+        rl.changetype = changetype;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
                 read_pbf::PbfTag::Value(1,i) => rl.id = i as i64,
@@ -235,7 +307,7 @@ impl MinimalBlock {
                 },
                 read_pbf::PbfTag::Data(9,d) => rl.refs_data = d.to_vec(),
                 read_pbf::PbfTag::Data(10,d) => rl.types_data = d.to_vec(),
-                read_pbf::PbfTag::Value(20,i) => rl.quadtree = read_pbf::unzigzag(i),
+                read_pbf::PbfTag::Value(20,i) => rl.quadtree = Quadtree::new(read_pbf::un_zig_zag(i)),
                 _ => {},
             }
         }
@@ -243,7 +315,7 @@ impl MinimalBlock {
         self.relations.push(rl);
         Ok(1)
     }
-    fn read_dense(&mut self, changetype: u64, data: &[u8]) -> Result<u64,Error> {
+    fn read_dense(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64,Error> {
         
         let mut ids = Vec::new();
         let mut lons = Vec::new();
@@ -288,12 +360,12 @@ impl MinimalBlock {
         
         for i in 0..ids.len() {
             let mut nd = MinimalNode::new();
-            nd.changetype = changetype as u32;
+            nd.changetype = changetype;
             nd.id = ids[i] as i64;
             
             if lats.len()>0 { nd.lat = lats[i] as i32; }
             if lons.len()>0 { nd.lon = lons[i] as i32; }
-            if qts.len()>0 { nd.quadtree=qts[i] as i64; }
+            if qts.len()>0 { nd.quadtree=Quadtree::new(qts[i]); }
             
             if vs.len()>0 { nd.version = vs[i] as u32; }
             if ts.len()>0 { nd.timestamp = ts[i] as i64; }
@@ -323,7 +395,7 @@ fn unpack_id_qt(data: &[u8]) -> io::Result<(i64, Quadtree)> {
     for t in IterTags::new(data,0) {
         match t {
             PbfTag::Value(1, x) => { i = x as i64; },
-            PbfTag::Value(20, x) => { qt = unzigzag(x); },
+            PbfTag::Value(20, x) => { qt = un_zig_zag(x); },
             _ => {}
         }
     }
