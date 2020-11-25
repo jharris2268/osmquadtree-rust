@@ -346,9 +346,9 @@ impl ChangeBlock {
 }
     
 
-pub fn read_xml_change<T: BufRead>(inf: T) -> Result<Box<ChangeBlock>> {
+pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
     
-    let mut res = Box::new(ChangeBlock::new());
+    let mut res = ChangeBlock::new();
     
     let mut reader = Reader::from_reader(inf);
     

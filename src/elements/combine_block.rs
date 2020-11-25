@@ -65,8 +65,8 @@ impl WithIdAndChangetype for MinimalRelation {
         &mut self.changetype
     }
 }
-
-fn combine<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
+/*
+fn combine_alt<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
     let mut res = Vec::new();
     
     left.reverse();
@@ -99,6 +99,49 @@ fn combine<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) ->
     res.reverse();
     res
 }
+*/
+
+fn combine<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Vec<T> {
+    let mut res = Vec::new();
+    
+    let mut left_iter = left.into_iter();
+    let mut right_iter = right.into_iter();
+    
+    let mut left_curr = left_iter.next();
+    let mut right_curr = right_iter.next();
+    
+    
+    while !(left_curr == None && right_curr==None) {
+        if left_curr==None {
+            res.push(right_curr.take().unwrap());
+            right_curr = right_iter.next();
+            
+        } else if right_curr==None {
+            res.push(left_curr.take().unwrap());
+            left_curr = left_iter.next();
+        } else {
+            match left_curr.as_ref().unwrap().get_id().cmp(&right_curr.as_ref().unwrap().get_id()) {
+                Ordering::Less => {
+                    res.push(left_curr.take().unwrap());
+                    left_curr = left_iter.next();
+                    
+                },
+                Ordering::Equal => {
+                    left_curr = left_iter.next();
+                    res.push(right_curr.take().unwrap());
+                    right_curr = right_iter.next();
+                },
+                Ordering::Greater => {
+                    res.push(right_curr.take().unwrap());
+                    right_curr = right_iter.next();
+                },
+            }
+        }
+    }
+    
+    res
+}
+
 
 fn check_changetype<T: WithIdAndChangetype>(o: &mut T) -> bool {
     match o.get_changetype() {
@@ -110,8 +153,8 @@ fn check_changetype<T: WithIdAndChangetype>(o: &mut T) -> bool {
     *o.get_changetype() = Changetype::Normal;
     true
 }
-
-fn apply_change<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
+/*
+fn apply_change_alt<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
     let mut res = Vec::new();
     
     left.reverse();
@@ -157,6 +200,54 @@ fn apply_change<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T
         }
     }
     res.reverse();
+    res
+}
+*/
+fn check_changetype_add<T: WithIdAndChangetype>(res: &mut Vec<T>, obj: &mut Option<T>) {
+    let mut r = obj.take().unwrap();
+    if check_changetype(&mut r) {
+        res.push(r);
+    }
+}
+
+fn apply_change<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Vec<T> {
+    let mut res = Vec::new();
+    
+    let mut left_iter = left.into_iter();
+    let mut right_iter = right.into_iter();
+    
+    let mut left_curr = left_iter.next();
+    let mut right_curr = right_iter.next();
+    
+    
+    while !(left_curr == None && right_curr==None) {
+        if left_curr==None {
+            check_changetype_add(&mut res, &mut right_curr);
+            right_curr = right_iter.next();
+            
+        } else if right_curr==None {
+            check_changetype_add(&mut res, &mut left_curr);
+            left_curr = left_iter.next();
+        } else {
+            match left_curr.as_ref().unwrap().get_id().cmp(&right_curr.as_ref().unwrap().get_id()) {
+                Ordering::Less => {
+                    check_changetype_add(&mut res, &mut left_curr);
+                    left_curr = left_iter.next();
+                    
+                },
+                Ordering::Equal => {
+                    left_curr = left_iter.next();
+                    check_changetype_add(&mut res, &mut right_curr);
+                    right_curr = right_iter.next();
+                },
+                Ordering::Greater => {
+                    check_changetype_add(&mut res, &mut right_curr);
+                    right_curr = right_iter.next();
+                },
+            }
+        }
+    }
+    
     res
 }
 

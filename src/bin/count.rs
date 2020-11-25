@@ -14,10 +14,14 @@ use osmquadtree::elements::way;
 use osmquadtree::elements::relation;
 use osmquadtree::elements::common::get_changetype;
 use osmquadtree::elements::minimal_block;
-use osmquadtree::elements::primitive_block::Changetype;
+use osmquadtree::elements::{Changetype,PrimitiveBlock,MinimalBlock};
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::update::{read_xml_change,ChangeBlock};
+use osmquadtree::update::{read_xml_change,ChangeBlock,read_filelist};
 use osmquadtree::utils::timestamp_string;
+
+use osmquadtree::callback::{Callback,CallbackMerge,CallFinish};
+use osmquadtree::utils::{ThreadTimer,MergeTimings};
+
 //use osmquadtree::dense;
 //use osmquadtree::common;
 //use osmquadtree::info;
@@ -452,11 +456,11 @@ fn as_secs(dur: std::time::Duration) -> f64 {
 
 
 
-fn add_fb<CT: CountBlocks>(cc: &mut CT, idx: i64, fb: &osmquadtree::read_file_block::FileBlock, minimal: bool, ishchange: bool, firstthread: bool, lt: &mut std::time::SystemTime, st: &std::time::SystemTime) {
+fn add_fb<CT: CountBlocks>(cc: &mut CT, idx: i64, fb: &osmquadtree::read_file_block::FileBlock, fname: &str, minimal: bool, ishchange: bool, firstthread: bool, lt: &mut std::time::SystemTime, st: &std::time::SystemTime) {
     let fbd = fb.data();
                 
     if fb.block_type == "OSMHeader" {
-        let hh = header_block::HeaderBlock::read(fb.pos+fb.len, &fbd).unwrap();
+        let hh = header_block::HeaderBlock::read(fb.pos+fb.len, &fbd, fname).unwrap();
         println!("header_block(bbox: {:?}, writer: {}, features: {:?}, {} index entries)", hh.bbox, hh.writer, hh.features, hh.index.len());
     } else {
         //cc.node.num += fbd.len() as i64;
@@ -504,7 +508,7 @@ fn add_fb<CT: CountBlocks>(cc: &mut CT, idx: i64, fb: &osmquadtree::read_file_bl
     
     
 
-fn count_all<I, CT: CountBlocks>(mut cc: CT, recv: I, idx: i64, minimal: bool, ischange: bool) -> CT
+fn count_all<I, CT: CountBlocks>(mut cc: CT, recv: I, idx: i64, fname: &str, minimal: bool, ischange: bool) -> CT
 where I: Iterator<Item=osmquadtree::read_file_block::FileBlock>,
 {
     let firstthread=idx==0;
@@ -515,7 +519,7 @@ where I: Iterator<Item=osmquadtree::read_file_block::FileBlock>,
     let mut lt = std::time::SystemTime::now();
 
     for fb in recv {
-        add_fb(&mut cc, idx, &fb, minimal, ischange, firstthread, &mut lt, &st);
+        add_fb(&mut cc, idx, &fb, fname, minimal, ischange, firstthread, &mut lt, &st);
         idx+=4;
         
     }
@@ -532,6 +536,74 @@ impl StringUtils for String {
         self.chars().skip(start).take(len).collect()
     }
 }*/
+
+struct CountPrim {
+    cc: Option<Count>,
+    tm: f64
+}
+
+impl CountPrim {
+    pub fn new() -> CountPrim {
+        CountPrim{cc: Some(Count::new()), tm: 0.0}
+    }
+}
+
+type Timings = osmquadtree::utils::Timings<Count>;
+
+impl CallFinish for CountPrim {
+    type CallType = PrimitiveBlock;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, bl: PrimitiveBlock) {
+        
+        let tx=ThreadTimer::new();
+        self.cc.as_mut().unwrap().add_primitive(&bl);
+        self.tm += tx.since();
+        
+    }
+    
+    fn finish(&mut self) -> std::io::Result<Timings> {
+        let mut tm = Timings::new();
+        tm.add("count", self.tm);
+        tm.add_other("count", self.cc.take().unwrap());
+        Ok(tm)
+    }
+}
+  
+  
+struct CountMinimal {
+    cc: Option<Count>,
+    tm: f64
+}
+
+impl CountMinimal {
+    pub fn new() -> CountMinimal {
+        CountMinimal{cc: Some(Count::new()), tm: 0.0}
+    }
+}
+
+
+impl CallFinish for CountMinimal {
+    type CallType = MinimalBlock;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, bl: MinimalBlock) {
+        
+        let tx=ThreadTimer::new();
+        self.cc.as_mut().unwrap().add_minimal(&bl);
+        self.tm += tx.since();
+        
+    }
+    
+    fn finish(&mut self) -> std::io::Result<Timings> {
+        let mut tm = Timings::new();
+        tm.add("count", self.tm);
+        tm.add_other("count", self.cc.take().unwrap());
+        Ok(tm)
+    }
+}
+    
+
 
 fn main() {
     
@@ -566,34 +638,37 @@ fn main() {
     }
     
     let f = File::open(&fname).expect("file not present");
-    let mut fbuf = BufReader::new(f);
+    
    
     
     
     if fname.ends_with(".osc") {
         let mut cn = CountChange::new();
-        let data = read_xml_change(fbuf).expect("failed to read osc");
+        let mut fbuf = BufReader::with_capacity(1024*1024, f);
+        let data = read_xml_change(&mut fbuf).expect("failed to read osc");
         
         cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".osc.gz") {
         let mut cn = CountChange::new();
-        let gzbuf = BufReader::new(flate2::bufread::GzDecoder::new(fbuf));
+        let fbuf = BufReader::with_capacity(1024*1024, f);
+        let mut gzbuf = BufReader::new(flate2::bufread::GzDecoder::new(fbuf));
         //Box::new(gzbuf) as Box<dyn std::io::BufRead>
-        let data = read_xml_change(gzbuf).expect("failed to read osc");
+        let data = read_xml_change(&mut gzbuf).expect("failed to read osc");
         
         cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".pbfc") {
         let mut cn = CountChange::new();
-        cn = count_all(cn, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal, true);
+        let mut fbuf=f;
+        cn = count_all(cn, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, true);
         println!("{}", cn);
-    } else {
+    } else if std::fs::metadata(&fname).expect("failed to open file").is_file() {
         
         let mut cc = Count::new();
         if numchan == 0 {
-            
-            cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, minimal, false);
+            let mut fbuf=f;
+            cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, false);
         
         } else if numchan > 8 {
             panic!("numchan must be between 0 & 8");
@@ -605,10 +680,11 @@ fn main() {
             for i in 0..numchan {
                 let (s,r) = mpsc::sync_channel(1);
                 senders.push(s);
-                results.push(thread::spawn(move || count_all(Count::new(), r.iter(), i as i64, minimal,false)));
+                let fnc=fname.clone();
+                results.push(thread::spawn(move || count_all(Count::new(), r.iter(), i as i64, &fnc, minimal,false)));
             }
             
-            
+            let mut fbuf=f;
             for (i,fb) in read_file_block::ReadFileBlocks::new(&mut fbuf).enumerate() {
                 senders[i%numchan].send(fb).unwrap();
             }        
@@ -626,6 +702,94 @@ fn main() {
             
         }
         println!("{}", cc);
+    } else {
+        
+        //let filter = Some(bbox=osmquadtree::elements::Bbox::new(-1800000000,-900000000,1800000000,900000000));
+        let filter: Option<osmquadtree::elements::Bbox> = None;
+        
+        let filelist = read_filelist(&fname);
+        
+        //let pf = 100.0 / (std::fs::metadata(&format!("{}{}", fname, filelist[0].filename)).expect("fail").len() as f64);
+    
+        let mut fbufs = Vec::new();
+        let mut locs = BTreeMap::new();
+        
+        let cap = match filter {
+            Some(_) => 8*1024,
+            None => 5*1024*1024
+        };
+        
+        for (i,fle) in filelist.iter().enumerate() {
+            let fle_fn = format!("{}{}", fname, fle.filename);
+            let f = File::open(&fle_fn).expect("fail");
+            let mut fbuf = BufReader::with_capacity(cap, f);
+            
+            let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
+            let filepos = read_file_block::file_position(&mut fbuf).expect("?");
+            let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
+            
+            
+            
+            for entry in head.index {
+                if !locs.contains_key(&entry.quadtree) {
+                    if i != 0 {
+                        panic!(format!("quadtree {} not in first file?", entry.quadtree.as_string()));
+                    }
+                    locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+                }
+                
+                locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
+            }
+            
+            fbufs.push(fbuf);
+        }
+        
+        //let bbox=osmquadtree::elements::Bbox::new(-5000000,495000000,13000000,535000000);
+        
+        
+        let mut locsv = Vec::new();
+        for (a,(_b,c)) in &locs {
+            match filter {
+                None => {locsv.push((locsv.len(),c.clone())); },
+                Some(ref bbox) => { 
+                    if bbox.overlaps(&a.as_bbox(0.05)) {
+                        locsv.push((locsv.len(),c.clone()));
+                    }
+                }
+            }
+        }
+            
+        println!("{} files, {} / {} tiles", fbufs.len(), locsv.len(), locs.len());
+        
+        let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<read_file_block::FileBlock>),ReturnType=Timings>>> = Vec::new();
+        
+        if minimal { 
+            for _ in 0..numchan {
+                let cca = Box::new(CountMinimal::new());
+                pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_minimal_blocks_combine_call_all(cca))));
+            }
+        
+        } else {
+            for _ in 0..numchan {
+                let cca = Box::new(CountPrim::new());
+                pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_primitive_blocks_combine_call_all(cca))));
+            }
+        }
+        let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
+        let (a,b) = read_file_block::read_all_blocks_parallel(fbufs, locsv, readb);
+        
+        println!("{} {}", a, b);
+        
+        let mut cc = Count::new();
+        for (x,y) in &a.others {
+            println!("{}\n{}\n", x, y);
+            cc.add_other(y);
+        }
+        
+        println!("{}", cc);
+        
+        
+        
     }
         
     if prof.len()>0 {

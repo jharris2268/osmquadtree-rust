@@ -13,6 +13,7 @@ pub use super::relation::{Relation,ElementType,Member};
 pub use super::tags::Tag;
 pub use super::common::Changetype;
 pub use super::info::Info;
+pub use super::idset::IdSet;
 
 use super::dense::Dense;
 use super::common::{PackStringTable,get_changetype};
@@ -73,6 +74,10 @@ impl PrimitiveBlock {
     }
     
     pub fn read(index: i64, location: u64, data: &[u8], ischange: bool, minimal: bool) -> Result<PrimitiveBlock> {
+        Self::read_check_ids(index, location, data, ischange, minimal, None)
+    }
+    
+    pub fn read_check_ids(index: i64, location: u64, data: &[u8], ischange: bool, minimal: bool, idset: Option<&IdSet>) -> Result<PrimitiveBlock> {
         
         let mut res = PrimitiveBlock::new(index,location);
         
@@ -98,7 +103,7 @@ impl PrimitiveBlock {
         
         for g in groups {
             let ct = PrimitiveBlock::find_changetype(&g, ischange);
-            res.read_group(&strings, ct, &g, minimal)?;
+            res.read_group(&strings, ct, &g, minimal, idset)?;
             drop(g);
         }
         drop(strings);
@@ -117,14 +122,14 @@ impl PrimitiveBlock {
         Changetype::Normal
     }
     
-    fn read_group(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_group(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<u64> {
         let mut count=0;
         for x in read_pbf::IterTags::new(&data,0) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => count += self.read_node(strings, changetype, &d, minimal)?,
-                read_pbf::PbfTag::Data(2, d) => count += self.read_dense(strings, changetype, &d, minimal)?,
-                read_pbf::PbfTag::Data(3, d) => count += self.read_way(strings, changetype, &d, minimal)?,
-                read_pbf::PbfTag::Data(4, d) => count += self.read_relation(strings, changetype, &d, minimal)?,
+                read_pbf::PbfTag::Data(1, d) => count += self.read_node(strings, changetype, &d, minimal, idset)?,
+                read_pbf::PbfTag::Data(2, d) => count += self.read_dense(strings, changetype, &d, minimal, idset)?,
+                read_pbf::PbfTag::Data(3, d) => count += self.read_way(strings, changetype, &d, minimal, idset)?,
+                read_pbf::PbfTag::Data(4, d) => count += self.read_relation(strings, changetype, &d, minimal, idset)?,
                 read_pbf::PbfTag::Value(10,_) => {},
                 _ => return Err(Error::new(ErrorKind::Other,"unexpected item")),
             }
@@ -132,24 +137,48 @@ impl PrimitiveBlock {
         Ok(count)
     }
     
-    fn read_node(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_node(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<u64> {
+        match idset {
+            Some(idset) => {
+                if !idset.contains(ElementType::Node,get_id(&data)) {
+                    return Ok(0);
+                }
+            },
+            None => {}
+        }
         let n = Node::read(changetype, &strings, &data, minimal)?;
         self.nodes.push(n);
         Ok(1)
         
     }
-    fn read_way(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_way(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<u64> {
+        match idset {
+            Some(idset) => {
+                if !idset.contains(ElementType::Way,get_id(&data)) {
+                    return Ok(0);
+                }
+            },
+            None => {}
+        }
         let w = Way::read(changetype, &strings, &data, minimal)?;
         self.ways.push(w);
         Ok(1)
     }
-    fn read_relation(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
+    fn read_relation(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<u64> {
+        match idset {
+            Some(idset) => {
+                if !idset.contains(ElementType::Relation,get_id(&data)) {
+                    return Ok(0);
+                }
+            },
+            None => {}
+        }
         let r = Relation::read(changetype, &strings, &data, minimal)?;
         self.relations.push(r);
         Ok(1)
     }
-    fn read_dense(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool) -> Result<u64> {
-        let nn = Dense::read(changetype,&strings, &data, minimal)?;
+    fn read_dense(&mut self, strings: &Vec<String>, changetype: Changetype, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<u64> {
+        let nn = Dense::read(changetype,&strings, &data, minimal, idset)?;
         let nl = nn.len() as u64;
         for n in nn {
             self.nodes.push(n);
@@ -232,5 +261,11 @@ impl PrimitiveBlock {
     
 }
 
-                
+fn get_id(data: &[u8]) -> i64 {
+    match read_pbf::read_tag(data, 0) {
+        (read_pbf::PbfTag::Value(1,i),_) => read_pbf::un_zig_zag(i),
+        _ => 0
+    }
+}
+        
                 

@@ -149,24 +149,24 @@ pub struct MinimalBlock {
 
 
 impl MinimalBlock {
-    pub fn new() -> Box<MinimalBlock> {
-        Box::new(MinimalBlock{index:0, location:0,
+    pub fn new() -> MinimalBlock {
+        MinimalBlock{index:0, location:0,
             quadtree: quadtree::Quadtree::new(-2),
             start_date: 0, end_date: 0,
             nodes: Vec::new(),
             ways: Vec::new(),
             relations: Vec::new(),            
-            })
+            }
     }
     
-    pub fn read(index: i64, location: u64, data: &[u8], ischange: bool) -> Result<Box<MinimalBlock>, Error> {
+    pub fn read(index: i64, location: u64, data: &[u8], ischange: bool) -> Result<MinimalBlock, Error> {
         MinimalBlock::read_parts(index,location,data,ischange,true,true,true)
     }
         
     pub fn len(&self) -> usize {
         self.nodes.len() + self.ways.len() + self.relations.len()
     }
-    pub fn read_parts(index: i64, location: u64, data: &[u8], ischange: bool, readnodes: bool, readways: bool, readrelations: bool) -> Result<Box<MinimalBlock>, Error> {
+    pub fn read_parts(index: i64, location: u64, data: &[u8], ischange: bool, readnodes: bool, readways: bool, readrelations: bool) -> Result<MinimalBlock, Error> {
         
         let mut res = MinimalBlock::new();
         res.index=index;

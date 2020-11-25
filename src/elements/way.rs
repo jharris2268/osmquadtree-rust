@@ -6,7 +6,7 @@ mod osmquadtree {
 use osmquadtree::read_pbf;
 use osmquadtree::write_pbf;
 
-use super::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable};
+use super::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable,SetCommon};
 use super::info::Info;
 use super::tags::Tag;
 use super::quadtree::Quadtree;
@@ -36,10 +36,9 @@ impl Way {
         let tgs = read_pbf::read_all_tags(&data,0);
         //let mut rem=Vec::new();
         //(w.id, w.info, w.tags, w.quadtree, rem) = read_common(&strings, &tgs, minimal)?;
-        let mut zz = read_common(&strings, &tgs, minimal)?;
-        w.id = zz.0; w.info = zz.1.take(); w.tags = std::mem::take(&mut zz.2); w.quadtree = zz.3;
+        let rem = read_common(&mut w, &strings, &tgs, minimal)?;
         
-        for t in zz.4 {
+        for t in rem {
             match t {
                 read_pbf::PbfTag::Data(8, d) => w.refs = read_pbf::read_delta_packed_int(&d),
                 _ => {},
@@ -62,6 +61,15 @@ impl Way {
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
+
+impl SetCommon for Way {
+    fn set_id(&mut self, id: i64) { self.id=id; }
+    fn set_info(&mut self, info: Info) { self.info=Some(info); }
+    fn set_tags(&mut self, tags: Vec<Tag>) { self.tags=tags; }
+    fn set_quadtree(&mut self, quadtree: Quadtree) { self.quadtree=quadtree; }
+}
+
+
 impl Ord for Way {
     fn cmp(&self, other: &Self) -> Ordering {
         common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)

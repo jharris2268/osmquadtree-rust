@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io;
-use std::io::{BufReader,Read,Write};
+use std::io::{BufReader,Read,Write,ErrorKind};
 
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -16,7 +16,7 @@ use super::write_pbf;
 use super::callback::CallFinish;
 use super::utils::{Checktime};
 
-pub fn read_file_data(file: &mut BufReader<File>, nbytes: u64) -> io::Result<Vec<u8>> {
+pub fn read_file_data<R: Read>(file: &mut R, nbytes: u64) -> io::Result<Vec<u8>> {
     
     let mut res = vec![0u8; nbytes as usize];
     file.read_exact(&mut res)?;
@@ -50,28 +50,33 @@ impl FileBlock {
 }
 
 
-pub fn file_position(file: &mut BufReader<File>) -> io::Result<u64> {
+pub fn file_position<F: Seek>(file: &mut F) -> io::Result<u64> {
     file.seek(SeekFrom::Current(0))
 }
+pub fn read_file_block<F: Seek+Read>(file: &mut F) -> io::Result<FileBlock> {
+    let pos = file_position(file)?;
+    let (_,y) = read_file_block_with_pos(file, pos)?;
+    Ok(y)
+}
 
-pub fn read_file_block(file: &mut BufReader<File>) -> io::Result<FileBlock> {
-    
-    //let mut fb = Box::new(FileBlock::new());
+
+pub fn read_file_block_with_pos<F: Read>(file: &mut F, mut pos: u64) -> io::Result<(u64,FileBlock)> {
+
     let mut fb = FileBlock::new();
-    
-    fb.pos = file_position(file)?;
-    
+    fb.pos = pos;
         
     let a = match read_file_data(file, 4) {
         Ok(data) => data,
         Err(err) => return Err(err),
     };
         
-        
+    pos += 4;
         
     let (l, _) = read_pbf::read_uint32(&a, 0)?;
     
     let b = read_file_data(file, l).unwrap();
+    pos += l;
+    
     let bb = read_pbf::IterTags::new(&b, 0);
     //println!("{:?}", bb);
     let mut ln = 0;
@@ -85,12 +90,8 @@ pub fn read_file_block(file: &mut BufReader<File>) -> io::Result<FileBlock> {
     fb.len = 4+l+ln;
     
     let c = read_file_data(file, ln).unwrap();
-    //let cc = read_pbf::read_all_tags(&c, 0);
+    pos += ln;
     
-    //println!("{:?}", cc);   
-    //let mut comp = Vec::new();
-    //let mut comp_len = 0;
-    //for tg in cc {
     for tg in read_pbf::IterTags::new(&c, 0) {
         match tg {
             read_pbf::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
@@ -99,56 +100,16 @@ pub fn read_file_block(file: &mut BufReader<File>) -> io::Result<FileBlock> {
             _ => println!("?? {:?}", tg),
         }
     }
-    /*drop(a);
-    drop(b);
-    drop(c);*/
     
-    Ok(fb)
+    Ok((pos,fb))
     
 }
 
 pub fn unpack_file_block(pos: u64, data: &[u8]) -> io::Result<FileBlock> {
     
-    
-    let mut fb = FileBlock::new();
-    
-    fb.pos = pos;
-    
-        
-    let a = &data[0..4];
-        
-    let (l, _) = read_pbf::read_uint32(a, 0)?;
-    
-    
-    let b = &data[4..4+l as usize];
-    
-    let bb = read_pbf::IterTags::new(b, 0);
-    //println!("{:?}", bb);
-    let mut ln = 0;
-    for tg in bb {
-        match tg {
-            read_pbf::PbfTag::Value(3, v) => ln = v,
-            read_pbf::PbfTag::Data(1, d) => fb.block_type = std::str::from_utf8(&d).unwrap().to_string(),
-            _ => println!("?? {:?}", tg),
-        }
-    }
-    fb.len = 4+l+ln;
-    
-    let c = &data[4+l as usize .. (4+l+ln) as usize];
-    for tg in read_pbf::IterTags::new(c, 0) {
-        match tg {
-            read_pbf::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
-            read_pbf::PbfTag::Value(2, _) => fb.is_comp = true,
-            read_pbf::PbfTag::Data(3, d) => fb.data_raw = d.to_vec(),
-            _ => println!("?? {:?}", tg),
-        }
-    }
-    /*drop(a);
-    drop(b);
-    drop(c);*/
-    
-    Ok(fb)
-    
+    let s = read_file_block_with_pos(&mut data.as_ref(),pos)?;
+    Ok(s.1)
+
 }
 
 pub fn pack_file_block(blockname: &str, data: &[u8], compress: bool) -> io::Result<Vec<u8>> {
@@ -181,30 +142,44 @@ pub fn pack_file_block(blockname: &str, data: &[u8], compress: bool) -> io::Resu
 
 
 
-pub struct ReadFileBlocks<'a> {
-    file: &'a mut BufReader<File>
+pub struct ReadFileBlocks<'a, R: Read> {
+    file: &'a mut R,
+    p: u64
 }
 
-impl ReadFileBlocks<'_> {
-    pub fn new(file: &mut BufReader<File>) -> ReadFileBlocks {
-        ReadFileBlocks{file}
+impl<R> ReadFileBlocks<'_, R>
+    where R: Read+Seek
+{
+    pub fn new(file: &mut R) -> ReadFileBlocks<R> {
+        let p = file_position(file).expect("!");
+        ReadFileBlocks{file, p}
     }
 }
 
 
 
-impl Iterator for ReadFileBlocks<'_> {
+impl<R> Iterator for ReadFileBlocks<'_, R>
+    where R: Read
+{
     type Item = FileBlock;
     
     fn next(&mut self) -> Option<Self::Item> {
         
                 
-        match read_file_block(self.file) {
-            Ok(fb) => { Some(fb) }
+        match read_file_block_with_pos(self.file,self.p) {
+            Ok((p,fb)) => { self.p = p; Some(fb) },
             Err(err) => {
-                println!("failed to read {}", err);
+                match err.kind() {
+                    ErrorKind::UnexpectedEof => {
+                        //at end of file
+                    },
+                    _ => {
+                        println!("failed to read {}", err);
+                    }
+                }
                 None
-            }
+            },
+            
         }
     }
 }
@@ -234,4 +209,39 @@ pub fn read_all_blocks<T,U>(fname: &str, mut pp: Box<T>) -> (U, f64)
     (pp.finish().expect("finish failed"), ct.gettime())
 }        
     
-
+pub fn read_all_blocks_parallel<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(usize,u64)>)>,mut pp: Box<T>) -> (U, f64)
+    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U>,
+            U: Send+Sync+'static,
+            F: Seek+Read
+{
+    let mut ct=Checktime::new();
+    
+    let mut fposes = Vec::new();
+    for f in fbufs.iter_mut() {
+        fposes.push(file_position(f).expect("!"));
+    }
+    let pf = 100.0 / (locs.len() as f64);
+    for (j,(i,ll)) in locs.iter().enumerate() {
+        let mut fbs = Vec::new();
+        for (a,b) in ll {
+            if fposes[*a]!=*b {
+                fbufs[*a].seek(SeekFrom::Start(*b)).expect(&format!("failed to read {} @ {}", *a,*b));
+            }
+            
+            let (x,y) = read_file_block_with_pos(&mut fbufs[*a],*b).expect(&format!("failed to read {} @ {}", *a,*b));
+            
+            fbs.push(y);
+            fposes[*a]=x;
+        }
+        
+        match ct.checktime() {
+            Some(d) => {
+                print!("\r{:8.3}s: {:6.1}% block {:10}", d, (j as f64)*pf, i);
+                io::stdout().flush().expect("");
+            },
+            None => {}
+        }
+        pp.call((*i,fbs));
+    }
+    (pp.finish().expect("finish failed"), ct.gettime())
+}      

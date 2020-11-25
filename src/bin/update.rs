@@ -1,12 +1,18 @@
 extern crate osmquadtree;
 
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::update::write_index_file;
-use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string};
+use osmquadtree::update::{write_index_file,FilelistEntry, read_filelist, write_filelist,read_xml_change,check_index_file};
+use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string,ReplaceNoneWithTimings,MergeTimings};
+use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
+use osmquadtree::header_block;
+use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock};
+use osmquadtree::read_file_block;
 use std::env;
 use std::fs::File;
 use serde::{Deserialize,Serialize};
-
+use std::collections::{BTreeSet,BTreeMap};
+use std::io::{Error,ErrorKind,BufReader};
+use std::sync::Arc;
 
 #[derive(Debug,Deserialize,Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -40,26 +46,6 @@ impl Settings {
         
 }
 
-#[derive(Debug,Deserialize,Serialize)]
-#[serde(rename_all = "PascalCase")]
-struct FilelistEntry {
-    filename: String,
-    end_date: String, 
-    num_tiles: usize,
-    state: i64
-}
-    
-impl FilelistEntry { 
-    pub fn new(filename: String, end_date: String, num_tiles: usize, state: i64) -> FilelistEntry {
-        FilelistEntry{filename,end_date,num_tiles,state}
-    }
-}
-
-fn read_filelist(prfx: &str) -> Vec<FilelistEntry> {
-    
-    let ff = File::open(format!("{}filelist.json", prfx)).expect("failed to open filelist file");
-    serde_json::from_reader(ff).expect("failed to read filelist")
-}
 
 
 fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(String,i64,i64)> {
@@ -78,7 +64,7 @@ fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(Strin
             
             if state > last_state {
                 let timestamp = parse_timestamp(&row[1]).expect("?");
-                let fname = format!("{}{}.osc.xml", settings.diffs_location, state);
+                let fname = format!("{}{}.osc.gz", settings.diffs_location, state);
                 res.push((fname, state,timestamp));
             }
         }
@@ -86,13 +72,137 @@ fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(Strin
     res
 }
 
-fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
-    let flfile = File::create(format!("{}filelist.json", prfx)).expect("failed to create filelist file");
-    serde_json::to_writer(&flfile, &filelist).expect("failed to write filelist json");
+struct CollectTiles {
+    res: BTreeMap<Quadtree,PrimitiveBlock>,
 }
+impl CollectTiles {
+    pub fn new() -> CollectTiles {
+        CollectTiles{res: BTreeMap::new()}
+    }
+}
+impl CallFinish for CollectTiles {
+    type CallType=PrimitiveBlock;
+    type ReturnType=Timings<BTreeMap<Quadtree,PrimitiveBlock>>;
 
+    fn call(&mut self, bl: PrimitiveBlock) {
+        self.res.insert(bl.quadtree, bl);
+    }
+    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+        let mut tm = Timings::new();
+        tm.add_other("tiles", std::mem::take(&mut self.res));
+        Ok(tm)
+    }
+}   
+    
 
-fn find_update(_prfx: &str, _filelist: &Vec<FilelistEntry>, _change_filename: &str, _state: i64, _timestamp: i64) -> std::io::Result<(f64,String,usize)> {
+fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<Quadtree>, idset: IdSet, numchan: usize) -> std::io::Result<(BTreeMap<Quadtree,PrimitiveBlock>,IdSet)> {
+    
+    let mut locs = BTreeMap::new();
+    let mut fbufs=Vec::new();
+    
+    for (i,fle) in filelist.iter().enumerate() {
+        let fle_fn = format!("{}{}", prfx, fle.filename);
+        let f = File::open(&fle_fn).expect("fail");
+        let mut fbuf = BufReader::new(f);
+        
+        let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
+        let filepos = read_file_block::file_position(&mut fbuf).expect("?");
+        let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
+        
+        
+        
+        for entry in head.index {
+            if !locs.contains_key(&entry.quadtree) {
+                if i != 0 {
+                    panic!(format!("quadtree {} not in first file?", entry.quadtree.as_string()));
+                }
+                locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+            }
+            
+            locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
+        }
+        
+        fbufs.push(fbuf);
+    }
+    
+    
+    let mut locsv = Vec::new();
+    for (a,(_b,c)) in &locs {
+        if tiles.contains(&a) {
+            locsv.push((locsv.len(),c.clone()));
+        }
+    }
+        
+    println!("{} files, {} / {} tiles", fbufs.len(), locsv.len(), locs.len());
+    
+    let idsetw = Arc::new(idset);
+    
+    let colls = CallbackSync::new(Box::new(CollectTiles::new()),numchan);
+    
+    let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<read_file_block::FileBlock>),ReturnType=<CollectTiles as CallFinish>::ReturnType>>> = Vec::new();
+    
+    for coll in colls {
+        let cca = Box::new(ReplaceNoneWithTimings::new(coll));
+        pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_primitive_blocks_combine_call_all_idset(cca, idsetw.clone()))));
+    }
+    
+    let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
+    let (mut tm,b) = read_file_block::read_all_blocks_parallel(fbufs, locsv, readb);
+    println!("{} {}",tm,b);
+    let tls = tm.others.pop().unwrap().1;
+    
+    match Arc::try_unwrap(idsetw) {
+        Ok(idset) => Ok((tls,idset)),
+        Err(_) => Err(Error::new(ErrorKind::Other,"can't retrive idset"))
+    }
+}
+    
+    
+
+fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str, _state: i64, _timestamp: i64, numchan: usize) -> std::io::Result<(f64,String,usize)> {
+    let mut chgf = BufReader::new(File::open(change_filename)?);
+    
+        
+    let changeblock = if change_filename.ends_with(".gz") {
+        read_xml_change(&mut BufReader::new(flate2::bufread::GzDecoder::new(chgf)))
+    } else {
+        read_xml_change(&mut chgf)
+    }?;
+    
+    let mut idset=IdSet::new();
+    for (_,n) in changeblock.nodes.iter() {
+        idset.add_node(n);
+    }
+    for (_,w) in changeblock.ways.iter() {
+        idset.add_way(w);
+    }
+    for (_,r) in changeblock.relations.iter() {
+        idset.add_relation(r);
+    }
+    println!("{}", idset);
+    idset.clip_exnodes();
+    println!("{}", idset);
+    
+    let mut tiles = BTreeSet::new();
+    
+    for fle in filelist {
+        let fname = format!("{}{}-index.pbf", prfx, fle.filename);
+        
+        let (a,b,c) = check_index_file(&fname, idset, numchan)?;
+        for q in &a {
+            tiles.insert(*q);
+        }
+        println!("{}: {:5.1}s {} tiles [now {}]", fname,c, a.len(),tiles.len());
+        idset=b;
+        
+    }
+    
+    println!("need to check {} tiles",tiles.len());        
+    
+    let (blocks, _idset) = collect_existing(prfx, filelist, &tiles, idset, numchan)?;
+    
+    println!("{} blocks, {} eles", blocks.len(), blocks.iter().map(|(_,b)| { b.len() as i64 }).sum::<i64>());
+    
     panic!("not impl");
 }
 
@@ -154,14 +264,17 @@ fn main() {
         
         let settings = Settings::from_file(&prfx);
         let mut filelist = read_filelist(&prfx);
-        
+        if filelist.len()>1 {
+            filelist.pop();
+        }
         
         let to_update = check_state(&settings, &filelist);
+        println!("have {} in filelist, {} to update", filelist.len(), to_update.len());
         let mut tm = Timings::<()>::new();
         if !to_update.is_empty() {
             for (chgfn, st, ts) in to_update {
-                
-                let (tx, fname, nt) = find_update(&prfx, &filelist, &chgfn, st, ts).expect("failed to write update");
+                println!("call find_update('{}',{} entries,'{}', {}, {}, {})", prfx,filelist.len(),chgfn,st,ts,numchan);
+                let (tx, fname, nt) = find_update(&prfx, &filelist, &chgfn, st, ts,numchan).expect("failed to write update");
                 tm.add(&fname,tx);
                 
                 filelist.push(FilelistEntry::new(fname, date_string(ts), nt, st));

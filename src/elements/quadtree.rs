@@ -125,6 +125,16 @@ impl Bbox {
         if lat>self.maxlat { self.maxlat = lat; }
     }
     
+    pub fn overlaps(&self, other: &Bbox) -> bool {
+        if self.minlon > other.maxlon { return false; }
+        if self.minlat > other.maxlat { return false; }
+        if other.minlon > self.maxlon { return false; }
+        if other.minlat > self.maxlat { return false; }
+        return true;
+    }
+    
+    
+    
 }
 
 impl fmt::Display for Bbox {
@@ -165,6 +175,18 @@ impl Quadtree {
             coordinate_as_float(lon), coordinate_as_float(lat),
             coordinate_as_float(lon), coordinate_as_float(lat),
             buffer, maxlevel))
+    }
+    pub fn read(data: &[u8]) -> Result<Quadtree> {
+        let mut res = (0,0,0);
+        for x in read_pbf::IterTags::new(&data,0) {
+            match x {
+                read_pbf::PbfTag::Value(1, x) => res.0 = x as u32,
+                read_pbf::PbfTag::Value(2, y) => res.1 = y as u32,
+                read_pbf::PbfTag::Value(3, z) => res.2 = z as u32,
+                _ => return Err(Error::new(ErrorKind::Other,"unexpected item")),
+            }
+        }
+        Ok(Self::from_xyz(res.0,res.1,res.2))
     }
     
     pub fn from_xyz(x: u32, y: u32, z: u32) -> Quadtree {

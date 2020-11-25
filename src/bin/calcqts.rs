@@ -14,10 +14,10 @@ use osmquadtree::read_file_block;
 use osmquadtree::read_file_block::{FileBlock};
 use osmquadtree::read_pbf;
 use osmquadtree::write_pbf;
-use osmquadtree::header_block;
+//use osmquadtree::header_block;
 
-use osmquadtree::elements::minimal_block;
-use osmquadtree::elements::{MinimalNode,MinimalBlock};
+
+use osmquadtree::elements::{MinimalNode,MinimalBlock,QuadtreeBlock};
 use osmquadtree::callback::{CallFinish, Callback,CallbackSync,CallbackMerge};
 use osmquadtree::elements::{Bbox,Quadtree};
 
@@ -418,10 +418,10 @@ impl<T> PackWayNodes<T>
         let fbd = fb.data();
                 
         if fb.block_type == "OSMHeader" {
-            let hh = header_block::HeaderBlock::read(fb.pos+fb.len, &fbd).unwrap();
-            println!("header_block(bbox: {:?}, writer: {}, features: {:?}, {} index entries)", hh.bbox, hh.writer, hh.features, hh.index.len());
+            //let hh = header_block::HeaderBlock::read(fb.pos+fb.len, &fbd, self.fname).unwrap();
+            //println!("header_block(bbox: {:?}, writer: {}, features: {:?}, {} index entries)", hh.bbox, hh.writer, hh.features, hh.index.len());
         } else {
-            let mb = minimal_block::MinimalBlock::read_parts(idx as i64, fb.pos+fb.len, &fbd, false,false,true,true).expect("failed to read block");
+            let mb = MinimalBlock::read_parts(idx as i64, fb.pos+fb.len, &fbd, false,false,true,true).expect("failed to read block");
             
             match &mut self.ct {
                 Some(ct) => match ct.checktime() {
@@ -768,7 +768,7 @@ impl<T,U> CombineNodeWayNodeCB<T,U>
 }
 
 fn combine_nodes_waynodes<'a, T>(
-    waynode_iter: &'a mut T, waynode_curr: &'a mut Option<(i64,i64)>, mb: Box<MinimalBlock>) -> NodeWayNodeCombTile
+    waynode_iter: &'a mut T, waynode_curr: &'a mut Option<(i64,i64)>, mb: MinimalBlock) -> NodeWayNodeCombTile
     
     where T: Iterator<Item=(i64,i64)>
     
@@ -813,10 +813,10 @@ impl<T,U> CallFinish for CombineNodeWayNodeCB<T,U>
         U: Iterator<Item=(i64,i64)> + Sync + Send + 'static
 {
         
-    type CallType = Box<MinimalBlock>;
+    type CallType = MinimalBlock;
     type ReturnType = Timings;
 
-    fn call(&mut self, mb: Box<MinimalBlock>) {
+    fn call(&mut self, mb: MinimalBlock) {
         let t=Timer::new();
         if !self.hadfirst {
             
@@ -937,9 +937,9 @@ impl WayBoxesVec {
         
     }
     
-    pub fn calculate(&self, maxlevel: usize, buffer: f64) -> (usize, Box<minimal_block::QuadtreeBlock>) { 
+    pub fn calculate(&self, maxlevel: usize, buffer: f64) -> (usize, Box<QuadtreeBlock>) { 
         
-        let mut t = Box::new(minimal_block::QuadtreeBlock::with_capacity(self.c));
+        let mut t = Box::new(QuadtreeBlock::with_capacity(self.c));
         let mut c=0;
         for i in 0..1024*1024 {
             
@@ -1242,7 +1242,7 @@ impl QuadtreeGetSet for QuadtreeSplit {
 
 
 
-fn make_convert_minimal_block<T: CallFinish<CallType=Box<minimal_block::MinimalBlock>, ReturnType=Timings>>
+fn make_convert_minimal_block<T: CallFinish<CallType=MinimalBlock, ReturnType=Timings>>
     (readnodes: bool, readways: bool, readrelations: bool, t: Box<T>)
         -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>
 {
@@ -1551,26 +1551,26 @@ struct ExpandNodeQuadtree<T> {
     nodeqts: Option<Box<QuadtreeSimple>>,
     tm: f64,
     outb: Box<T>,
-    curr: Box<minimal_block::QuadtreeBlock>,
+    curr: Box<QuadtreeBlock>,
     qt_level: usize,
     qt_buffer: f64
 }
 const NODE_LIMIT: usize = 100000;
 
 impl<T> ExpandNodeQuadtree<T>
-    where T: CallFinish<CallType=Vec<Box<minimal_block::QuadtreeBlock>>>
+    where T: CallFinish<CallType=Vec<Box<QuadtreeBlock>>>
 {
     pub fn new(wayqts: Box<dyn QuadtreeGetSet>, nodeqts: Box<QuadtreeSimple>, outb: Box<T>, qt_level: usize, qt_buffer: f64) -> ExpandNodeQuadtree<T> {
         let wayqts=Some(wayqts);
         let nodeqts=Some(nodeqts);
         let tm = 0.0;
-        let curr = Box::new(minimal_block::QuadtreeBlock::with_capacity(NODE_LIMIT));
+        let curr = Box::new(QuadtreeBlock::with_capacity(NODE_LIMIT));
         ExpandNodeQuadtree{wayqts, nodeqts, tm, outb, curr, qt_level, qt_buffer}
     }
 }
 
 impl<T> CallFinish for ExpandNodeQuadtree<T> 
-    where T: CallFinish<CallType=Vec<Box<minimal_block::QuadtreeBlock>>,ReturnType=Timings>
+    where T: CallFinish<CallType=Vec<Box<QuadtreeBlock>>,ReturnType=Timings>
 {
     type CallType = NodeWayNodeCombTile;
     //type ReturnType = (T::ReturnType, Box<dyn QuadtreeGetSet>, QuadtreeSimple);
@@ -1580,7 +1580,7 @@ impl<T> CallFinish for ExpandNodeQuadtree<T>
         let tx=Timer::new();
         if nn.vals.is_empty() { return; }
         
-        //let mut bl = Box::new(minimal_block::QuadtreeBlock::with_capacity(nn.vals.len())); 
+        //let mut bl = Box::new(QuadtreeBlock::with_capacity(nn.vals.len())); 
         let mut bl = Vec::new();
         for n in nn.vals {
             let q = if n.ways.is_empty() {
@@ -1599,7 +1599,7 @@ impl<T> CallFinish for ExpandNodeQuadtree<T>
             //bl.add_node(n.id,q);
             self.curr.add_node(n.id,q);
             if self.curr.len() >= NODE_LIMIT {
-                let p = std::mem::replace(&mut self.curr, Box::new(minimal_block::QuadtreeBlock::with_capacity(NODE_LIMIT)));
+                let p = std::mem::replace(&mut self.curr, Box::new(QuadtreeBlock::with_capacity(NODE_LIMIT)));
                 bl.push(p);
             }
             
@@ -1611,7 +1611,7 @@ impl<T> CallFinish for ExpandNodeQuadtree<T>
     
     fn finish(&mut self) -> io::Result<Self::ReturnType> {
         
-        self.outb.call(vec![std::mem::replace(&mut self.curr, Box::new(minimal_block::QuadtreeBlock::new()))]);
+        self.outb.call(vec![std::mem::replace(&mut self.curr, Box::new(QuadtreeBlock::new()))]);
         
         let mut r = self.outb.finish()?;
         r.add("calc node quadtrees", self.tm);
@@ -1811,7 +1811,7 @@ impl<T> WriteQuadTreePack<T>
 impl<T> CallFinish for WriteQuadTreePack<T>
     where T: CallFinish<CallType=Vec<u8>> + Sync + Send + 'static
 {
-    type CallType=Box<minimal_block::QuadtreeBlock>;
+    type CallType=Box<QuadtreeBlock>;
     type ReturnType=T::ReturnType;
 
     fn call(&mut self, t: Self::CallType) {
@@ -1830,7 +1830,7 @@ impl<T> CallFinish for WriteQuadTreePack<T>
 
 pub struct WriteQuadTree {
     //out: Box<WriteFile>,
-    packs: Vec<Box<Callback<Box<minimal_block::QuadtreeBlock>,Timings>>>,
+    packs: Vec<Box<Callback<Box<QuadtreeBlock>,Timings>>>,
     numwritten: usize,
 //    byteswritten: usize,
     ct: Checktime
@@ -1855,7 +1855,7 @@ impl WriteQuadTree
         
 impl CallFinish for WriteQuadTree
 {
-    type CallType = Box<minimal_block::QuadtreeBlock>;
+    type CallType = Box<QuadtreeBlock>;
     type ReturnType = Timings;
     
     fn call(&mut self, t: Self::CallType) {
@@ -1901,16 +1901,16 @@ impl CallFinish for WriteQuadTree
     
 
 struct PackQuadtrees {
-    out: Box<dyn CallFinish<CallType=Box<minimal_block::QuadtreeBlock>, ReturnType=Timings>>,
+    out: Box<dyn CallFinish<CallType=Box<QuadtreeBlock>, ReturnType=Timings>>,
     limit: usize,
-    curr: Box<minimal_block::QuadtreeBlock>
+    curr: Box<QuadtreeBlock>
     
 }
 
 impl PackQuadtrees {
-    pub fn new(out: Box<dyn CallFinish<CallType=Box<minimal_block::QuadtreeBlock>, ReturnType=Timings>>, limit: usize) -> PackQuadtrees {
+    pub fn new(out: Box<dyn CallFinish<CallType=Box<QuadtreeBlock>, ReturnType=Timings>>, limit: usize) -> PackQuadtrees {
         
-        let curr = Box::new(minimal_block::QuadtreeBlock::with_capacity(limit));
+        let curr = Box::new(QuadtreeBlock::with_capacity(limit));
         PackQuadtrees{out,limit,curr}
     }
     /*
@@ -1940,7 +1940,7 @@ impl PackQuadtrees {
     
     fn pack_and_write(&mut self) {
         
-        let t = std::mem::replace(&mut self.curr, Box::new(minimal_block::QuadtreeBlock::with_capacity(self.limit)));
+        let t = std::mem::replace(&mut self.curr, Box::new(QuadtreeBlock::with_capacity(self.limit)));
         
         self.out.call(t);
         

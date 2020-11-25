@@ -7,7 +7,7 @@ use osmquadtree::callback::{CallFinish,Callback,CallbackSync,CallbackMerge};
 use osmquadtree::read_file_block::{FileBlock,read_all_blocks};
 use osmquadtree::elements::{PrimitiveBlock};
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::sortblocks::sortblocks::{AddQuadtree,make_packprimblock,make_unpackprimblock,WriteFile};
+use osmquadtree::sortblocks::sortblocks::{AddQuadtree,make_packprimblock,make_unpackprimblock,WriteFile,HeaderType};
 use osmquadtree::sortblocks::{Timings,OtherData};
 
 
@@ -60,7 +60,7 @@ fn main() {
         println!("\n{:8.3}s Total, {}", d, res);
         
     } else if numchan == 0 {
-        let wf = Box::new(WriteFile::new(&outfn, false));
+        let wf = Box::new(WriteFile::new(&outfn, HeaderType::NoLocs));
         //let cc = Box::new(PackPrimBlock::new(wf, true));
         let cc = make_packprimblock(wf,true);
         let aq = Box::new(AddQuadtree::new(&qtsfn, cc));
@@ -81,7 +81,7 @@ fn main() {
         
     } else {
         
-        let wws = CallbackSync::new(Box::new(WriteFile::new(&outfn,false)),numchan);
+        let wws = CallbackSync::new(Box::new(WriteFile::new(&outfn,HeaderType::NoLocs)),numchan);
         let mut ccs: Vec<Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>>> = Vec::new();
         for ww in wws {
             let w2 = Box::new(ReplaceNoneWithTimings::new(ww));

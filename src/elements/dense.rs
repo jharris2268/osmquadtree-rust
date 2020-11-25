@@ -10,11 +10,21 @@ use super::info::Info;
 use super::common::{Changetype,PackStringTable};
 use osmquadtree::write_pbf;
 use std::io::{Result,Error,ErrorKind};
+
+use super::relation::ElementType;
+use super::idset::IdSet;
+
+fn check_id(id: i64, idset: Option<&IdSet>) -> bool {
+    match idset {
+        None => true,
+        Some(idset) => idset.contains(ElementType::Node,id)
+    }
+}
+
 pub struct Dense {}
 
-
 impl Dense {
-    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Vec<node::Node>> {
+    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool, idset: Option<&IdSet>) -> Result<Vec<node::Node>> {
         
         let mut res = Vec::new();
         
@@ -74,29 +84,37 @@ impl Dense {
         
         let mut kvs_idx=0;
         for i in 0..ids.len() {
-            let mut nd = node::Node::new(ids[i], changetype);
-            if lats.len()>0 { nd.lat = lats[i]; }
-            if lons.len()>0 { nd.lon = lons[i]; }
-            if qts.len()>0 { nd.quadtree = quadtree::Quadtree::new(qts[i]); }
-            if !minimal {
-                let mut info = Info::new();
-                if vs.len()>0 { info.version = vs[i] as i64; }
-                if ts.len()>0 { info.timestamp = ts[i]; }
-                if cs.len()>0 { info.changeset = cs[i]; }
-                if ui.len()>0 { info.user_id = ui[i]; }
-                if us.len()>0 { info.user = strings[us[i] as usize].clone(); }
-                nd.info = Some(info);
+            if check_id(ids[i], idset) {
             
+                let mut nd = node::Node::new(ids[i], changetype);
+                if lats.len()>0 { nd.lat = lats[i]; }
+                if lons.len()>0 { nd.lon = lons[i]; }
+                if qts.len()>0 { nd.quadtree = quadtree::Quadtree::new(qts[i]); }
+                if !minimal {
+                    let mut info = Info::new();
+                    if vs.len()>0 { info.version = vs[i] as i64; }
+                    if ts.len()>0 { info.timestamp = ts[i]; }
+                    if cs.len()>0 { info.changeset = cs[i]; }
+                    if ui.len()>0 { info.user_id = ui[i]; }
+                    if us.len()>0 { info.user = strings[us[i] as usize].clone(); }
+                    nd.info = Some(info);
+                
+                    while kvs_idx < kvs.len() && kvs[kvs_idx]!=0 {
+                        nd.tags.push(
+                            tags::Tag::new(
+                                strings[kvs[kvs_idx] as usize].clone(),
+                                strings[kvs[kvs_idx+1] as usize].clone()));
+                        kvs_idx+=2;
+                    }
+                    if kvs_idx < kvs.len() { kvs_idx+=1; }
+                }
+                res.push(nd);
+            } else {
                 while kvs_idx < kvs.len() && kvs[kvs_idx]!=0 {
-                    nd.tags.push(
-                        tags::Tag::new(
-                            strings[kvs[kvs_idx] as usize].clone(),
-                            strings[kvs[kvs_idx+1] as usize].clone()));
                     kvs_idx+=2;
                 }
                 if kvs_idx < kvs.len() { kvs_idx+=1; }
             }
-            res.push(nd);
         }
         
         return Ok(res);

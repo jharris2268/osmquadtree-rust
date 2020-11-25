@@ -15,7 +15,7 @@ use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unp
 use osmquadtree::sortblocks::{QuadtreeTree,Timings,OtherData};
 use osmquadtree::stringutils::StringUtils;
 pub use osmquadtree::sortblocks::addquadtree::{AddQuadtree,make_unpackprimblock};
-pub use osmquadtree::sortblocks::writepbf::{make_packprimblock,WriteFile,make_packprimblock_many};
+pub use osmquadtree::sortblocks::writepbf::{make_packprimblock,WriteFile,HeaderType,make_packprimblock_many};
 
 fn get_block<'a>(blocks: &'a mut HashMap<i64,PrimitiveBlock>, groups: &'a Box<QuadtreeTree>, q: Quadtree) -> &'a mut PrimitiveBlock {
     let (_,b) = groups.find(q);
@@ -154,7 +154,7 @@ fn get_blocks(infn: &str, qtsfn: &str, groups: Box<QuadtreeTree>, numchan: usize
     
 fn write_blocks(outfn: &str, blocks: Vec<PrimitiveBlock>, numchan: usize, timestamp: i64) -> io::Result<()> {
     
-    let wf = Box::new(WriteFile::new(&outfn, false));
+    let wf = Box::new(WriteFile::new(&outfn, HeaderType::NoLocs));
     
     let t = 
         if numchan == 0 {
@@ -201,7 +201,7 @@ impl WriteTemp {
         if tempfn == "NONE" {
             WriteTemp{tempf: None, tempd: BTreeMap::new(), tm:0.0}
         } else {
-            WriteTemp{tempf: Some(WriteFile::new(tempfn,true)), tempd: BTreeMap::new(), tm:0.0}
+            WriteTemp{tempf: Some(WriteFile::new(tempfn,HeaderType::NoLocs)), tempd: BTreeMap::new(), tm:0.0}
         }
     }
     
@@ -579,7 +579,7 @@ fn read_temp_data<T: CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=Timings
 
 
 fn write_blocks_from_temp(xx: TempData, outfn: &str, groups: Box<QuadtreeTree>, numchan: usize, timestamp: i64) -> io::Result<()> {
-    let wf = Box::new(WriteFile::new(&outfn, true));
+    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
     
     let t = 
         if numchan == 0 {

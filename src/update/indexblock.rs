@@ -2,25 +2,25 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::elements::{MinimalBlock,Quadtree};
+use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet,ElementType};
 use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
 use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
 use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock};
 use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
 use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
 
-use osmquadtree::update::ChangeBlock;
 
 pub enum ResultType {
     NumTiles(usize),
-    CheckIndexResult((Vec<Quadtree>,ChangeBlock))
+    CheckIndexResult((Vec<Quadtree>,IdSet)),
+    CheckIndexResultWrap(Vec<Quadtree>)
 }
 
 type Timings = osmquadtree::utils::Timings<ResultType>;
 
 use std::fs::File;
-use std::io::{Result,Write};
-use std::collections::BTreeSet;
+use std::io::{Result,Write,Error,ErrorKind};
+use std::sync::Arc;
 
 fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
     let mut res = Vec::with_capacity(20+5*mb.len());
@@ -41,7 +41,7 @@ fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
     res
 }
 
-fn check_index_block(bl: Vec<u8>, changeblock: &ChangeBlock, exnodes: &BTreeSet<i64>) -> Option<Quadtree> {
+fn check_index_block(bl: Vec<u8>, idset: &IdSet) -> Option<Quadtree> {
     
     let mut qt = Quadtree::new(-2);
     for tg in IterTags::new(&bl, 0) {
@@ -49,30 +49,32 @@ fn check_index_block(bl: Vec<u8>, changeblock: &ChangeBlock, exnodes: &BTreeSet<
             PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {
                 for n in DeltaPackedInt::new(&nn) {
-                    if changeblock.nodes.contains_key(&n) {
-                        return Some(qt);
-                    } else if exnodes.contains(&n) {
+                    if idset.contains(ElementType::Node,n) {
+                        //println!("found node {} in {}", n, qt.as_string());
                         return Some(qt);
                     }
                 }
             },
             PbfTag::Data(3, ww) => {
                 for w in DeltaPackedInt::new(&ww) {
-                    if changeblock.ways.contains_key(&w) {
+                    if idset.contains(ElementType::Way,w) {
+                        //println!("found way {} in {}", w, qt.as_string());
                         return Some(qt);
                     }
                 }
             },
             PbfTag::Data(4, rr) => {
                 for r in DeltaPackedInt::new(&rr) {
-                    if changeblock.relations.contains_key(&r) {
+                    if idset.contains(ElementType::Relation,r) {
+                        //println!("found relation {} in {}", r, qt.as_string());
                         return Some(qt);
                     }
                 }
-            }
+            },
             _ => {}
         }
     }
+    //println!("nothing in {}", qt.as_string());
     return None;
 }
     
@@ -152,15 +154,14 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
 }
 
 struct CheckIndexFile {
-    changeblock: Option<ChangeBlock>, 
-    exnodes: BTreeSet<i64>,
+    idset: Option<IdSet>,
     quadtrees: Vec<Quadtree>,
     tm: f64,
 }
 
 impl CheckIndexFile {
-    pub fn new(changeblock: ChangeBlock, exnodes: BTreeSet<i64>) -> CheckIndexFile {
-        CheckIndexFile{changeblock: Some(changeblock), exnodes: exnodes, quadtrees: Vec::new(), tm: 0.0}
+    pub fn new(idset: IdSet,) -> CheckIndexFile {
+        CheckIndexFile{idset: Some(idset), quadtrees: Vec::new(), tm: 0.0}
     }
 }
 
@@ -170,7 +171,7 @@ impl CallFinish for CheckIndexFile {
     
     fn call(&mut self, bl: Vec<u8>) {
         let tx=ThreadTimer::new();
-        match check_index_block(bl, self.changeblock.as_ref().unwrap(), &self.exnodes) {
+        match check_index_block(bl, self.idset.as_ref().unwrap()) {
             Some(q) => self.quadtrees.push(q),
             None => {}
         }
@@ -182,9 +183,49 @@ impl CallFinish for CheckIndexFile {
         let mut t = Timings::new();
         t.add("check index", self.tm);
         
-        let cb = self.changeblock.take();
+        let idset = self.idset.take();
+        
         let qts = std::mem::take(&mut self.quadtrees);
-        t.add_other("result", ResultType::CheckIndexResult((qts,cb.unwrap())));
+        t.add_other("result", ResultType::CheckIndexResult((qts,idset.unwrap())));
+        Ok(t)
+    }
+}
+
+
+struct CheckIndexFileWrap {
+    idset: Arc<IdSet>,
+    quadtrees: Vec<Quadtree>,
+    tm: f64,
+}
+
+impl CheckIndexFileWrap {
+    pub fn new(idset: Arc<IdSet>) -> CheckIndexFileWrap {
+        CheckIndexFileWrap{idset: idset, quadtrees: Vec::new(), tm: 0.0}
+    }
+}
+
+impl CallFinish for CheckIndexFileWrap {
+    type CallType = Vec<u8>;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, bl: Vec<u8>) {
+        let tx=ThreadTimer::new();
+        match check_index_block(bl, self.idset.as_ref()) {
+            Some(q) => {self.quadtrees.push(q); },
+            None => {}
+        }
+        self.tm += tx.since();
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        
+        let mut t = Timings::new();
+        t.add("check index", self.tm);
+        
+        
+        
+        let qts = std::mem::take(&mut self.quadtrees);
+        t.add_other("result", ResultType::CheckIndexResultWrap(qts));
         Ok(t)
     }
 }
@@ -197,9 +238,9 @@ fn unpack_fb(i_fb: (usize,FileBlock)) -> Vec<u8> {
 }
 
 
-pub fn check_index_file(indexfn: &str, changeblock: ChangeBlock, exnodes: BTreeSet<i64>, numchan: usize) -> (Vec<Quadtree>,ChangeBlock) {
+pub fn check_index_file(indexfn: &str, idset: IdSet, numchan: usize) -> Result<(Vec<Quadtree>,IdSet,f64)> {
     if numchan == 0 {
-        let ci = Box::new(CheckIndexFile::new(changeblock, exnodes));
+        let ci = Box::new(CheckIndexFile::new(idset));
         
         let ca = Box::new(CallAll::new(ci, "unpack", Box::new(unpack_fb)));
         
@@ -211,13 +252,36 @@ pub fn check_index_file(indexfn: &str, changeblock: ChangeBlock, exnodes: BTreeS
             panic!("!!");
         }
         match tm.others.pop().unwrap().1 {
-            ResultType::CheckIndexResult(r) => {return r;},
+            ResultType::CheckIndexResult((a,b)) => {return Ok((a,b,x));},
             _ => { panic!("??"); }
         }
     } else {
         
-        panic!("not impl");
+        let idsetw = Arc::new(idset);
+        
+        let mut cas: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>> = Vec::new();
+        for _ in 0..numchan {
+            let ci = Box::new(CheckIndexFileWrap::new(idsetw.clone()));
+            let ca = Box::new(CallAll::new(ci,"unpack", Box::new(unpack_fb)));
+            cas.push(Box::new(Callback::new(ca)));
+        }
+        let ca = Box::new(CallbackMerge::new(cas, Box::new(MergeTimings::new())));
+        let (tm,x) = read_all_blocks(indexfn, ca);
+        
+        //println!("{} {}", tm, x);
+        let mut qq=Vec::new();
+        for (_,x) in tm.others {
+            match x {
+                ResultType::CheckIndexResultWrap(q) => { qq.extend(q.iter()); },
+                _ => {}
+            }
+        }
+        match Arc::try_unwrap(idsetw) {
+            Ok(idset) => { return Ok((qq,idset,x)); },
+            Err(_) => { return Err(Error::new(ErrorKind::Other, "can't release idsetw?")); }
+        }
     }
+        
         
         
 }

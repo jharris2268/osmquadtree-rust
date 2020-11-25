@@ -5,7 +5,7 @@ mod osmquadtree {
 use osmquadtree::read_pbf;
 use osmquadtree::write_pbf;
 
-use super::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable};
+use super::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable,SetCommon};
 use super::info::Info;
 use super::tags::Tag;
 use super::quadtree::Quadtree;
@@ -67,14 +67,13 @@ impl Relation {
         let tgs = read_pbf::read_all_tags(&data,0);
         //let mut rem=Vec::new();
         //(rel.id, rel.info, rel.tags, rel.quadtree, rem) = read_common(&strings,&tgs, minimal)?;
-        let mut zz = read_common(&strings, &tgs, minimal)?;
-        rel.id = zz.0; rel.info = zz.1.take(); rel.tags = std::mem::take(&mut zz.2); rel.quadtree = zz.3;
+        let rem = read_common(&mut rel, &strings, &tgs, minimal)?;
         
         let mut roles = Vec::new();
         let mut refs = Vec::new();
         let mut types = Vec::new();
         
-        for t in zz.4 {
+        for t in rem {
             match t {
                 read_pbf::PbfTag::Data(8, d) => {
                     if !minimal {
@@ -131,6 +130,14 @@ impl Relation {
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
+
+impl SetCommon for Relation {
+    fn set_id(&mut self, id: i64) { self.id=id; }
+    fn set_info(&mut self, info: Info) { self.info=Some(info); }
+    fn set_tags(&mut self, tags: Vec<Tag>) { self.tags=tags; }
+    fn set_quadtree(&mut self, quadtree: Quadtree) { self.quadtree=quadtree; }
+}
+
 impl Ord for Relation {
     fn cmp(&self, other: &Self) -> Ordering {
         common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)

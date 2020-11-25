@@ -52,25 +52,28 @@ pub fn get_changetype(ct: u64) -> Changetype {
     }
 }
 
+pub trait SetCommon {
+    fn set_id(&mut self, id: i64);
+    fn set_tags(&mut self, tags: Vec<Tag>);
+    fn set_info(&mut self, info: Info);
+    fn set_quadtree(&mut self, quadtree: Quadtree);
+}
 
+pub fn read_common<'a, 'b, T: SetCommon>(obj: &mut T, strings: &Vec<String>, pbftags: &'a Vec<PbfTag<'b>>, minimal: bool) -> Result<Vec<&'a PbfTag<'b>>> {
 
-pub fn read_common<'a, 'b>(strings: &Vec<String>, pbftags: &'a Vec<PbfTag<'b>>, minimal: bool) -> Result<(i64, Option<Info>, Vec<Tag>, Quadtree, Vec<&'a PbfTag<'b>>)> {
-
-    let mut id=0;
-    let mut info:Option<Info> = None;
-    let mut tags = Vec::new();
-    let mut quadtree = Quadtree::empty();
+    
         
     let mut kk = Vec::new();
     let mut vv = Vec::new();
     let mut rem = Vec::new();
+    let mut id=0;
     for t in pbftags {
         
         match t {
-            PbfTag::Value(1, i) => id = *i as i64,
+            PbfTag::Value(1, i) => {id=*i; obj.set_id(*i as i64);},
             PbfTag::Data(4, d) => {
                 if !minimal {
-                    info = Some(Info::read(strings, d)?);
+                    obj.set_info(Info::read(strings, d)?);
                 }
             },
                 
@@ -88,7 +91,7 @@ pub fn read_common<'a, 'b>(strings: &Vec<String>, pbftags: &'a Vec<PbfTag<'b>>, 
                     
                 }
             },
-            PbfTag::Value(20, q) => quadtree=Quadtree::new(un_zig_zag(*q)),
+            PbfTag::Value(20, q) => {obj.set_quadtree(Quadtree::new(un_zig_zag(*q)));},
             x => {rem.push(x); },
         }
     }
@@ -96,13 +99,14 @@ pub fn read_common<'a, 'b>(strings: &Vec<String>, pbftags: &'a Vec<PbfTag<'b>>, 
         return Err(Error::new(ErrorKind::Other, format!("tags don't match: [id={}] {} // {}", id, kk.len(), vv.len())));
     }
     if kk.len()>0 {
+        let mut tags=Vec::new();
         tags.reserve(kk.len());
         for i in 0..kk.len() {
             tags.push(Tag::new(strings[kk[i] as usize].clone(), strings[vv[i] as usize].clone()));
         }
-        
+        obj.set_tags(tags);
     }
-    Ok((id, info, tags, quadtree, rem))
+    Ok(rem)
 }
     
 pub fn pack_length(tags: &Vec<Tag>, _pack_strings: &mut Box<PackStringTable>, _include_qts: bool) -> usize {
