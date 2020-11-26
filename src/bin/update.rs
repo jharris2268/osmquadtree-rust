@@ -2,17 +2,21 @@ extern crate osmquadtree;
 
 use osmquadtree::stringutils::StringUtils;
 use osmquadtree::update::{write_index_file,FilelistEntry, read_filelist, write_filelist,read_xml_change,check_index_file};
-use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string,ReplaceNoneWithTimings,MergeTimings};
-use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
+use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string,MergeTimings,ThreadTimer};
+use osmquadtree::callback::{Callback,CallbackMerge,CallFinish};
 use osmquadtree::header_block;
-use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock};
+use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,ElementType};
 use osmquadtree::read_file_block;
+use osmquadtree::sortblocks::QuadtreeTree;
+//use osmquadtree::convertblocks;
 use std::env;
 use std::fs::File;
 use serde::{Deserialize,Serialize};
 use std::collections::{BTreeSet,BTreeMap};
-use std::io::{Error,ErrorKind,BufReader};
+use std::io::{Error,ErrorKind,BufReader,Write,stdout};
 use std::sync::Arc;
+//use std::marker::PhantomData;
+use std::fmt;
 
 #[derive(Debug,Deserialize,Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -72,8 +76,11 @@ fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(Strin
     res
 }
 
-struct CollectTiles {
-    res: BTreeMap<Quadtree,PrimitiveBlock>,
+/*struct CollectTiles {
+    qts: BTreeMap<(ElementType,i64),(Quadtree,Quadtree)>,
+    othernodes: Vec<Node>,
+    
+    //res: BTreeMap<Quadtree,PrimitiveBlock>,
 }
 impl CollectTiles {
     pub fn new() -> CollectTiles {
@@ -92,10 +99,230 @@ impl CallFinish for CollectTiles {
         tm.add_other("tiles", std::mem::take(&mut self.res));
         Ok(tm)
     }
-}   
+} */  
+
+pub struct OrigData {
+    pub node_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
+    pub way_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
+    pub relation_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
+    pub othernodes: Vec<Node>
+}
+impl OrigData {
+    pub fn new() -> OrigData {
+        OrigData{node_qts: BTreeMap::new(),way_qts: BTreeMap::new(),relation_qts: BTreeMap::new(),othernodes: Vec::new()}
+    }
+    
+    pub fn add(&mut self, pb: PrimitiveBlock, idset: &IdSet) {
+        for n in pb.nodes {
+            match n.changetype {
+                Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
+                    self.node_qts.insert(n.id,(n.quadtree,pb.quadtree));
+                    if idset.is_exnode(n.id) {
+                        let mut n = n;
+                        n.changetype=Changetype::Normal;
+                        self.othernodes.push(n);
+                    }
+                },
+                _ => {}
+            }
+        }
+        for w in pb.ways {
+            match w.changetype {
+                Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
+                    self.way_qts.insert(w.id,(w.quadtree,pb.quadtree));
+                },
+                _ => {}
+            }
+        }
+        
+        for r in pb.relations {
+            match r.changetype {
+                Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
+                    self.relation_qts.insert(r.id,(r.quadtree,pb.quadtree));
+                },
+                _ => {}
+            }
+        }
+    }
+    
+    pub fn extend(&mut self, other: OrigData) {
+        self.node_qts.extend(other.node_qts);
+        self.way_qts.extend(other.way_qts);
+        self.relation_qts.extend(other.relation_qts);
+        self.othernodes.extend(other.othernodes);
+    }
+}
+impl fmt::Display for OrigData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OrigData {:10} node qts, {:8} way qts, {:7} rel qts, {:8} other nodes", self.node_qts.len(), self.way_qts.len(), self.relation_qts.len(), self.othernodes.len())
+    }
+}
+
+struct ReadPB {
+    
+    origdata: Option<OrigData>,
+    
+    ids: Arc<IdSet>,
+    ischange:bool,
+    
+    tm: f64
+}
+impl ReadPB {
+    pub fn new(ischange: bool, ids: Arc<IdSet>) -> ReadPB {
+        ReadPB{origdata: Some(OrigData::new()),ids:ids,ischange: ischange, tm:0.0}
+    }
+}
+
+
+impl CallFinish for ReadPB {
+    type CallType = (usize, read_file_block::FileBlock);
+    type ReturnType = Timings<OrigData>;
+    
+    fn call(&mut self, idx_blocks: (usize, read_file_block::FileBlock)) {
+        let tx=ThreadTimer::new();
+        let b = PrimitiveBlock::read_check_ids(idx_blocks.0 as i64, idx_blocks.1.pos, &idx_blocks.1.data(),self.ischange, false,Some(self.ids.as_ref())).expect("?");
+        
+        self.origdata.as_mut().unwrap().add(b,self.ids.as_ref());
+        
+        //let b = read_primitive_blocks_combine(idx_blocks.0 as i64, idx_blocks.1, Some(self.ids.as_ref())).expect("?");
+        //println!("block {} {} nodes, {} ways, {} relations", b.quadtree.as_string(),b.nodes.len(),b.ways.len(),b.relations.len());
+        self.tm+=tx.since();
+        //self.out.call(b);
+    }
+    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+        let mut tm = Timings::new();//self.out.finish()?;
+        tm.add("read_primitive_blocks_combine", self.tm);
+        tm.add_other("origdata", self.origdata.take().unwrap());
+        Ok(tm)
+    }
+}
+
+
+
+
+fn read_change_tiles(fname: &str, tiles: &BTreeSet<Quadtree>, idset: Arc<IdSet>, numchan: usize) -> std::io::Result<(OrigData,f64)> {
+    let ischange = fname.ends_with(".pbfc");
+    let mut file = File::open(fname)?;
+    let (p,fb) = read_file_block::read_file_block_with_pos(&mut file, 0)?;
+    if fb.block_type != "OSMHeader" {
+        return Err(Error::new(ErrorKind::Other, "first block not an OSMHeader"));
+    }
+    let head = header_block::HeaderBlock::read(p, &fb.data(), fname)?;
+    if head.index.is_empty() {
+        return Err(Error::new(ErrorKind::Other, "no locs in header"));
+    }
+    let mut locs = Vec::new();
+    for ii in &head.index {
+        if tiles.contains(&ii.quadtree) {
+            locs.push(ii.location);
+        }
+    }
+    let (mut tm,b) = if numchan == 0 {
+        //let collect = Box::new(CollectTiles::new());
+        let convert = Box::new(ReadPB::new(ischange,idset));//convertblocks::make_read_primitive_blocks_combine_call_all_idset(collect, idset);
+        read_file_block::read_all_blocks_locs(&mut file, fname, locs, false, convert)
+    } else {
+        //let collect = CallbackSync::new(Box::new(CollectTiles::new()), numchan);
+        let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,read_file_block::FileBlock),ReturnType=Timings<OrigData>>>> = Vec::new();
+        for _ in 0..numchan { //coll in collect {
+            //let coll2 = Box::new(ReplaceNoneWithTimings::new(coll));
+            convs.push(Box::new(Callback::new(Box::new(ReadPB::new(ischange,idset.clone())))));
+                //convertblocks::make_read_primitive_blocks_combine_call_all_idset(coll2, idset.clone()))));
+        }
+        let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
+        read_file_block::read_all_blocks_locs(&mut file, fname, locs, true, convsm)
+    };
+    
+    //println!("{}", tm);
+    
+    
+    let mut tls = tm.others.pop().unwrap().1;
+    while !tm.others.is_empty() {
+        tls.extend(tm.others.pop().unwrap().1);
+    }
+    Ok((tls,b))
+}
+    
+    
     
 
-fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<Quadtree>, idset: IdSet, numchan: usize) -> std::io::Result<(BTreeMap<Quadtree,PrimitiveBlock>,IdSet)> {
+fn collect_existing_alt(
+    prfx: &str, filelist: &Vec<FilelistEntry>,
+    //tiles: &BTreeSet<Quadtree>,
+    idset: Arc<IdSet>,
+    numchan: usize) -> std::io::Result<OrigData> {
+        
+    //let mut changetiles = BTreeMap::new();
+    let mut origdata = OrigData::new();
+    
+    //let mut tne=0;
+    //let mut tnobj=0;
+    let mut tt = 0.0;
+    
+    
+    
+    for (i,fle) in filelist.iter().enumerate() {
+        let nc = if i==0 { numchan} else { 1 };
+        
+        
+        let fnameidx = format!("{}{}-index.pbf", prfx, fle.filename);
+        
+        let (a,c) = check_index_file(&fnameidx, idset.clone(), nc)?;
+        
+        
+        
+        tt+=c;
+        print!("\r{}: {:5.1}s {:5.1}s {} tiles", fnameidx,c, tt,a.len());
+        stdout().flush().expect("");
+        //idset=b;
+        let mut ctiles = BTreeSet::new();
+        ctiles.extend(a);
+        
+      //  let mut ne=0; let mut nobj=0;
+        let fname = format!("{}{}", prfx, fle.filename);
+        if i==0 {
+            println!("");
+        }
+        let (bb,t) = read_change_tiles(&fname, &ctiles, idset.clone(), nc)?;
+        print!("  {}: {} {:5.1}s", fname, bb, t);
+        origdata.extend(bb);
+        tt+=t;
+        
+        /*let bbl=bb.len();
+        for (q,b) in bb {
+            nobj+=b.len();
+            if b.len() == 0 {
+                ne+=1;
+            } else if !changetiles.contains_key(&q) {
+                changetiles.insert(q, b);
+            } else {
+                
+                let (k,v) = changetiles.remove_entry(&q).unwrap();
+                let m = apply_change_primitive(v, b);
+                changetiles.insert(k, m);
+            }
+        }
+        
+        tt+=t;
+        tne+=ne;
+        tnobj+=nobj;
+        if i==0 {
+            println!("");
+        }
+        print!("    {}: {} tiles {} empty, {} objs {:5.1}s => {} tiles", fname, bbl, ne, nobj, tt, changetiles.len());*/
+        
+        stdout().flush().expect("");
+    }
+    //println!("\n{} tiles {} empty, {} objs {:5.1}s", changetiles.len(), tne, tnobj, tt);
+    println!("");
+    Ok(origdata)
+    
+}
+            
+            
+
+/*
+fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<Quadtree>, idset: Arc<IdSet>, numchan: usize) -> std::io::Result<BTreeMap<Quadtree,PrimitiveBlock>> {
     
     let mut locs = BTreeMap::new();
     let mut fbufs=Vec::new();
@@ -135,7 +362,7 @@ fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<
         
     println!("{} files, {} / {} tiles", fbufs.len(), locsv.len(), locs.len());
     
-    let idsetw = Arc::new(idset);
+    //let idsetw = Arc::new(idset);
     
     let colls = CallbackSync::new(Box::new(CollectTiles::new()),numchan);
     
@@ -143,7 +370,7 @@ fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<
     
     for coll in colls {
         let cca = Box::new(ReplaceNoneWithTimings::new(coll));
-        pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_primitive_blocks_combine_call_all_idset(cca, idsetw.clone()))));
+        pps.push(Box::new(Callback::new(convertblocks::make_read_primitive_blocks_combine_call_all_idset(cca, idset.clone()))));
     }
     
     let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
@@ -151,14 +378,26 @@ fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<
     println!("{} {}",tm,b);
     let tls = tm.others.pop().unwrap().1;
     
-    match Arc::try_unwrap(idsetw) {
-        Ok(idset) => Ok((tls,idset)),
-        Err(_) => Err(Error::new(ErrorKind::Other,"can't retrive idset"))
-    }
-}
+    Ok(tls)
     
-    
+}*/
 
+fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<QuadtreeTree> {
+    let fname = format!("{}{}", prfx, filelist[0].filename);
+    let mut fobj = File::open(&fname)?;
+    let (x,fb) = read_file_block::read_file_block_with_pos(&mut fobj, 0)?;
+    if fb.block_type != "OSMHeader" {
+        return Err(Error::new(ErrorKind::Other,"first block not an OSMHeader"));
+    }
+    let head = header_block::HeaderBlock::read(x, &fb.data(), &fname)?;
+    
+    let mut tree = QuadtreeTree::new();
+    for ii in &head.index {
+        tree.add(ii.quadtree,1);
+    }
+    
+    Ok(tree)
+}
 fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str, _state: i64, _timestamp: i64, numchan: usize) -> std::io::Result<(f64,String,usize)> {
     let mut chgf = BufReader::new(File::open(change_filename)?);
     
@@ -170,21 +409,44 @@ fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str,
     }?;
     
     let mut idset=IdSet::new();
+    
     for (_,n) in changeblock.nodes.iter() {
-        idset.add_node(n);
+        idset.nodes.insert(n.id);
     }
+    println!("{}", idset);
     for (_,w) in changeblock.ways.iter() {
-        idset.add_way(w);
+        idset.ways.insert(w.id);
+        for n in w.refs.iter() {
+            idset.nodes.insert(*n);
+            if !changeblock.nodes.contains_key(n) {
+                idset.exnodes.insert(*n);
+            }
+        }
+        
+        
     }
+    println!("{}", idset);
+    
     for (_,r) in changeblock.relations.iter() {
-        idset.add_relation(r);
+        //println!("rel {} {} // {} mems ", r.id, r.members.len(), r.members.iter().filter(|m| { idset.contains(m.mem_type.clone(),m.mem_ref.clone()) }).count());
+        idset.relations.insert(r.id);
+        for m in r.members.iter() {
+            match m.mem_type {
+                ElementType::Node => { idset.nodes.insert(m.mem_ref); },
+                ElementType::Way => { idset.ways.insert(m.mem_ref); },
+                ElementType::Relation => { idset.relations.insert(m.mem_ref); },
+            }
+        }
+        
     }
     println!("{}", idset);
-    idset.clip_exnodes();
-    println!("{}", idset);
     
-    let mut tiles = BTreeSet::new();
     
+    let idset = Arc::new(idset);
+    
+    //let mut tiles = BTreeSet::new();
+    
+    /*let mut tc=0.0;
     for fle in filelist {
         let fname = format!("{}{}-index.pbf", prfx, fle.filename);
         
@@ -192,16 +454,22 @@ fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str,
         for q in &a {
             tiles.insert(*q);
         }
-        println!("{}: {:5.1}s {} tiles [now {}]", fname,c, a.len(),tiles.len());
+        tc+=c;
+        print!("\r{}: {:5.1}s {:5.1}s {} tiles [now {}]", fname,c, tc,a.len(),tiles.len());
+        stdout().flush().expect("");
         idset=b;
         
-    }
+    }*/
     
-    println!("need to check {} tiles",tiles.len());        
+    //println!("\nneed to check {} tiles",tiles.len());        
     
-    let (blocks, _idset) = collect_existing(prfx, filelist, &tiles, idset, numchan)?;
+    let blocks = collect_existing_alt(prfx, filelist, /*&tiles, */idset, numchan)?;
     
-    println!("{} blocks, {} eles", blocks.len(), blocks.iter().map(|(_,b)| { b.len() as i64 }).sum::<i64>());
+    println!("{}", blocks);
+    //println!("{} blocks, {} eles", blocks.len(), blocks.iter().map(|(_,b)| { b.len() as i64 }).sum::<i64>());
+    
+    let tree = prep_tree(prfx, filelist)?;
+    println!("{}", tree);
     
     panic!("not impl");
 }

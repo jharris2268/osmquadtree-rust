@@ -47,9 +47,9 @@ fn elementtype_int(t: &ElementType) -> u64 {
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct Member {
-    role: String, 
-    mem_type: ElementType,
-    mem_ref: i64,
+    pub role: String, 
+    pub mem_type: ElementType,
+    pub mem_ref: i64,
 }
 impl Member {
     pub fn new(role: String, mem_type: ElementType, mem_ref: i64) -> Member {

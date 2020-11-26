@@ -2,7 +2,7 @@ mod osmquadtree {
     pub use super::super::super::*;
 }
 
-use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet,ElementType};
+use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet};
 use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
 use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
 use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock};
@@ -19,7 +19,7 @@ pub enum ResultType {
 type Timings = osmquadtree::utils::Timings<ResultType>;
 
 use std::fs::File;
-use std::io::{Result,Write,Error,ErrorKind};
+use std::io::{Result,Write,/*Error,ErrorKind*/};
 use std::sync::Arc;
 
 fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
@@ -49,7 +49,7 @@ fn check_index_block(bl: Vec<u8>, idset: &IdSet) -> Option<Quadtree> {
             PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {
                 for n in DeltaPackedInt::new(&nn) {
-                    if idset.contains(ElementType::Node,n) {
+                    if idset.nodes.contains(&n) {
                         //println!("found node {} in {}", n, qt.as_string());
                         return Some(qt);
                     }
@@ -57,7 +57,7 @@ fn check_index_block(bl: Vec<u8>, idset: &IdSet) -> Option<Quadtree> {
             },
             PbfTag::Data(3, ww) => {
                 for w in DeltaPackedInt::new(&ww) {
-                    if idset.contains(ElementType::Way,w) {
+                    if idset.ways.contains(&w) {
                         //println!("found way {} in {}", w, qt.as_string());
                         return Some(qt);
                     }
@@ -65,7 +65,7 @@ fn check_index_block(bl: Vec<u8>, idset: &IdSet) -> Option<Quadtree> {
             },
             PbfTag::Data(4, rr) => {
                 for r in DeltaPackedInt::new(&rr) {
-                    if idset.contains(ElementType::Relation,r) {
+                    if idset.relations.contains(&r) {
                         //println!("found relation {} in {}", r, qt.as_string());
                         return Some(qt);
                     }
@@ -152,7 +152,7 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
     }
         
 }
-
+/*
 struct CheckIndexFile {
     idset: Option<IdSet>,
     quadtrees: Vec<Quadtree>,
@@ -191,7 +191,7 @@ impl CallFinish for CheckIndexFile {
     }
 }
 
-
+*/
 struct CheckIndexFileWrap {
     idset: Arc<IdSet>,
     quadtrees: Vec<Quadtree>,
@@ -238,30 +238,34 @@ fn unpack_fb(i_fb: (usize,FileBlock)) -> Vec<u8> {
 }
 
 
-pub fn check_index_file(indexfn: &str, idset: IdSet, numchan: usize) -> Result<(Vec<Quadtree>,IdSet,f64)> {
+pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize) -> Result<(Vec<Quadtree>,f64)> {
     if numchan == 0 {
-        let ci = Box::new(CheckIndexFile::new(idset));
+        let ci = Box::new(CheckIndexFileWrap::new(idset));
         
         let ca = Box::new(CallAll::new(ci, "unpack", Box::new(unpack_fb)));
         
         let (mut tm,x) = read_all_blocks(indexfn, ca);
         
-        println!("{} {}", tm, x);
+        //println!("{} {}", tm, x);
         
         if tm.others.len()!=1 {
             panic!("!!");
         }
+       
         match tm.others.pop().unwrap().1 {
-            ResultType::CheckIndexResult((a,b)) => {return Ok((a,b,x));},
+            ResultType::CheckIndexResultWrap(q) => Ok((q,x)),
             _ => { panic!("??"); }
         }
+        
+        
+        
     } else {
         
-        let idsetw = Arc::new(idset);
+        //let idsetw = Arc::new(idset);
         
         let mut cas: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>> = Vec::new();
         for _ in 0..numchan {
-            let ci = Box::new(CheckIndexFileWrap::new(idsetw.clone()));
+            let ci = Box::new(CheckIndexFileWrap::new(idset.clone()));
             let ca = Box::new(CallAll::new(ci,"unpack", Box::new(unpack_fb)));
             cas.push(Box::new(Callback::new(ca)));
         }
@@ -276,10 +280,8 @@ pub fn check_index_file(indexfn: &str, idset: IdSet, numchan: usize) -> Result<(
                 _ => {}
             }
         }
-        match Arc::try_unwrap(idsetw) {
-            Ok(idset) => { return Ok((qq,idset,x)); },
-            Err(_) => { return Err(Error::new(ErrorKind::Other, "can't release idsetw?")); }
-        }
+        Ok((qq,x))
+        
     }
         
         

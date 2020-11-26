@@ -263,7 +263,7 @@ impl PrimitiveBlock {
 
 fn get_id(data: &[u8]) -> i64 {
     match read_pbf::read_tag(data, 0) {
-        (read_pbf::PbfTag::Value(1,i),_) => read_pbf::un_zig_zag(i),
+        (read_pbf::PbfTag::Value(1,i),_) => {i as i64},
         _ => 0
     }
 }

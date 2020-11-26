@@ -168,8 +168,8 @@ fn read_member(e: &BytesStart) -> Result<Member> {
                     b"type" => { 
                         match val.as_str() {
                             "node" => { mem_type=ElementType::Node; },
-                            "way" => { mem_type=ElementType::Node; },
-                            "relation" => { mem_type=ElementType::Node; },
+                            "way" => { mem_type=ElementType::Way; },
+                            "relation" => { mem_type=ElementType::Relation; },
                             t => { return Err(Error::new(ErrorKind::Other, format!("unexpected member type {}", t))); },
                         }
                     },

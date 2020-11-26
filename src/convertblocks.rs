@@ -84,6 +84,8 @@ impl<O,V> CallFinish for Rpbccai<O,V>
     }
 }
 
+
+
 pub fn make_read_primitive_blocks_combine_call_all_idset<V: Sync+Send+'static, O: CallFinish<CallType=PrimitiveBlock,ReturnType=Timings<V>>>(out: Box<O>, idset: Arc<IdSet>) -> Box<impl CallFinish<CallType=(usize, Vec<FileBlock>), ReturnType=Timings<V>>> {
     //Box::new(CallAll::new(out, "read_primitive_blocks_combine_idset", Box::new(move |pp| { wrap_read_primitive_blocks_combine(pp, Some(idset)) })))
     Box::new(Rpbccai::new(out,idset))
@@ -133,4 +135,13 @@ pub fn make_read_minimal_blocks_combine_call_all<V: Sync+Send+'static, O: CallFi
 }
 
 
+        
+        
+    
+    
+    
+    
+    
+    
+    
     
