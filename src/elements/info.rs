@@ -7,7 +7,7 @@ use super::common;
 use osmquadtree::write_pbf;
 use std::io::{Error,Result,ErrorKind};
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct Info {
     pub version: i64,
     pub changeset: i64,

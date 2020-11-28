@@ -57,10 +57,10 @@ struct NodeCount {
     max_id: i64,
     min_ts: i64,
     max_ts: i64,
-    min_lon: i64,
-    min_lat: i64,
-    max_lon: i64,
-    max_lat: i64,
+    min_lon: i32,
+    min_lat: i32,
+    max_lon: i32,
+    max_lat: i32,
 }
 impl NodeCount {
     fn new() -> NodeCount {
@@ -93,10 +93,10 @@ impl NodeCount {
         if self.min_ts==-1 || nd.timestamp < self.min_ts { self.min_ts = nd.timestamp; }
         if self.max_ts==-1 || nd.timestamp > self.max_ts { self.max_ts = nd.timestamp; }
         
-        if (nd.lon as i64) < self.min_lon { self.min_lon = nd.lon as i64; }
-        if (nd.lon as i64) > self.max_lon { self.max_lon = nd.lon as i64; }
-        if (nd.lat as i64) < self.min_lat { self.min_lat = nd.lat as i64; }
-        if (nd.lat as i64) > self.max_lat { self.max_lat = nd.lat as i64; }
+        if nd.lon < self.min_lon { self.min_lon = nd.lon; }
+        if nd.lon > self.max_lon { self.max_lon = nd.lon; }
+        if nd.lat < self.min_lat { self.min_lat = nd.lat; }
+        if nd.lat > self.max_lat { self.max_lat = nd.lat; }
     }
     
     fn add_other(&mut self, nc: &NodeCount) {

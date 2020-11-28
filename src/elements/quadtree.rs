@@ -173,7 +173,7 @@ impl Quadtree {
     pub fn calculate_point(lon: i32, lat: i32, maxlevel: usize, buffer: f64) -> Quadtree {
         Quadtree(make_quad_tree_floating(
             coordinate_as_float(lon), coordinate_as_float(lat),
-            coordinate_as_float(lon), coordinate_as_float(lat),
+            coordinate_as_float(lon+1), coordinate_as_float(lat+1),
             buffer, maxlevel))
     }
     pub fn read(data: &[u8]) -> Result<Quadtree> {
@@ -191,7 +191,7 @@ impl Quadtree {
     
     pub fn from_xyz(x: u32, y: u32, z: u32) -> Quadtree {
         if z>20 {
-            return Quadtree(-1);
+            return Quadtree(-2);
         }
         
         let mut ans:i64 =0;
@@ -263,9 +263,9 @@ impl Quadtree {
     }
     
     pub fn common(&self, other: &Quadtree) -> Quadtree {
-        if self.0 == -1 {
+        if self.0 < 0  {
             return Quadtree(other.0);
-        } else if other.0 == -1 {
+        } else if other.0 < 0 {
             return Quadtree(self.0);
         } else if self.0 == other.0 {
             return Quadtree(self.0);

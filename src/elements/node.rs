@@ -12,15 +12,15 @@ use super::quadtree::Quadtree;
 
 use std::io::{Error,ErrorKind,Result};
 use core::cmp::Ordering;
-#[derive(Debug,Eq)]
+#[derive(Debug,Eq,Clone)]
 pub struct Node {
     pub id: i64,
     pub changetype: Changetype,
     pub info: Option<Info>, 
     pub tags: Vec<Tag>,
     
-    pub lon: i64,
-    pub lat: i64,
+    pub lon: i32,
+    pub lat: i32,
     
     pub quadtree: Quadtree,
 }
@@ -43,8 +43,8 @@ impl Node {
         
         for t in rem {
             match t {
-                read_pbf::PbfTag::Value(8,lat) => nd.lat = read_pbf::un_zig_zag(*lat),
-                read_pbf::PbfTag::Value(9,lon) => nd.lon = read_pbf::un_zig_zag(*lon),
+                read_pbf::PbfTag::Value(8,lat) => nd.lat = read_pbf::un_zig_zag(*lat) as i32,
+                read_pbf::PbfTag::Value(9,lon) => nd.lon = read_pbf::un_zig_zag(*lon) as i32,
                 _ => {},
             }
         }

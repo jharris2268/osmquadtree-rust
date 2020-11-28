@@ -15,7 +15,7 @@ use std::io::{Result,};
 use core::cmp::Ordering;
 
 
-#[derive(Debug,Eq)]
+#[derive(Debug,Eq,Clone)]
 pub struct Way {
     pub id: i64,
     pub changetype: Changetype,
@@ -54,7 +54,11 @@ impl Way {
         
         let mut res = Vec::with_capacity(l);
         pack_head(&self.id, &self.info, &self.tags, &mut res, pack_strings)?;
-        write_pbf::pack_data(&mut res, 8, &refs);
+        if refs.is_empty() {
+            write_pbf::pack_value(&mut res, 8, 0);
+        } else {
+            write_pbf::pack_data(&mut res, 8, &refs);
+        }
         pack_tail(&self.quadtree, &mut res, include_qts)?;
         Ok(res)
         

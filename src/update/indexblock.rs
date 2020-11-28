@@ -144,8 +144,8 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
             let mt = Box::new(CallbackMerge::new(packs, Box::new(MergeTimings::new())));
             read_all_blocks(infn, mt)
         };
-    
-    println!("{} bytes: {}", br, tm);
+    println!("{}: {:4.1}s", outfn, br);
+    //println!("{} bytes: {}", br, tm);
     match tm.others.pop().unwrap().1 {
         ResultType::NumTiles(nt) => { return nt; }
         _ => { panic!("??"); }

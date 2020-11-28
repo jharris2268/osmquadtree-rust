@@ -16,7 +16,7 @@ pub use super::info::Info;
 pub use super::idset::IdSet;
 
 use super::dense::Dense;
-use super::common::{PackStringTable,get_changetype};
+use super::common::{PackStringTable,get_changetype,changetype_int};
 
 use std::io::{Error,Result,ErrorKind};
 
@@ -51,6 +51,41 @@ fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     Ok(res)
 }
 
+trait WithChangetype {
+    fn changetype(&self) -> Changetype;
+}
+
+impl WithChangetype for Node {
+    fn changetype(&self) -> Changetype { return self.changetype; }
+}
+impl WithChangetype for Way {
+    fn changetype(&self) -> Changetype { return self.changetype; }
+}
+impl WithChangetype for Relation {
+    fn changetype(&self) -> Changetype { return self.changetype; }
+}
+
+fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype,usize,usize)> {
+    let mut res = Vec::new();
+    if objs.is_empty() {
+        return res;
+    }
+    let mut c=objs[0].changetype();
+    let mut li = 0;
+    for (i,o) in objs.iter().enumerate() {
+        if i != 0 {
+            let nc = o.changetype();
+            if c != nc {
+                res.push((c,li,i));
+                c = nc;
+                li = i;
+            }
+        }
+    }
+    res.push((c,li,objs.len()));
+    res
+}
+            
 
 impl PrimitiveBlock {
     pub fn new(index: i64, location: u64) -> PrimitiveBlock {
@@ -189,23 +224,20 @@ impl PrimitiveBlock {
     }
     
     pub fn pack(&self, include_qts: bool, as_change: bool) -> Result<Vec<u8>> {
-        if as_change {
-            return Err(Error::new(ErrorKind::Other,"not impl"));
-        }
+        
     
         let mut pack_strings = Box::new(PackStringTable::new());
         
         
         let mut groups = Vec::new();
         if self.nodes.len()>0 {
-            
-            groups.push(self.pack_nodes(&mut pack_strings, include_qts, as_change)?);
+            groups.extend(self.pack_nodes(&mut pack_strings, include_qts, as_change)?);
         }
         if self.ways.len()>0 {
-            groups.push(self.pack_ways(&mut pack_strings, include_qts, as_change)?);
+            groups.extend(self.pack_ways(&mut pack_strings, include_qts, as_change)?);
         }
         if self.relations.len()>0 {
-            groups.push(self.pack_relations(&mut pack_strings, include_qts, as_change)?);
+            groups.extend(self.pack_relations(&mut pack_strings, include_qts, as_change)?);
         }
 
         let pp = pack_strings.pack();
@@ -237,26 +269,63 @@ impl PrimitiveBlock {
     }    
         
             
-    fn pack_nodes(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, _as_change: bool) -> Result<Vec<u8>> {
+    fn pack_nodes(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, as_change: bool) -> Result<Vec<Vec<u8>>> {
+        if as_change {
+            let mut pp = Vec::new();
+            for (a,b,c) in find_splits(&self.nodes) {
+                let mut res=Vec::new();
+                write_pbf::pack_data(&mut res, 2, &Dense::pack(&self.nodes[b..c], prep_strings, include_qts)?);
+                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                pp.push(res);
+            }
+            return Ok(pp);
+        }
+          
         let mut res=Vec::new();
         write_pbf::pack_data(&mut res, 2, &Dense::pack(&self.nodes, prep_strings, include_qts)?);
-        return Ok(res);
+        return Ok(vec![res]);
     }
     
-    fn pack_ways(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, _as_change: bool) -> Result<Vec<u8>> {
+    fn pack_ways(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, as_change: bool) -> Result<Vec<Vec<u8>>> {
+        
+        if as_change {
+            let mut pp = Vec::new();
+            for (a,b,c) in find_splits(&self.ways) {
+                let mut res=Vec::new();
+                for w in &self.ways[b..c] {
+                    write_pbf::pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
+                }
+                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                pp.push(res);
+            }
+            return Ok(pp);
+        }
+        
         let mut res=Vec::new();
         for w in &self.ways {
             write_pbf::pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
         }
-        return Ok(res);
+        return Ok(vec![res]);
     }
     
-    fn pack_relations(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, _as_change: bool) -> Result<Vec<u8>> {
+    fn pack_relations(&self, prep_strings: &mut Box<PackStringTable>, include_qts: bool, as_change: bool) -> Result<Vec<Vec<u8>>> {
+        if as_change {
+            let mut pp = Vec::new();
+            for (a,b,c) in find_splits(&self.relations) {
+                let mut res=Vec::new();
+                for r in &self.relations[b..c] {
+                    write_pbf::pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
+                }
+                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                pp.push(res);
+            }
+            return Ok(pp);
+        }
         let mut res=Vec::new();
         for r in &self.relations {
             write_pbf::pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
         }
-        return Ok(res);
+        return Ok(vec![res]);
     }
     
 }

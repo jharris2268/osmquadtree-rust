@@ -1,4 +1,4 @@
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct Tag {
     pub key: String,
     pub val: String,

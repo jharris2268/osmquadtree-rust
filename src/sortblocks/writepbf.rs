@@ -40,9 +40,10 @@ fn make_header_block(withlocs: bool) -> Vec<u8> {
     res
 }
 
-fn pack_index_item(q: &Quadtree, ischange: bool, l: u64) -> Vec<u8> {
+fn pack_index_item(q: &Quadtree, _ischange: bool, l: u64) -> Vec<u8> {
     let mut res=Vec::with_capacity(25);
-    if ischange { write_pbf::pack_value(&mut res, 2, 1); }
+    //if ischange { write_pbf::pack_value(&mut res, 2, 1); }
+    write_pbf::pack_value(&mut res, 2, 0);
     write_pbf::pack_value(&mut res, 3, write_pbf::zig_zag(l as i64));
     write_pbf::pack_value(&mut res, 4, write_pbf::zig_zag(q.as_int()));
     res
@@ -183,6 +184,7 @@ impl CallFinish for WriteFileInternalLocs {
         let mut outf = File::create(&self.fname).expect("failed to create");
         let hb = pack_file_block("OSMHeader", &make_header_block_stored_locs(self.ischange,locs),true).expect("?");
         let mut pos = hb.len() as u64;
+        outf.write_all(&hb).expect("?");
         
         let mut ls = Vec::with_capacity(self.data.len());
         for (a,b) in &self.data {

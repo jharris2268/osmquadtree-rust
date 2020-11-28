@@ -87,8 +87,8 @@ impl Dense {
             if check_id(ids[i], idset) {
             
                 let mut nd = node::Node::new(ids[i], changetype);
-                if lats.len()>0 { nd.lat = lats[i]; }
-                if lons.len()>0 { nd.lon = lons[i]; }
+                if lats.len()>0 { nd.lat = lats[i] as i32; }
+                if lons.len()>0 { nd.lon = lons[i] as i32; }
                 if qts.len()>0 { nd.quadtree = quadtree::Quadtree::new(qts[i]); }
                 if !minimal {
                     let mut info = Info::new();
@@ -174,12 +174,12 @@ impl Dense {
     pub fn pack(feats: &[node::Node], pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
         
         let ids = write_pbf::pack_delta_int(feats.iter().map( |n| { n.id }));
-        let lats = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lat }));
-        let lons = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lon }));
+        let lats = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lat as i64}));
+        let lons = write_pbf::pack_delta_int(feats.iter().map( |n| { n.lon as i64 }));
         
         let mut qts: Option<Vec<u8>> = None;
         if include_qts {
-            qts=Some(write_pbf::pack_delta_int(feats.iter().map( |n| { n.quadtree.as_int() })));
+            qts=Some(write_pbf::pack_delta_int(feats.iter().map( |n| { if n.quadtree.as_int() < 0 { 0 } else { n.quadtree.as_int() }})));
         }
         
         

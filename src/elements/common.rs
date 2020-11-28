@@ -51,6 +51,17 @@ pub fn get_changetype(ct: u64) -> Changetype {
         _ => {panic!("wronge changetype"); }
     }
 }
+pub fn changetype_int(ct: Changetype) -> u64 {
+    match ct {
+        Changetype::Normal => 0,
+        Changetype::Delete => 1,
+        Changetype::Remove => 2,
+        Changetype::Unchanged => 3,
+        Changetype::Modify => 4,
+        Changetype::Create => 5,
+        
+    }
+}
 
 pub trait SetCommon {
     fn set_id(&mut self, id: i64);
@@ -129,7 +140,7 @@ pub fn pack_head(id: &i64, info: &Option<Info>, tags: &Vec<Tag>, res: &mut Vec<u
 }
     
 pub fn pack_tail(quadtree: &Quadtree, res:&mut Vec<u8>, include_qts: bool) -> Result<()> {
-    if include_qts {
+    if include_qts && quadtree.as_int()>=0 {
         write_pbf::pack_value(res, 20, write_pbf::zig_zag(quadtree.as_int()));
     }
     Ok(())

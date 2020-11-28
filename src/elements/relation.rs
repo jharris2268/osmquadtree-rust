@@ -13,7 +13,7 @@ use super::quadtree::Quadtree;
 use std::io::{Result,Error,ErrorKind};
 use core::cmp::Ordering;
 
-#[derive(Debug,Eq)]
+#[derive(Debug,Eq,Clone)]
 pub struct Relation {
     pub id: i64,
     pub changetype: Changetype,
@@ -45,7 +45,7 @@ fn elementtype_int(t: &ElementType) -> u64 {
     }
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct Member {
     pub role: String, 
     pub mem_type: ElementType,

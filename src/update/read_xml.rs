@@ -45,12 +45,12 @@ fn all_whitespace(s: &[u8]) -> bool {
     return true;
 }
 
-fn as_int(v: f64) -> i64 {
+fn as_int(v: f64) -> i32 {
     if v<0.0 {
-        return ((v*10000000.0)-0.5) as i64;
+        return ((v*10000000.0)-0.5) as i32;
     }
     
-    return ((v*10000000.0)+0.5) as i64;
+    return ((v*10000000.0)+0.5) as i32;
 }
 
 fn read_node<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, e: &BytesStart, ct: Option<Changetype>, has_children: bool) -> Result<Node> {

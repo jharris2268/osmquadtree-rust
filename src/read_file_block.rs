@@ -193,7 +193,7 @@ pub fn read_all_blocks<T,U>(fname: &str, mut pp: Box<T>) -> (U, f64)
 {
     let mut ct=Checktime::new();
     
-    let pf = 100.0 / (std::fs::metadata(fname).expect("fail").len() as f64);
+    let pf = 100.0 / (std::fs::metadata(fname).expect(&format!("failed to open {}", fname)).len() as f64);
     let f = File::open(fname).expect("fail");
     let mut fbuf = BufReader::new(f);
     for (i,fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {

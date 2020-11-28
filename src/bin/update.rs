@@ -1,13 +1,13 @@
 extern crate osmquadtree;
 
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::update::{write_index_file,FilelistEntry, read_filelist, write_filelist,read_xml_change,check_index_file};
-use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string,MergeTimings,ThreadTimer};
+use osmquadtree::update::{write_index_file,FilelistEntry, read_filelist, write_filelist,read_xml_change,check_index_file,ChangeBlock};
+use osmquadtree::utils::{parse_timestamp,timestamp_string,Timings, date_string,MergeTimings,Timer,ThreadTimer};
 use osmquadtree::callback::{Callback,CallbackMerge,CallFinish};
 use osmquadtree::header_block;
-use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,ElementType};
+use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,Way,Relation,ElementType,Bbox};
 use osmquadtree::read_file_block;
-use osmquadtree::sortblocks::QuadtreeTree;
+use osmquadtree::sortblocks::{QuadtreeTree,WriteFileInternalLocs};
 //use osmquadtree::convertblocks;
 use std::env;
 use std::fs::File;
@@ -52,13 +52,13 @@ impl Settings {
 
 
 
-fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(String,i64,i64)> {
+fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> (Vec<(String,i64,i64)>,i64) {
     let mut res = Vec::new();
     if filelist.is_empty() {
         panic!("empty filelist");
     }
     let last_state = filelist.last().unwrap().state;
-    
+    let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
     let state_ff = File::open(format!("{}state.csv", settings.diffs_location)).expect("failed to open state.csv file");
     for row in csv::Reader::from_reader(state_ff).records() {
         let row = row.expect("?");
@@ -73,63 +73,53 @@ fn check_state(settings: &Settings, filelist: &Vec<FilelistEntry>) -> Vec<(Strin
             }
         }
     }
-    res
+    (res,prev_ts)
 }
-
-/*struct CollectTiles {
-    qts: BTreeMap<(ElementType,i64),(Quadtree,Quadtree)>,
-    othernodes: Vec<Node>,
-    
-    //res: BTreeMap<Quadtree,PrimitiveBlock>,
-}
-impl CollectTiles {
-    pub fn new() -> CollectTiles {
-        CollectTiles{res: BTreeMap::new()}
-    }
-}
-impl CallFinish for CollectTiles {
-    type CallType=PrimitiveBlock;
-    type ReturnType=Timings<BTreeMap<Quadtree,PrimitiveBlock>>;
-
-    fn call(&mut self, bl: PrimitiveBlock) {
-        self.res.insert(bl.quadtree, bl);
-    }
-    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
-        let mut tm = Timings::new();
-        tm.add_other("tiles", std::mem::take(&mut self.res));
-        Ok(tm)
-    }
-} */  
 
 pub struct OrigData {
     pub node_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
     pub way_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
     pub relation_qts: BTreeMap<i64,(Quadtree,Quadtree)>,
-    pub othernodes: Vec<Node>
+    pub othernodes: BTreeMap<i64,Option<Node>>
 }
 impl OrigData {
     pub fn new() -> OrigData {
-        OrigData{node_qts: BTreeMap::new(),way_qts: BTreeMap::new(),relation_qts: BTreeMap::new(),othernodes: Vec::new()}
+        OrigData{node_qts: BTreeMap::new(),way_qts: BTreeMap::new(),relation_qts: BTreeMap::new(),othernodes: BTreeMap::new()}
     }
     
     pub fn add(&mut self, pb: PrimitiveBlock, idset: &IdSet) {
         for n in pb.nodes {
+            
+            
             match n.changetype {
+                
                 Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
                     self.node_qts.insert(n.id,(n.quadtree,pb.quadtree));
                     if idset.is_exnode(n.id) {
-                        let mut n = n;
+                        let mut n = n.clone();
                         n.changetype=Changetype::Normal;
-                        self.othernodes.push(n);
+                        self.othernodes.insert(n.id,Some(n));
+                    }
+                },
+                Changetype::Delete => {
+                    self.node_qts.insert(n.id, (Quadtree::empty(), Quadtree::empty()));
+                    if idset.is_exnode(n.id) {
+                        self.othernodes.insert(n.id,None);
                     }
                 },
                 _ => {}
             }
+            
+            
         }
         for w in pb.ways {
             match w.changetype {
                 Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
                     self.way_qts.insert(w.id,(w.quadtree,pb.quadtree));
+                },
+                Changetype::Delete => {
+                    self.way_qts.insert(w.id, (Quadtree::empty(), Quadtree::empty()));
+                    
                 },
                 _ => {}
             }
@@ -140,6 +130,10 @@ impl OrigData {
                 Changetype::Normal | Changetype::Unchanged | Changetype::Modify | Changetype::Create => {
                     self.relation_qts.insert(r.id,(r.quadtree,pb.quadtree));
                 },
+                Changetype::Delete => {
+                    self.relation_qts.insert(r.id, (Quadtree::empty(), Quadtree::empty()));
+                    
+                },                    
                 _ => {}
             }
         }
@@ -151,7 +145,84 @@ impl OrigData {
         self.relation_qts.extend(other.relation_qts);
         self.othernodes.extend(other.othernodes);
     }
+    
+    fn get_quadtree(&self, t: &ElementType, r: &i64) -> Option<Quadtree> {
+        match *t {
+            ElementType::Node => get_quadtree(&self.node_qts, r),
+            ElementType::Way => get_quadtree(&self.way_qts, r),
+            ElementType::Relation => get_quadtree(&self.relation_qts, r),
+        }
+    }
+    
+    fn get_alloc(&self, t: &ElementType, r: &i64) -> Option<Quadtree> {
+        match t {
+            ElementType::Node => get_alloc(&self.node_qts, r),
+            ElementType::Way => get_alloc(&self.way_qts, r),
+            ElementType::Relation => get_alloc(&self.relation_qts, r),
+        }
+    }
+    
+    fn expand_node(&mut self, r: &i64, q: Quadtree) {
+        expand_quadtree(&mut self.node_qts, r, q);
+    }
+    
+    /*fn set_node(&mut self, r: &i64, q: Quadtree) {
+        replace_quadtree(&mut self.node_qts, r, q);
+    }*/
+    fn set_way(&mut self, r: &i64, q: Quadtree)  {
+        replace_quadtree(&mut self.way_qts, r, q);
+    }
+    
+    fn expand_relation(&mut self, r: &i64, q: Quadtree)  {
+        expand_quadtree(&mut self.relation_qts, r, q);
+    }
+    
+    fn set_relation(&mut self, r: &i64, q: Quadtree)  {
+        replace_quadtree(&mut self.relation_qts, r, q);
+    }
+    
+    
+    
 }
+
+fn expand_quadtree(curr: &mut BTreeMap<i64, (Quadtree,Quadtree)>, i: &i64, q: Quadtree) {
+    match curr.get_mut(i) {
+        None => {curr.insert(*i,(q,Quadtree::empty())); },
+        Some(p) => {p.0 = p.0.common(&q); },
+    }
+}
+fn replace_quadtree(curr: &mut BTreeMap<i64,(Quadtree,Quadtree)>, i: &i64, q: Quadtree) {
+    match curr.get_mut(i) {
+        None => {curr.insert(*i,(q,Quadtree::empty())); },
+        Some(p) => {p.0 = q; },
+    }
+}
+fn get_quadtree(curr: &BTreeMap<i64, (Quadtree,Quadtree)>, i: &i64) -> Option<Quadtree>{
+    match curr.get(i) {
+        Some(q) => {
+            if q.0.as_int() < 0 {
+                None
+            } else {
+                Some(q.0)
+            }
+        },
+        None => None
+    }
+}
+fn get_alloc(curr: &BTreeMap<i64, (Quadtree,Quadtree)>, i: &i64) -> Option<Quadtree> {
+    match curr.get(i) {
+        Some(q) => {
+            if q.1.as_int() < 0 {
+                None
+            } else {
+                Some(q.1)
+            }
+        },
+        None => None
+    }
+}
+
+
 impl fmt::Display for OrigData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "OrigData {:10} node qts, {:8} way qts, {:7} rel qts, {:8} other nodes", self.node_qts.len(), self.way_qts.len(), self.relation_qts.len(), self.othernodes.len())
@@ -184,10 +255,8 @@ impl CallFinish for ReadPB {
         
         self.origdata.as_mut().unwrap().add(b,self.ids.as_ref());
         
-        //let b = read_primitive_blocks_combine(idx_blocks.0 as i64, idx_blocks.1, Some(self.ids.as_ref())).expect("?");
-        //println!("block {} {} nodes, {} ways, {} relations", b.quadtree.as_string(),b.nodes.len(),b.ways.len(),b.relations.len());
         self.tm+=tx.since();
-        //self.out.call(b);
+        
     }
     fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
         let mut tm = Timings::new();//self.out.finish()?;
@@ -218,23 +287,18 @@ fn read_change_tiles(fname: &str, tiles: &BTreeSet<Quadtree>, idset: Arc<IdSet>,
         }
     }
     let (mut tm,b) = if numchan == 0 {
-        //let collect = Box::new(CollectTiles::new());
-        let convert = Box::new(ReadPB::new(ischange,idset));//convertblocks::make_read_primitive_blocks_combine_call_all_idset(collect, idset);
+        
+        let convert = Box::new(ReadPB::new(ischange,idset));
         read_file_block::read_all_blocks_locs(&mut file, fname, locs, false, convert)
     } else {
-        //let collect = CallbackSync::new(Box::new(CollectTiles::new()), numchan);
+        
         let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,read_file_block::FileBlock),ReturnType=Timings<OrigData>>>> = Vec::new();
-        for _ in 0..numchan { //coll in collect {
-            //let coll2 = Box::new(ReplaceNoneWithTimings::new(coll));
+        for _ in 0..numchan {
             convs.push(Box::new(Callback::new(Box::new(ReadPB::new(ischange,idset.clone())))));
-                //convertblocks::make_read_primitive_blocks_combine_call_all_idset(coll2, idset.clone()))));
         }
         let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
         read_file_block::read_all_blocks_locs(&mut file, fname, locs, true, convsm)
     };
-    
-    //println!("{}", tm);
-    
     
     let mut tls = tm.others.pop().unwrap().1;
     while !tm.others.is_empty() {
@@ -246,17 +310,14 @@ fn read_change_tiles(fname: &str, tiles: &BTreeSet<Quadtree>, idset: Arc<IdSet>,
     
     
 
-fn collect_existing_alt(
+fn collect_existing(
     prfx: &str, filelist: &Vec<FilelistEntry>,
-    //tiles: &BTreeSet<Quadtree>,
     idset: Arc<IdSet>,
     numchan: usize) -> std::io::Result<OrigData> {
         
-    //let mut changetiles = BTreeMap::new();
+    
     let mut origdata = OrigData::new();
     
-    //let mut tne=0;
-    //let mut tnobj=0;
     let mut tt = 0.0;
     
     
@@ -277,8 +338,7 @@ fn collect_existing_alt(
         //idset=b;
         let mut ctiles = BTreeSet::new();
         ctiles.extend(a);
-        
-      //  let mut ne=0; let mut nobj=0;
+     
         let fname = format!("{}{}", prfx, fle.filename);
         if i==0 {
             println!("");
@@ -288,99 +348,440 @@ fn collect_existing_alt(
         origdata.extend(bb);
         tt+=t;
         
-        /*let bbl=bb.len();
-        for (q,b) in bb {
-            nobj+=b.len();
-            if b.len() == 0 {
-                ne+=1;
-            } else if !changetiles.contains_key(&q) {
-                changetiles.insert(q, b);
-            } else {
-                
-                let (k,v) = changetiles.remove_entry(&q).unwrap();
-                let m = apply_change_primitive(v, b);
-                changetiles.insert(k, m);
-            }
-        }
-        
-        tt+=t;
-        tne+=ne;
-        tnobj+=nobj;
-        if i==0 {
-            println!("");
-        }
-        print!("    {}: {} tiles {} empty, {} objs {:5.1}s => {} tiles", fname, bbl, ne, nobj, tt, changetiles.len());*/
-        
         stdout().flush().expect("");
     }
-    //println!("\n{} tiles {} empty, {} objs {:5.1}s", changetiles.len(), tne, tnobj, tt);
+
     println!("");
     Ok(origdata)
     
 }
-            
-            
 
-/*
-fn collect_existing(prfx: &str, filelist: &Vec<FilelistEntry>, tiles: &BTreeSet<Quadtree>, idset: Arc<IdSet>, numchan: usize) -> std::io::Result<BTreeMap<Quadtree,PrimitiveBlock>> {
+
+
     
-    let mut locs = BTreeMap::new();
-    let mut fbufs=Vec::new();
+    /*
+    std::list<std::pair<ElementType,int64>> mms;
+    for (auto& pp:  (*em)) {
+        auto k = pp.second->InternalId();//(pp.first.first<<61) | pp.first.second;
+        if (pp.second->ChangeType()==changetype::Normal) {
+
+            if (qts->at(k)==pp.second->Quadtree()) {
+                mms.push_back(pp.first);
+            } else {
+                pp.second->SetQuadtree(qts->at(k));
+                pp.second->SetChangeType(changetype::Unchanged);
+            }
+        } else if (pp.second->ChangeType()>changetype::Remove) {
+            pp.second->SetQuadtree(qts->at(k));
+        }
+    }
+    Logger::Message() << "remove " << mms.size() << " unneeded extra nodes";
+    for (auto& m: mms) {
+        em->erase(m);
+    }
+    */
+
+fn find_tile(tree: &QuadtreeTree, q: Option<Quadtree>) -> Option<Quadtree> {
+    match q {
+        None => None,
+        Some(q) => {
+            let (_,t) = tree.find(q);
+            Some(t.qt)
+        }
+    }
+}
+
+fn find_node<'a>(changeblock: &'a ChangeBlock, id: &i64) -> std::io::Result<&'a Node> {
+    match changeblock.nodes.get(id) {
+        Some(n) => { 
+            if n.changetype == Changetype::Delete {
+                Err(Error::new(ErrorKind::Other,format!("node {} deleted", id)))
+            } else {
+                Ok(n)
+            }
+        },
+        None => Err(Error::new(ErrorKind::Other,format!("node {} missing", id))),
+    }
     
-    for (i,fle) in filelist.iter().enumerate() {
-        let fle_fn = format!("{}{}", prfx, fle.filename);
-        let f = File::open(&fle_fn).expect("fail");
-        let mut fbuf = BufReader::new(f);
-        
-        let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
-        let filepos = read_file_block::file_position(&mut fbuf).expect("?");
-        let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
-        
-        
-        
-        for entry in head.index {
-            if !locs.contains_key(&entry.quadtree) {
-                if i != 0 {
-                    panic!(format!("quadtree {} not in first file?", entry.quadtree.as_string()));
-                }
-                locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+}
+
+
+struct AllocBlocks {
+    st: i64,
+    et: i64,
+    pub blocks: BTreeMap<Quadtree,PrimitiveBlock>
+}
+
+impl AllocBlocks {
+    pub fn new(st: i64, et: i64) -> AllocBlocks {
+        AllocBlocks{st:st,et:et,blocks:BTreeMap::new()}
+    }
+
+    fn add_node(&mut self, qt: Quadtree, nd: Node) {
+        match self.blocks.get_mut(&qt) {
+            None => {
+                let mut pb = PrimitiveBlock::new(0,0);
+                pb.quadtree=qt.clone();
+                pb.start_date=self.st;
+                pb.end_date=self.et;
+                pb.nodes.push(nd);
+                self.blocks.insert(qt, pb);
+            },
+            Some(pb) => { pb.nodes.push(nd); }
+        }
+    }
+    fn add_way(&mut self, qt: Quadtree, wy: Way) {
+        match self.blocks.get_mut(&qt) {
+            None => {
+                let mut pb = PrimitiveBlock::new(0,0);
+                pb.quadtree=qt.clone();
+                pb.start_date=self.st;
+                pb.end_date=self.et;
+                pb.ways.push(wy);
+                self.blocks.insert(qt, pb);
+            },
+            Some(pb) => { pb.ways.push(wy); }
+        }
+    }
+    fn add_relation(&mut self, qt: Quadtree, rl: Relation) {
+        match self.blocks.get_mut(&qt) {
+            None => {
+                let mut pb = PrimitiveBlock::new(0,0);
+                pb.quadtree=qt.clone();
+                pb.start_date=self.st;
+                pb.end_date=self.et;
+                pb.relations.push(rl);
+                self.blocks.insert(qt, pb);
+            },
+            Some(pb) => { pb.relations.push(rl); }
+        }
+    }
+}
+
+fn calc_qts(changeblock: &ChangeBlock, orig_data: &mut OrigData, tree: &QuadtreeTree, maxlevel: usize, buffer: f64, st: i64, et: i64) -> std::io::Result<BTreeMap<Quadtree, PrimitiveBlock>> {
+    
+    let mut nq = BTreeSet::new();
+    let mut rel_rels = Vec::new();
+    
+    /*
+
+    for (auto& pp : (*em)) {
+        if ((pp.first.first == ElementType::Way) && (pp.second->ChangeType()>changetype::Delete)) {
+            bbox bx;
+            auto o = std::dynamic_pointer_cast<Way>(pp.second);
+            for (auto& n: o->Refs()) {
+                auto it=em->find(std::make_pair(ElementType::Node,n));
+                if (it==em->end()) { throw std::domain_error("node not present"); }
+                auto no = std::dynamic_pointer_cast<Node>(it->second);
+                expand_point(bx, no->Lon(),no->Lat());
+            }
+            int64 k = pp.second->InternalId();//(1ll<<61) | pp.first.second;
+            qts->expand(k, -1);
+            int64 qt = quadtree::calculate(bx.minx,bx.miny,bx.maxx,bx.maxy,0.05,18);
+            if (qt<0) {
+                Logger::Message() << bx << "=>" << qt;
+                throw std::domain_error("??");
+            }
+            for (auto& n: o->Refs()) {
+                qts->expand(n,qt);
+                nq.insert(n);
+            }
+            qts->expand(k,qt);
+        }
+    }*/
+    for (_,w) in changeblock.ways.iter() {
+        if w.changetype != Changetype::Delete {
+            let mut bbox = Bbox::empty();
+            for r in w.refs.iter() {
+                let n = find_node(changeblock, r)?;
+                bbox.expand(n.lon, n.lat);
             }
             
-            locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
-        }
-        
-        fbufs.push(fbuf);
-    }
-    
-    
-    let mut locsv = Vec::new();
-    for (a,(_b,c)) in &locs {
-        if tiles.contains(&a) {
-            locsv.push((locsv.len(),c.clone()));
+            let q = Quadtree::calculate(&bbox, maxlevel, buffer);
+            orig_data.set_way(&w.id, q);
+            
+            for r in w.refs.iter() {
+                orig_data.expand_node(r, q);
+                nq.insert(r);
+            }
         }
     }
-        
-    println!("{} files, {} / {} tiles", fbufs.len(), locsv.len(), locs.len());
-    
-    //let idsetw = Arc::new(idset);
-    
-    let colls = CallbackSync::new(Box::new(CollectTiles::new()),numchan);
-    
-    let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<read_file_block::FileBlock>),ReturnType=<CollectTiles as CallFinish>::ReturnType>>> = Vec::new();
-    
-    for coll in colls {
-        let cca = Box::new(ReplaceNoneWithTimings::new(coll));
-        pps.push(Box::new(Callback::new(convertblocks::make_read_primitive_blocks_combine_call_all_idset(cca, idset.clone()))));
+    /*
+    Logger::Message() << "calc node qts";
+    for (auto& pp : (*em)) {
+        if ((pp.first.first == ElementType::Node) && (pp.second->ChangeType()>changetype::Delete)) {
+
+            if (nq.count(pp.first.second)==0) {
+                auto o = std::dynamic_pointer_cast<Node>(pp.second);
+                int64 qt = quadtree::calculate(o->Lon(),o->Lat(),o->Lon(),o->Lat(),0.05,18);
+                qts->expand(pp.first.second,qt);
+            }
+        }
+    }*/
+    for (_,n) in changeblock.nodes.iter() {
+        if n.changetype != Changetype::Delete {
+            if !nq.contains(&n.id) {
+                let q = Quadtree::calculate_point(n.lon, n.lat, maxlevel, buffer);
+                orig_data.expand_node(&n.id, q);
+                   
+            }
+        }
     }
     
-    let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-    let (mut tm,b) = read_file_block::read_all_blocks_parallel(fbufs, locsv, readb);
-    println!("{} {}",tm,b);
-    let tls = tm.others.pop().unwrap().1;
+    /*
+    Logger::Message() << "calc rel qts";
+    std::multimap<int64,int64> rr;
+    for (auto& pp : (*em)) {
+        if ((pp.first.first == ElementType::Relation) && (pp.second->ChangeType()>changetype::Delete)) {
+            auto obj = std::dynamic_pointer_cast<Relation>(pp.second);
+            int64 k = pp.second->InternalId();
+            if (obj->Members().empty()) {
+                qts->expand(k,0);
+            } else {
+                std::list<Member> missing_members;
+                
+                for (auto& m : obj->Members()) {
+                    if (m.type==ElementType::Relation) {
+                        rr.insert(std::make_pair(pp.first.second, m.ref));
+                    } else {
+                        int64 mk = make_internalid(m.type,m.ref);
+                        if (!qts->contains(mk)) {
+                            missing_members.push_back(m);
+                            
+                        } else {
+                            auto d = qts->at(mk);
+                            qts->expand(k,d);
+                        }
+                    }
+                }
+                if (!missing_members.empty()) {
+                    Logger::Message msg;
+                    msg << "relation " << obj->Id() << " missing " << missing_members.size() << " member qts";
+                    if (missing_members.size() < 10) {
+                        for (const auto& m: missing_members) {
+                            msg << " (" << m.type << ", " << m.ref << "),";
+                        }
+                    }
+                }
+                            
+            }
+        }
+    }
+    for (size_t z=0; z< 5; z++) {
+        for (auto& r: rr) {
+            int64 k0 = make_internalid(ElementType::Relation, r.first);
+            int64 k1 = make_internalid(ElementType::Relation, r.second);
+            if (qts->contains(k1)) {
+                qts->expand(k0, qts->at(k1));
+            }
+        }
+    }*/
+    for (_,r) in changeblock.relations.iter() {
+        if r.changetype != Changetype::Delete {
+            
+            if r.members.is_empty() {
+                orig_data.set_relation(&r.id, Quadtree::new(0));
+            } else {
+                
+                let mut qt = Quadtree::empty();
+                for m in r.members.iter() {
+                    if m.mem_type == ElementType::Relation {
+                        rel_rels.push((r.id, m.mem_ref));
+                    } else {
+                        match orig_data.get_quadtree(&m.mem_type, &m.mem_ref) {
+                            Some(q) => { qt = qt.common(&q);},
+                            None => { println!("missing member {:?} {} for relation {}", m.mem_type, m.mem_ref, r.id); }
+                        }
+                    }
+                }
+                
+                orig_data.expand_relation(&r.id, qt);
+            }
+        }
+    }
     
-    Ok(tls)
+    for i in 0..5 {
+        for (a,b) in rel_rels.iter() {
+            match orig_data.get_quadtree(&ElementType::Relation, b) {
+                Some(q) => { orig_data.expand_relation(a, q); },
+                None => {
+                    if i== 4 { 
+                        println!("missing member {:?} {} for relation {}", ElementType::Relation, b, a);
+                    }
+                },
+            }
+        }
+    }
+    /*
+    std::list<std::pair<ElementType,int64>> mms;
+    for (auto& pp:  (*em)) {
+        auto k = pp.second->InternalId();//(pp.first.first<<61) | pp.first.second;
+        if (pp.second->ChangeType()==changetype::Normal) {
+
+            if (qts->at(k)==pp.second->Quadtree()) {
+                mms.push_back(pp.first);
+            } else {
+                pp.second->SetQuadtree(qts->at(k));
+                pp.second->SetChangeType(changetype::Unchanged);
+            }
+        } else if (pp.second->ChangeType()>changetype::Remove) {
+            pp.second->SetQuadtree(qts->at(k));
+        }
+    }
+    Logger::Message() << "remove " << mms.size() << " unneeded extra nodes";
+    for (auto& m: mms) {
+        em->erase(m);
+    }
+    */
+    let mut unneeded_extra_nodes = 0;
+    let mut create_delete = 0;
+    let mut res = AllocBlocks::new(st, et);
     
-}*/
+    for (_,n) in changeblock.nodes.iter() {
+        
+        let q = orig_data.get_quadtree(&ElementType::Node, &n.id);
+        
+        let na = find_tile(&tree, q);
+        
+        let a = orig_data.get_alloc(&ElementType::Node, &n.id);
+        
+       
+        
+        match (n.changetype, a) {
+            (Changetype::Normal, Some(alloc)) => {
+                if n.quadtree == q.unwrap() {
+                    unneeded_extra_nodes += 1;
+                } else {
+                    let mut n2 = n.clone();
+                    n2.quadtree = q.unwrap();
+                    n2.changetype = Changetype::Unchanged;
+                    res.add_node(na.unwrap(), n2);
+                    
+                    if na.unwrap() != alloc {
+                        let mut n3 = n.clone();
+                        //n3.tags.clear();
+                        n3.quadtree=Quadtree::new(0);
+                        n3.changetype = Changetype::Remove;
+                        res.add_node(alloc, n3);
+                    }
+                }
+            },
+            (Changetype::Delete, Some(alloc)) => {
+                let mut n2=n.clone();
+                n2.quadtree=Quadtree::new(0);
+                res.add_node(alloc, n2);
+            },
+            (Changetype::Delete, None) => { create_delete+=1; },
+            (Changetype::Modify, Some(alloc)) => {
+                let mut n2 = n.clone();
+                n2.quadtree = q.unwrap();
+                res.add_node(na.unwrap(), n2);
+                if na.unwrap() != alloc {
+                    let mut n3 = n.clone();
+                    //n3.tags.clear();
+                    n3.quadtree=Quadtree::new(0);
+                    n3.changetype = Changetype::Remove;
+                    res.add_node(alloc, n3);
+                   
+                }
+            },
+            (Changetype::Modify, None) | (Changetype::Create, None) => {
+                let mut n2 = n.clone();
+                n2.quadtree=q.unwrap();
+                res.add_node(na.unwrap(), n2);
+            },
+            (rt,ra) => { println!("dont understand {} {:?} {:?} {:?} {:?}", rt,ra,n,q,na); },
+        }
+        
+        
+    }
+    
+    for (_,w) in changeblock.ways.iter() {
+        
+        let q = orig_data.get_quadtree(&ElementType::Way, &w.id);
+        
+        let na = find_tile(&tree, q);
+        
+        let a = orig_data.get_alloc(&ElementType::Way, &w.id);
+        
+        match (w.changetype, a) {
+            
+            (Changetype::Delete, Some(alloc)) => {
+                let mut w2=w.clone();
+                w2.quadtree=Quadtree::new(0);
+                res.add_way(alloc, w2);
+            },
+            (Changetype::Delete, None) => { create_delete+=1; },
+            (Changetype::Modify, Some(alloc)) => {
+                let mut w2 = w.clone();
+                w2.quadtree = q.unwrap();
+                res.add_way(na.unwrap(), w2);
+                if na.unwrap() != alloc {
+                    let mut w3 = w.clone();
+                    //w3.tags.clear();
+                    w3.quadtree=Quadtree::new(0);
+                    w3.changetype = Changetype::Remove;
+                    res.add_way(alloc, w3);
+                   
+                }
+            },
+            (Changetype::Modify, None) | (Changetype::Create, None) => {
+                let mut w2 = w.clone();
+                w2.quadtree=q.unwrap();
+                res.add_way(na.unwrap(), w2);
+            },
+            (rt,ra) => { println!("dont understand {} {:?} {:?} {:?} {:?}", rt,ra,w,q,na); },
+        }
+        
+        
+    }
+    for (_,r) in changeblock.relations.iter() {
+        
+        let q = orig_data.get_quadtree(&ElementType::Relation, &r.id);
+        
+        let na = find_tile(&tree, q);
+        
+        let a = orig_data.get_alloc(&ElementType::Relation, &r.id);
+        
+        match (r.changetype, a) {
+            
+            (Changetype::Delete, Some(alloc)) => {
+                let mut r2=r.clone();
+                r2.quadtree=Quadtree::new(0);
+                res.add_relation(alloc, r2);
+            },
+            (Changetype::Delete, None) => { create_delete+=1; },
+            (Changetype::Modify, Some(alloc)) => {
+                let mut r2 = r.clone();
+                r2.quadtree = q.unwrap();
+                res.add_relation(na.unwrap(), r2);
+                if na.unwrap() != alloc {
+                    let mut r3 = r.clone();
+                    //r3.tags.clear();
+                    r3.quadtree=Quadtree::new(0);
+                    r3.changetype = Changetype::Remove;
+                    res.add_relation(alloc, r3);
+                   
+                }
+            },
+            (Changetype::Modify, None) | (Changetype::Create, None) => {
+                let mut r2 = r.clone();
+                r2.quadtree=q.unwrap();
+                res.add_relation(na.unwrap(), r2);
+            },
+            (rt,ra) => { println!("dont understand {} {:?} {:?} {:?} {:?}", rt,ra,r,q,na); },
+        }
+        
+        
+    }
+    
+    println!("{} unneeded extra nodes, {} create_delete", unneeded_extra_nodes, create_delete);
+    
+    Ok(res.blocks)
+}
+
+        
+    
 
 fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<QuadtreeTree> {
     let fname = format!("{}{}", prfx, filelist[0].filename);
@@ -398,17 +799,10 @@ fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<Quadt
     
     Ok(tree)
 }
-fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str, _state: i64, _timestamp: i64, numchan: usize) -> std::io::Result<(f64,String,usize)> {
-    let mut chgf = BufReader::new(File::open(change_filename)?);
-    
-        
-    let changeblock = if change_filename.ends_with(".gz") {
-        read_xml_change(&mut BufReader::new(flate2::bufread::GzDecoder::new(chgf)))
-    } else {
-        read_xml_change(&mut chgf)
-    }?;
-    
-    let mut idset=IdSet::new();
+
+ 
+fn prep_idset(changeblock: &ChangeBlock) -> IdSet {
+    let mut idset = IdSet::new();
     
     for (_,n) in changeblock.nodes.iter() {
         idset.nodes.insert(n.id);
@@ -432,7 +826,12 @@ fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str,
         idset.relations.insert(r.id);
         for m in r.members.iter() {
             match m.mem_type {
-                ElementType::Node => { idset.nodes.insert(m.mem_ref); },
+                ElementType::Node => {
+                    idset.nodes.insert(m.mem_ref);
+                    //if !changeblock.nodes.contains_key(&m.mem_ref) {
+                        //idset.exnodes.insert(m.mem_ref);
+                    //}
+                },
                 ElementType::Way => { idset.ways.insert(m.mem_ref); },
                 ElementType::Relation => { idset.relations.insert(m.mem_ref); },
             }
@@ -440,38 +839,68 @@ fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str,
         
     }
     println!("{}", idset);
+    idset
+}
+
+fn find_update(prfx: &str, filelist: &Vec<FilelistEntry>, change_filename: &str, prev_ts: i64, ts: i64, fname:&str, numchan: usize) -> std::io::Result<(f64,usize)> {
+    let mut chgf = BufReader::new(File::open(change_filename)?);
     
-    
-    let idset = Arc::new(idset);
-    
-    //let mut tiles = BTreeSet::new();
-    
-    /*let mut tc=0.0;
-    for fle in filelist {
-        let fname = format!("{}{}-index.pbf", prfx, fle.filename);
+    let tx=Timer::new();
         
-        let (a,b,c) = check_index_file(&fname, idset, numchan)?;
-        for q in &a {
-            tiles.insert(*q);
+    let mut changeblock = if change_filename.ends_with(".gz") {
+        read_xml_change(&mut BufReader::new(flate2::bufread::GzDecoder::new(chgf)))
+    } else {
+        read_xml_change(&mut chgf)
+    }?;
+    
+    let a = tx.since();
+    
+    let idset=Arc::new(prep_idset(&changeblock));
+   
+    let b = tx.since();
+    
+    let mut orig_data = collect_existing(prfx, filelist, idset, numchan)?;
+    
+    let c = tx.since();
+    println!("{}", orig_data);
+    
+    let on = std::mem::take(&mut orig_data.othernodes);
+    for (a,b) in on {
+        match b {
+            None=>{},
+            Some(n) => { changeblock.nodes.insert(a,n); }
         }
-        tc+=c;
-        print!("\r{}: {:5.1}s {:5.1}s {} tiles [now {}]", fname,c, tc,a.len(),tiles.len());
-        stdout().flush().expect("");
-        idset=b;
-        
-    }*/
+    }
+    //changeblock.nodes.append(&mut orig_data.othernodes);
     
-    //println!("\nneed to check {} tiles",tiles.len());        
-    
-    let blocks = collect_existing_alt(prfx, filelist, /*&tiles, */idset, numchan)?;
-    
-    println!("{}", blocks);
-    //println!("{} blocks, {} eles", blocks.len(), blocks.iter().map(|(_,b)| { b.len() as i64 }).sum::<i64>());
+    let d = tx.since();
     
     let tree = prep_tree(prfx, filelist)?;
+    let e = tx.since();
     println!("{}", tree);
     
-    panic!("not impl");
+    println!("node 4395882932: {:?}", orig_data.node_qts.get(&4395882932));
+    
+    let tiles = calc_qts(&changeblock, &mut orig_data, &tree, 18, 0.05, prev_ts, ts)?;
+    let f = tx.since();
+    
+    println!("{} tiles, {} objs", tiles.len(), tiles.iter().map(|(_,b)| { b.nodes.len() }).sum::<usize>());
+    
+    let mut wf = WriteFileInternalLocs::new(&format!("{}{}", prfx, fname), true);
+    for (k,v) in tiles.iter() {
+        let pp = v.pack(true,true)?;
+        let qq = read_file_block::pack_file_block("OSMData", &pp, true)?;
+        wf.call((*k,qq))
+    }
+    wf.finish()?;
+    
+    let g = tx.since();
+        
+    println!("read xml: {:5.1}s\nprep_idset: {:5.1}s\ncollect_existing: {:5.1}s\nextend nodes: {:5.1}s\nprep_tree: {:5.1}s\ncalc_qts: {:5.1}s\npack and write{:5.1}s\nTOTAL: {:5.1}s",a,b-a,c-b,d-c,e-d,f-e,g-f,g);
+    
+    Ok((tx.since(), tiles.len()))
+    
+    //panic!("not impl");
 }
 
 fn main() {
@@ -491,6 +920,7 @@ fn main() {
     let mut timestamp = 0;
     let mut initial_state=0;
     let mut diffs_location = String::new();
+    let mut limit=0;
     
     if args.len()>3 {
         for i in 3..args.len() {
@@ -504,6 +934,8 @@ fn main() {
                 initial_state = args[i].substr(14,args[i].len()).parse().unwrap();
             } else if args[i].starts_with("diffs_location=") {
                 diffs_location = args[i].substr(15,args[i].len());
+            } else if args[i].starts_with("limit=") {
+                limit = args[i].substr(6,args[i].len()).parse().unwrap();
             } else {
                 println!("unexpected argument: {}", args[i]);
             }
@@ -528,30 +960,51 @@ fn main() {
         
         
         
-    } else if op == "update" {
+    } else if op == "update" || op == "update_demo" {
         
         let settings = Settings::from_file(&prfx);
         let mut filelist = read_filelist(&prfx);
-        if filelist.len()>1 {
+        let mut suffix = String::new();
+        if op == "update_demo" {
+            
             filelist.pop();
+            if limit > 1 {
+                for _ in 1..limit {
+                    filelist.pop();
+                }
+            }
+            suffix=String::from("-rust");
+            
         }
         
-        let to_update = check_state(&settings, &filelist);
+        let (mut to_update, mut prev_ts) = check_state(&settings, &filelist);
+        if limit > 0 && to_update.len()>limit {
+            to_update = to_update[..limit].to_vec();
+        }
         println!("have {} in filelist, {} to update", filelist.len(), to_update.len());
         let mut tm = Timings::<()>::new();
         if !to_update.is_empty() {
-            for (chgfn, st, ts) in to_update {
-                println!("call find_update('{}',{} entries,'{}', {}, {}, {})", prfx,filelist.len(),chgfn,st,ts,numchan);
-                let (tx, fname, nt) = find_update(&prfx, &filelist, &chgfn, st, ts,numchan).expect("failed to write update");
+            
+            for (chgfn, state, ts) in to_update {
+                let fname = format!("{}{}.pbfc",date_string(ts),suffix);
+                println!("call find_update('{}',{} entries,'{}', {}, {}, {}, {})", prfx,filelist.len(),chgfn,prev_ts, ts,fname,numchan);
+            
+                let (tx, nt) = find_update(&prfx, &filelist, &chgfn, prev_ts, ts,&fname,numchan).expect("failed to write update");
                 tm.add(&fname,tx);
                 
-                filelist.push(FilelistEntry::new(fname, date_string(ts), nt, st));
+                let idxfn=format!("{}{}-index.pbf",prfx,fname);
+                let txx=ThreadTimer::new();
+                write_index_file(&format!("{}{}",prfx,fname),&idxfn,numchan);
+                tm.add(&idxfn,txx.since());
                 
+                filelist.push(FilelistEntry::new(fname, timestamp_string(ts), nt, state));
+                prev_ts=ts;
             }
-            
-            write_filelist(&prfx, &filelist);
+            if op == "update" {
+                write_filelist(&prfx, &filelist);
+            }
         }
-        
+        println!("{}",tm);
             
         
         //println!("{:?}\n{:?}\n{:?}", settings, filelist, to_update);
