@@ -15,6 +15,7 @@ use super::read_pbf;
 use super::write_pbf;
 use super::callback::CallFinish;
 use super::utils::{Checktime};
+use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn read_file_data<R: Read>(file: &mut R, nbytes: u64) -> io::Result<Vec<u8>> {
     
@@ -207,7 +208,31 @@ pub fn read_all_blocks<T,U>(fname: &str, mut pp: Box<T>) -> (U, f64)
         pp.call((i,fb));
     }
     (pp.finish().expect("finish failed"), ct.gettime())
-}        
+}      
+
+pub fn read_all_blocks_prog<T,U>(fname: &str, mut pp: Box<T>, prog: &ProgBarWrap) -> (U, f64)
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+            U: Send+Sync+'static
+{
+    let ct=Checktime::new();
+    
+    let pf = 100.0 / (std::fs::metadata(fname).expect(&format!("failed to open {}", fname)).len() as f64);
+    let f = File::open(fname).expect("fail");
+    let mut fbuf = BufReader::new(f);
+    for (i,fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {
+        /*match ct.checktime() {
+            Some(d) => {
+                print!("\r{:8.3}s: {:6.1}% {:9.1}mb block {:10}", d, (fb.pos as f64)*pf, (fb.pos as f64)/1024.0/1024.0, i);
+                io::stdout().flush().expect("");
+            },
+            None => {}
+        }*/
+        prog.prog((fb.pos as f64)*pf);
+        pp.call((i,fb));
+        
+    }
+    (pp.finish().expect("finish failed"), ct.gettime())
+}    
 
 pub fn read_all_blocks_locs<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, print_msgs: bool, mut pp: Box<T>) -> (U, f64)
     where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
@@ -232,7 +257,66 @@ pub fn read_all_blocks_locs<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, pr
     }
     (pp.finish().expect("finish failed"), ct.gettime())
 }
+
+
+pub struct ProgBarWrap {
+    start: u64,
+    end: u64,
+    
+    pb: ProgressBar
+}
+
+impl ProgBarWrap {
+    pub fn new(total: u64) -> ProgBarWrap {
+        let pb = ProgressBar::new(total);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent:4.1%} ({eta_precise}) {msg}")
+            .progress_chars("#>-"));
+            
+        ProgBarWrap{start:0, end: 0, pb: pb}
+    }
+    
+    pub fn set_range(&mut self, x: u64) {
+        self.start=self.end;
+        self.end = self.start+x;
+    }
+    pub fn set_message(&self, msg: &str) {
+        self.pb.set_message(msg);
+    }
+    pub fn prog(&self, val: f64) {
+        let v= ((self.end-self.start) as f64)*val/100.0;
+        self.pb.set_position(v as u64 + self.start);
+    }
+    pub fn finish(&self) {
+        self.pb.finish();
+    }
+    
+}
+    
+
+
+
+pub fn read_all_blocks_locs_prog<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+            U: Send+Sync+'static,
+            R: Read+Seek
+{
+    let ct=Checktime::new();
+    
+    let pf = 100.0 / (locs.len() as f64);
+    
+    
+    for (i,l) in locs.iter().enumerate() {
         
+        fobj.seek(SeekFrom::Start(*l)).expect(&format!("failed to read {} @ {}", fname, *l));
+        let (_,fb) = read_file_block_with_pos(fobj, *l).expect(&format!("failed to read {} @ {}", fname, *l));
+        
+        pb.prog((i as f64) * pf);
+        
+        pp.call((i,fb));
+    }
+    (pp.finish().expect("finish failed"), ct.gettime())
+}
 
 
 pub fn read_all_blocks_parallel<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(usize,u64)>)>,mut pp: Box<T>) -> (U, f64)

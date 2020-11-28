@@ -17,6 +17,7 @@ chrono = "0.4.0"
 cpu-time="1.0.0"
 quick-xml="0.20"
 csv = "1.1"
+indicatif = "0.15"
 [profile.release]
 #debug = true
 

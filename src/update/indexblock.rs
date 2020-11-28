@@ -5,7 +5,7 @@ mod osmquadtree {
 use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet};
 use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
 use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
-use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock};
+use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock,ProgBarWrap,read_all_blocks_prog};
 use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
 use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
 
@@ -145,6 +145,7 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
             read_all_blocks(infn, mt)
         };
     println!("{}: {:4.1}s", outfn, br);
+    
     //println!("{} bytes: {}", br, tm);
     match tm.others.pop().unwrap().1 {
         ResultType::NumTiles(nt) => { return nt; }
@@ -238,13 +239,16 @@ fn unpack_fb(i_fb: (usize,FileBlock)) -> Vec<u8> {
 }
 
 
-pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize) -> Result<(Vec<Quadtree>,f64)> {
+pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Option<&ProgBarWrap>) -> Result<(Vec<Quadtree>,f64)> {
     if numchan == 0 {
         let ci = Box::new(CheckIndexFileWrap::new(idset));
         
         let ca = Box::new(CallAll::new(ci, "unpack", Box::new(unpack_fb)));
         
-        let (mut tm,x) = read_all_blocks(indexfn, ca);
+        let (mut tm,x) = match pb {
+            None => read_all_blocks(indexfn, ca),
+            Some(pb) => read_all_blocks_prog(indexfn, ca, pb),
+        };
         
         //println!("{} {}", tm, x);
         
@@ -270,7 +274,11 @@ pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize) -> Res
             cas.push(Box::new(Callback::new(ca)));
         }
         let ca = Box::new(CallbackMerge::new(cas, Box::new(MergeTimings::new())));
-        let (tm,x) = read_all_blocks(indexfn, ca);
+        //let (tm,x) = read_all_blocks(indexfn, ca);
+        let (tm,x) = match pb {
+            None => read_all_blocks(indexfn, ca),
+            Some(pb) => read_all_blocks_prog(indexfn, ca, pb),
+        };
         
         //println!("{} {}", tm, x);
         let mut qq=Vec::new();
