@@ -327,7 +327,7 @@ fn collect_existing(
     let mut total_scan=0.0;
     let mut total_read=0.0;
     
-    let mut pb = read_file_block::ProgBarWrap::new(147+348 + (filelist.len() as u64-1)*2);
+    let mut pb = read_file_block::ProgBarWrap::new(147+388 + (filelist.len() as u64-1)*2);
     
     
     
