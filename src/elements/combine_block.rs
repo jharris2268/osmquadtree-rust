@@ -65,41 +65,6 @@ impl WithIdAndChangetype for MinimalRelation {
         &mut self.changetype
     }
 }
-/*
-fn combine_alt<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
-    let mut res = Vec::new();
-    
-    left.reverse();
-    right.reverse();
-    
-    
-    while !left.is_empty() && !right.is_empty() {
-        if left.is_empty() {
-            res.push(right.pop().unwrap());
-            
-        } else if right.is_empty() {
-            res.push(left.pop().unwrap());
-        } else {
-            match right.last().unwrap().get_id().cmp(&left.last().unwrap().get_id()) {
-                Ordering::Less => {
-                    res.push(left.pop().unwrap());
-                    
-                },
-                Ordering::Equal => {
-                    left.pop();
-                    
-                    res.push(right.pop().unwrap());
-                },
-                Ordering::Greater => {
-                    res.push(right.pop().unwrap());
-                },
-            }
-        }
-    }
-    res.reverse();
-    res
-}
-*/
 
 fn combine<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Vec<T> {
     let mut res = Vec::new();
@@ -153,56 +118,7 @@ fn check_changetype<T: WithIdAndChangetype>(o: &mut T) -> bool {
     *o.get_changetype() = Changetype::Normal;
     true
 }
-/*
-fn apply_change_alt<T: WithIdAndChangetype + Ord>(mut left: Vec<T>, mut right: Vec<T>) -> Vec<T> {
-    let mut res = Vec::new();
-    
-    left.reverse();
-    right.reverse();
-    
-    
-    while !left.is_empty() && !right.is_empty() {
-        if left.is_empty() {
-            let mut r = right.pop().unwrap();
-            if check_changetype(&mut r) {
-                res.push(r);
-            }
-            
-        } else if right.is_empty() {
-            let mut l = right.pop().unwrap();
-            if check_changetype(&mut l) {
-                res.push(l);
-            }
-        } else {
-            match right.last().unwrap().get_id().cmp(&left.last().unwrap().get_id()) {
-                Ordering::Less => {
-                    let mut l = right.pop().unwrap();
-                    if check_changetype(&mut l) {
-                        res.push(l);
-                    }
-                    
-                },
-                Ordering::Equal => {
-                    left.pop();
-                    
-                    let mut r = right.pop().unwrap();
-                    if check_changetype(&mut r) {
-                        res.push(r);
-                    }
-                },
-                Ordering::Greater => {
-                    let mut r = right.pop().unwrap();
-                    if check_changetype(&mut r) {
-                        res.push(r);
-                    }
-                },
-            }
-        }
-    }
-    res.reverse();
-    res
-}
-*/
+
 fn check_changetype_add<T: WithIdAndChangetype>(res: &mut Vec<T>, obj: &mut Option<T>) {
     let mut r = obj.take().unwrap();
     if check_changetype(&mut r) {

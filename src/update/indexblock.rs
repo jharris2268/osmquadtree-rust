@@ -5,7 +5,7 @@ mod osmquadtree {
 use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet};
 use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
 use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
-use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock,ProgBarWrap,read_all_blocks_prog};
+use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock,ProgBarWrap,read_all_blocks_prog,file_length};
 use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
 use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
 
@@ -19,7 +19,7 @@ pub enum ResultType {
 type Timings = osmquadtree::utils::Timings<ResultType>;
 
 use std::fs::File;
-use std::io::{Result,Write,/*Error,ErrorKind*/};
+use std::io::{Result,Write,BufReader/*Error,ErrorKind*/};
 use std::sync::Arc;
 
 fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
@@ -240,6 +240,11 @@ fn unpack_fb(i_fb: (usize,FileBlock)) -> Vec<u8> {
 
 
 pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Option<&ProgBarWrap>) -> Result<(Vec<Quadtree>,f64)> {
+    
+    let flen = file_length(indexfn);
+    let f = File::open(indexfn).expect("fail");
+    let mut fbuf = BufReader::new(f);
+    
     if numchan == 0 {
         let ci = Box::new(CheckIndexFileWrap::new(idset));
         
@@ -247,7 +252,7 @@ pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Op
         
         let (mut tm,x) = match pb {
             None => read_all_blocks(indexfn, ca),
-            Some(pb) => read_all_blocks_prog(indexfn, ca, pb),
+            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb),
         };
         
         //println!("{} {}", tm, x);
@@ -277,7 +282,7 @@ pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Op
         //let (tm,x) = read_all_blocks(indexfn, ca);
         let (tm,x) = match pb {
             None => read_all_blocks(indexfn, ca),
-            Some(pb) => read_all_blocks_prog(indexfn, ca, pb),
+            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb),
         };
         
         //println!("{} {}", tm, x);

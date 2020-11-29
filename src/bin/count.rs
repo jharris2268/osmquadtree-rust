@@ -4,46 +4,25 @@ extern crate cpuprofiler;
 use std::fs::File;
 
 use std::env;
-use osmquadtree::read_file_block;
-use osmquadtree::read_pbf;
-use osmquadtree::header_block;
-//use osmquadtree::quadtree;
-use osmquadtree::elements::primitive_block;
-use osmquadtree::elements::node;
-use osmquadtree::elements::way;
-use osmquadtree::elements::relation;
-use osmquadtree::elements::common::get_changetype;
-use osmquadtree::elements::minimal_block;
-use osmquadtree::elements::{Changetype,PrimitiveBlock,MinimalBlock};
+
+use osmquadtree::read_file_block::{FileBlock,read_all_blocks_prog,read_all_blocks_parallel_prog,ProgBarWrap,file_length};
+use osmquadtree::read_pbf::{read_delta_packed_int};
+
+use osmquadtree::elements::{Changetype,PrimitiveBlock,MinimalBlock,Bbox,Node,Way,Relation,get_changetype,MinimalNode,MinimalWay,MinimalRelation};
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::update::{read_xml_change,ChangeBlock,read_filelist};
+use osmquadtree::update::{read_xml_change,ChangeBlock,get_file_locs};
 use osmquadtree::utils::timestamp_string;
 
 use osmquadtree::callback::{Callback,CallbackMerge,CallFinish};
-use osmquadtree::utils::{ThreadTimer,MergeTimings};
+use osmquadtree::utils::{ThreadTimer,MergeTimings,CallAll};
 
-//use osmquadtree::dense;
-//use osmquadtree::common;
-//use osmquadtree::info;
-//use osmquadtree::tags;
-use std::io::Write;
 
-use std::thread;
-use std::sync::mpsc;
-
+use std::io::{Error,ErrorKind,Result};
 use std::io::BufReader;
 use std::fmt;
 use std::collections::BTreeMap;
 
 use cpuprofiler::PROFILER;
-
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
 
 
     
@@ -66,7 +45,7 @@ impl NodeCount {
     fn new() -> NodeCount {
         NodeCount{num:0, min_id:-1,max_id:-1, min_ts:-1, max_ts:-1, min_lon:1800000000,min_lat:900000000,max_lon:-1800000000,max_lat:-900000000}
     }
-    fn add(&mut self, nd: &node::Node) {
+    fn add(&mut self, nd: &Node) {
         self.num += 1;
         if self.min_id==-1 || nd.id < self.min_id { self.min_id = nd.id; }
         if self.max_id==-1 || nd.id > self.max_id { self.max_id = nd.id; }
@@ -85,7 +64,7 @@ impl NodeCount {
         if nd.lat > self.max_lat { self.max_lat = nd.lat; }
     }
     
-    fn add_minimal(&mut self, nd: &minimal_block::MinimalNode) {
+    fn add_minimal(&mut self, nd: &MinimalNode) {
         self.num += 1;
         if self.min_id==-1 || nd.id < self.min_id { self.min_id = nd.id; }
         if self.max_id==-1 || nd.id > self.max_id { self.max_id = nd.id; }
@@ -119,7 +98,7 @@ impl NodeCount {
 
 impl fmt::Display for NodeCount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "nodes: {} objects: {} => {} [{} => {}] {{{}, {}, {}, {}}}",
+        write!(f, "{:10} objects: {:12} => {:12} [{:19} => {:19}] {{{:-10}, {:-10}, {:-10}, {:-10}}}",
             self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
             self.min_lon, self.min_lat, self.max_lon, self.max_lat)
         
@@ -145,7 +124,7 @@ impl WayCount {
     fn new() -> WayCount {
         WayCount{num:0, min_id:-1,max_id:-1, min_ts:-1, max_ts:-1, num_refs:0, max_refs_len:-1,min_ref:-1,max_ref:-1}
     }
-    fn add(&mut self, wy: &way::Way) {
+    fn add(&mut self, wy: &Way) {
         self.num += 1;
         if self.min_id==-1 || wy.id < self.min_id { self.min_id = wy.id; }
         if self.max_id==-1 || wy.id > self.max_id { self.max_id = wy.id; }
@@ -167,7 +146,7 @@ impl WayCount {
         }
     }
     
-    fn add_minimal(&mut self, wy: &minimal_block::MinimalWay) {
+    fn add_minimal(&mut self, wy: &MinimalWay) {
         self.num += 1;
         if self.min_id==-1 || wy.id < self.min_id { self.min_id = wy.id; }
         if self.max_id==-1 || wy.id > self.max_id { self.max_id = wy.id; }
@@ -176,7 +155,7 @@ impl WayCount {
         if self.max_ts==-1 || wy.timestamp > self.max_ts { self.max_ts = wy.timestamp; }
         
         
-        let refs = read_pbf::read_delta_packed_int(&wy.refs_data);
+        let refs = read_delta_packed_int(&wy.refs_data);
         
         self.num_refs += refs.len() as i64;
         if self.max_refs_len==-1 || refs.len() as i64>self.max_refs_len { self.max_refs_len = refs.len() as i64; }
@@ -211,7 +190,7 @@ impl WayCount {
 
 impl fmt::Display for WayCount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ways: {} objects: {} => {} [{} => {}] {{{} refs, {} to {}. Longest: {}}}",
+        write!(f, "{:10} objects: {:12} => {:12} [{:19} => {:19}] {{{} refs, {} to {}. Longest: {}}}",
             self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
             self.num_refs, self.min_ref, self.max_ref, self.max_refs_len)
         
@@ -234,7 +213,7 @@ impl RelationCount {
     fn new() -> RelationCount {
         RelationCount{num:0, min_id:-1,max_id:-1, min_ts:-1, max_ts:-1, num_empties: 0, num_mems: 0, max_mems_len: 0}
     }
-    fn add(&mut self, rl: &relation::Relation) {
+    fn add(&mut self, rl: &Relation) {
         self.num += 1;
         if self.min_id==-1 || rl.id < self.min_id { self.min_id = rl.id; }
         if self.max_id==-1 || rl.id > self.max_id { self.max_id = rl.id; }
@@ -252,7 +231,7 @@ impl RelationCount {
         if self.max_mems_len==-1 || rl.members.len() as i64>self.max_mems_len { self.max_mems_len = rl.members.len() as i64; }
     }
     
-    fn add_minimal(&mut self, rl: &minimal_block::MinimalRelation) {
+    fn add_minimal(&mut self, rl: &MinimalRelation) {
         self.num += 1;
         if self.min_id==-1 || rl.id < self.min_id { self.min_id = rl.id; }
         if self.max_id==-1 || rl.id > self.max_id { self.max_id = rl.id; }
@@ -261,7 +240,7 @@ impl RelationCount {
         if self.max_ts==-1 || rl.timestamp > self.max_ts { self.max_ts = rl.timestamp; }
         
         //if rl.refs_data.len() == 0 { self.num_empties += 1; }
-        let nr = read_pbf::read_delta_packed_int(&rl.refs_data).len() as i64;
+        let nr = read_delta_packed_int(&rl.refs_data).len() as i64;
         self.num_mems += nr;
         if nr == 0 { self.num_empties += 1; }
         if self.max_mems_len==-1 || nr>self.max_mems_len { self.max_mems_len = nr as i64; }
@@ -286,7 +265,7 @@ impl RelationCount {
 
 impl fmt::Display for RelationCount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "relation. {} object. {} => {} [{} => {}] {{Longest: {}, {} empties.}}",
+        write!(f, "{:10} objects: {:12} => {:12} [{:19} => {:19}] {{Longest: {}, {} empties.}}",
             self.num, self.min_id, self.max_id, timestamp_string(self.min_ts), timestamp_string(self.max_ts),
             self.max_mems_len, self.num_empties)
         
@@ -294,15 +273,15 @@ impl fmt::Display for RelationCount {
 }
 
 trait CountBlocks {
-    fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock);
-    fn add_minimal(&mut self, mb: &minimal_block::MinimalBlock);
+    fn add_primitive(&mut self, bl: &PrimitiveBlock);
+    fn add_minimal(&mut self, mb: &MinimalBlock);
 }
 
 #[derive(Debug)]
 struct Count {
-    node: NodeCount,
-    way: WayCount,
-    relation: RelationCount,
+    pub node: NodeCount,
+    pub way: WayCount,
+    pub relation: RelationCount,
 }
 impl Count {
     fn new() -> Count {
@@ -315,7 +294,7 @@ impl Count {
     }
 }
 impl CountBlocks for Count {
-    fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
+    fn add_primitive(&mut self, bl: &PrimitiveBlock) {
         for nd in &bl.nodes {
             self.node.add(&nd);
         }
@@ -327,7 +306,7 @@ impl CountBlocks for Count {
         }
     }
     
-    fn add_minimal(&mut self, mb: &minimal_block::MinimalBlock) {
+    fn add_minimal(&mut self, mb: &MinimalBlock) {
         for nd in &mb.nodes {
             self.node.add_minimal(&nd);
         }
@@ -343,16 +322,16 @@ impl CountBlocks for Count {
     
 impl fmt::Display for Count {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}\n{}\n{}", self.node, self.way, self.relation)
+        write!(f, "node:      {}\nway:       {}\nrelations: {}", self.node, self.way, self.relation)
     }
 }
     
     
 #[derive(Debug)]
 struct CountChange {
-    node: BTreeMap<Changetype,NodeCount>,
-    way: BTreeMap<Changetype,WayCount>,
-    relation: BTreeMap<Changetype,RelationCount>,
+    pub node: BTreeMap<Changetype,NodeCount>,
+    pub way: BTreeMap<Changetype,WayCount>,
+    pub relation: BTreeMap<Changetype,RelationCount>,
 }
 impl CountChange {
     fn new() -> CountChange {
@@ -382,7 +361,7 @@ impl CountChange {
     }
 }
 impl CountBlocks for CountChange {
-    fn add_primitive(&mut self, bl: &primitive_block::PrimitiveBlock) {
+    fn add_primitive(&mut self, bl: &PrimitiveBlock) {
         for nd in &bl.nodes {
             if !self.node.contains_key(&nd.changetype) {
                 self.node.insert(nd.changetype, NodeCount::new());
@@ -405,7 +384,7 @@ impl CountBlocks for CountChange {
         }
     }
     
-    fn add_minimal(&mut self, bl: &minimal_block::MinimalBlock) {
+    fn add_minimal(&mut self, bl: &MinimalBlock) {
         for nd in &bl.nodes {
             let ct=get_changetype(nd.changetype as u64);
             
@@ -435,107 +414,59 @@ impl CountBlocks for CountChange {
 
 impl fmt::Display for CountChange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut p=Vec::new();
+        
+        write!(f, "nodes:")?;
         for (a,b) in &self.node {
-            p.push(format!("{} {}", a, b));
+            write!(f, "\n  {:10} {}", a.to_string(), b)?;
         }
+        write!(f, "\nways:")?;
         for (a,b) in &self.way {
-            p.push(format!("{} {}", a, b));
+            write!(f, "\n  {:10} {}", a.to_string(), b)?;
         }
+        write!(f, "\nrelations:")?;
         for (a,b) in &self.relation {
-            p.push(format!("{} {}", a, b));
+            write!(f, "\n  {:10} {}", a.to_string(), b)?;
         }
-        
-        write!(f, "{}",  p.join("\n"))
-        
-    }
-}
-fn as_secs(dur: std::time::Duration) -> f64 {
-    (dur.as_secs() as f64)*1.0 + (dur.subsec_nanos() as f64)*0.000000001
-}
-
-
-
-fn add_fb<CT: CountBlocks>(cc: &mut CT, idx: i64, fb: &osmquadtree::read_file_block::FileBlock, fname: &str, minimal: bool, ishchange: bool, firstthread: bool, lt: &mut std::time::SystemTime, st: &std::time::SystemTime) {
-    let fbd = fb.data();
-                
-    if fb.block_type == "OSMHeader" {
-        let hh = header_block::HeaderBlock::read(fb.pos+fb.len, &fbd, fname).unwrap();
-        println!("header_block(bbox: {:?}, writer: {}, features: {:?}, {} index entries)", hh.bbox, hh.writer, hh.features, hh.index.len());
-    } else {
-        //cc.node.num += fbd.len() as i64;
-        
-        if minimal {
-            match minimal_block::MinimalBlock::read(idx, fb.pos+fb.len, &fbd, ishchange) {
-                Ok(mb) => {
-                    if firstthread {
-                        let lm=as_secs(lt.elapsed().unwrap());
-                        if lm>5.0 {
-                            println!("time {} minimal_block(index: {}, pos: {}, quadtree: {:?}, start_date: {}, end_date: {}): {} nodes {} ways {} relations",
-                                as_secs(st.elapsed().unwrap()), mb.index, mb.location, mb.quadtree, mb.start_date, mb.end_date, mb.nodes.len(), mb.ways.len(), mb.relations.len());
-                            *lt = std::time::SystemTime::now();
-                        }
-                    }
-                    
-                    cc.add_minimal(&mb);                        
-                    //drop(mb);
-                },
-                Err(err) => println_stderr!("?? {:?}", err),
-            }  
-        } else {
-        
-        
-            match primitive_block::PrimitiveBlock::read(idx, fb.pos+fb.len, &fbd, ishchange, minimal) {
-                Ok(pb) => {
-                    if firstthread {
-                        let lm=as_secs(lt.elapsed().unwrap());
-                        if lm>5.0 {
-                            println!("time {} primitive_block(index: {}, pos: {}, quadtree: {:?}, start_date: {}, end_date: {}): {} features",
-                                as_secs(st.elapsed().unwrap()), pb.index, pb.location, pb.quadtree, pb.start_date, pb.end_date, pb.len());
-                            *lt = std::time::SystemTime::now();
-                        }
-                    }
-                    
-                    cc.add_primitive(&pb);                         
-                    
-                },
-                Err(err) => println_stderr!("?? {:?}", err),
-            }  
-        }
-    }
-}
-    
-    
-    
-
-fn count_all<I, CT: CountBlocks>(mut cc: CT, recv: I, idx: i64, fname: &str, minimal: bool, ischange: bool) -> CT
-where I: Iterator<Item=osmquadtree::read_file_block::FileBlock>,
-{
-    let firstthread=idx==0;
-    let mut idx=idx;
-    //let mut cc = Count::new();
-    
-    let st = std::time::SystemTime::now();
-    let mut lt = std::time::SystemTime::now();
-
-    for fb in recv {
-        add_fb(&mut cc, idx, &fb, fname, minimal, ischange, firstthread, &mut lt, &st);
-        idx+=4;
+        write!(f,"")
         
     }
-    return cc;
-    
 }
 
-/*trait StringUtils {
-    fn substr(&self, start: usize, len: usize) -> Self;
+struct CountChangeMinimal {
+    cc: Option<CountChange>,
+    tm: f64
 }
 
-impl StringUtils for String {
-    fn substr(&self, start: usize, len: usize) -> Self {
-        self.chars().skip(start).take(len).collect()
+impl CountChangeMinimal {
+    pub fn new() -> CountChangeMinimal {
+        CountChangeMinimal{cc: Some(CountChange::new()), tm: 0.0}
     }
-}*/
+}
+
+
+
+impl CallFinish for CountChangeMinimal {
+    type CallType = MinimalBlock;
+    type ReturnType = osmquadtree::utils::Timings::<CountChange>;
+    
+    fn call(&mut self, bl: MinimalBlock) {
+        
+        let tx=ThreadTimer::new();
+        self.cc.as_mut().unwrap().add_minimal(&bl);
+        self.tm += tx.since();
+        
+    }
+    
+    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+        let mut tm = osmquadtree::utils::Timings::<CountChange>::new();
+        tm.add("countchange", self.tm);
+        tm.add_other("countchange", self.cc.take().unwrap());
+        Ok(tm)
+    }
+}
+  
+
+
 
 struct CountPrim {
     cc: Option<Count>,
@@ -602,6 +533,46 @@ impl CallFinish for CountMinimal {
         Ok(tm)
     }
 }
+
+fn make_convert_minimal_block<T: CallFinish<CallType=MinimalBlock,ReturnType=osmquadtree::utils::Timings<U>>,U: Sync+Send+'static>(ischange: bool, out: Box<T>) -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=osmquadtree::utils::Timings<U>>> {
+    let convert_minimal = move |(i,fb): (usize, FileBlock)| -> MinimalBlock {
+        if fb.block_type == "OSMData" {
+            MinimalBlock::read(i as i64, fb.pos, &fb.data(),ischange).expect("?")
+        } else {
+            MinimalBlock::new()
+        }
+    };
+    
+    Box::new(CallAll::new(out, "convert minimal", Box::new(convert_minimal)))
+    
+}
+
+fn make_convert_primitive_block<T: CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>>(ischange: bool, out: Box<T>) -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>> {
+    let convert_minimal = move |(i,fb): (usize, FileBlock)| -> PrimitiveBlock {
+        if fb.block_type == "OSMData" {
+            PrimitiveBlock::read(i as i64, fb.pos, &fb.data(),ischange,false).expect("?")
+        } else {
+            PrimitiveBlock::new(0,0)
+        }
+    };
+    
+    Box::new(CallAll::new(out, "convert primitive", Box::new(convert_minimal)))
+    
+}
+
+fn parse_bbox(fstr: &str) -> Result<Bbox> {
+    
+    let vv:Vec<&str> = fstr.split(",").collect();
+    if vv.len()!=4 {
+        return Err(Error::new(ErrorKind::Other,"expected four vals"));
+    }
+    let mut vvi = Vec::new();
+    for v in vv {
+        vvi.push(v.parse().unwrap());
+    }
+    Ok(Bbox::new(vvi[0],vvi[1],vvi[2],vvi[3]))
+}
+    
     
 
 
@@ -619,7 +590,7 @@ fn main() {
     let mut prof = String::from("");
     let mut minimal = false;
     let mut numchan = 4;
-    
+    let mut filter: Option<Bbox> = None;
     
     if args.len()>2 {
         for i in 2..args.len() {
@@ -629,6 +600,8 @@ fn main() {
                 minimal=true;
             } else if args[i].starts_with("numchan=") {
                 numchan = args[i].substr(8,args[i].len()).parse().unwrap();
+            } else if args[i].starts_with("filter=") {
+                filter = Some(parse_bbox(&args[i].substr(7,args[i].len())).expect("failed to read filter"));
             }
         }
     }
@@ -640,7 +613,8 @@ fn main() {
     let f = File::open(&fname).expect("file not present");
     
    
-    
+    let mut pb = ProgBarWrap::new(100);
+    pb.set_range(100);
     
     if fname.ends_with(".osc") {
         let mut cn = CountChange::new();
@@ -659,130 +633,101 @@ fn main() {
         cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".pbfc") {
-        let mut cn = CountChange::new();
-        let mut fbuf=f;
-        cn = count_all(cn, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, true);
-        println!("{}", cn);
-    } else if std::fs::metadata(&fname).expect("failed to open file").is_file() {
+        pb.set_message(&format!("count change blocks minimal {}, numchan=1", &fname));
+        let flen = file_length(&fname);
+        let mut fbuf = BufReader::new(f);
+        let cc = Box::new(CountChangeMinimal::new());
+        let cn = Box::new(Callback::new(make_convert_minimal_block(true,cc)));
+        let (mut a,_) = read_all_blocks_prog(&mut fbuf, flen, cn, &pb);
+        pb.finish();
+        let cn = std::mem::take(&mut a.others).pop().unwrap().1;
         
+        println!("{}", cn);
+        //println!("{:?}", cn.relation.get(&Changetype::Create));
+        
+    } else if std::fs::metadata(&fname).expect("failed to open file").is_file() {
+        let flen = file_length(&fname);
         let mut cc = Count::new();
         if numchan == 0 {
-            let mut fbuf=f;
-            cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, false);
+            let mut fbuf=BufReader::new(f);
+            
+            let (a,_) = if minimal {
+                pb.set_message(&format!("count blocks minimal {}, numchan=0", &fname));
+                let cm = Box::new(CountMinimal::new());
+                let cc = make_convert_minimal_block(false,cm);
+                read_all_blocks_prog(&mut fbuf, flen, cc, &pb)
+            } else {
+                pb.set_message(&format!("count blocks primitive {}, numchan=0", &fname));
+                let cm = Box::new(CountPrim::new());
+                let cc = make_convert_primitive_block(false,cm);
+                read_all_blocks_prog(&mut fbuf, flen, cc, &pb)
+            };
+            pb.finish();
+            cc.add_other(&a.others[0].1);
+            
+            //cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, false);
         
         } else if numchan > 8 {
             panic!("numchan must be between 0 & 8");
         } else {
-        
-            let mut senders = Vec::new();
-            let mut results = Vec::new();
-            
-            for i in 0..numchan {
-                let (s,r) = mpsc::sync_channel(1);
-                senders.push(s);
-                let fnc=fname.clone();
-                results.push(thread::spawn(move || count_all(Count::new(), r.iter(), i as i64, &fnc, minimal,false)));
-            }
             
             let mut fbuf=f;
-            for (i,fb) in read_file_block::ReadFileBlocks::new(&mut fbuf).enumerate() {
-                senders[i%numchan].send(fb).unwrap();
-            }        
-            for s in senders {
-                drop(s);
-            }
             
             
-            for r in results {
-                match r.join() {
-                    Ok(cci) => cc.add_other(&cci),
-                    Err(e) => println!("?? {:?}", e),
+            
+            
+            let mut ccs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>> = Vec::new();
+            for _ in  0..numchan {
+                if minimal {
+                    pb.set_message(&format!("count blocks minimal {}, numchan={}", &fname,numchan));
+                    let cm = Box::new(CountMinimal::new());
+                    ccs.push(Box::new(Callback::new(make_convert_minimal_block(false,cm))));
+                } else {
+                    pb.set_message(&format!("count blocks primitive {}, numchan={}", &fname,numchan));
+                    let cm = Box::new(CountPrim::new());
+                    ccs.push(Box::new(Callback::new(make_convert_primitive_block(false,cm))));
                 }
             }
-            
+            let cm = Box::new(CallbackMerge::new(ccs, Box::new(MergeTimings::new())));
+            let (a,_)  = read_all_blocks_prog(&mut fbuf, flen, cm, &pb);
+            pb.finish();
+            for (_,x) in a.others {
+                cc.add_other(&x);
+            }
+        
         }
         println!("{}", cc);
     } else {
         
-        //let filter = Some(bbox=osmquadtree::elements::Bbox::new(-1800000000,-900000000,1800000000,900000000));
-        let filter: Option<osmquadtree::elements::Bbox> = None;
         
-        let filelist = read_filelist(&fname);
-        
-        //let pf = 100.0 / (std::fs::metadata(&format!("{}{}", fname, filelist[0].filename)).expect("fail").len() as f64);
-    
-        let mut fbufs = Vec::new();
-        let mut locs = BTreeMap::new();
-        
-        let cap = match filter {
-            Some(_) => 8*1024,
-            None => 5*1024*1024
-        };
-        
-        for (i,fle) in filelist.iter().enumerate() {
-            let fle_fn = format!("{}{}", fname, fle.filename);
-            let f = File::open(&fle_fn).expect("fail");
-            let mut fbuf = BufReader::with_capacity(cap, f);
-            
-            let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
-            let filepos = read_file_block::file_position(&mut fbuf).expect("?");
-            let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
-            
-            
-            
-            for entry in head.index {
-                if !locs.contains_key(&entry.quadtree) {
-                    if i != 0 {
-                        panic!(format!("quadtree {} not in first file?", entry.quadtree.as_string()));
-                    }
-                    locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
-                }
-                
-                locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
-            }
-            
-            fbufs.push(fbuf);
-        }
-        
-        //let bbox=osmquadtree::elements::Bbox::new(-5000000,495000000,13000000,535000000);
+        let (fbufs, locsv) = get_file_locs(&fname, filter).expect("?");
         
         
-        let mut locsv = Vec::new();
-        for (a,(_b,c)) in &locs {
-            match filter {
-                None => {locsv.push((locsv.len(),c.clone())); },
-                Some(ref bbox) => { 
-                    if bbox.overlaps(&a.as_bbox(0.05)) {
-                        locsv.push((locsv.len(),c.clone()));
-                    }
-                }
-            }
-        }
-            
-        println!("{} files, {} / {} tiles", fbufs.len(), locsv.len(), locs.len());
         
-        let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<read_file_block::FileBlock>),ReturnType=Timings>>> = Vec::new();
+        
+        
+        let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>>> = Vec::new();
         
         if minimal { 
             for _ in 0..numchan {
+                pb.set_message(&format!("count blocks combine minimal {}, numchan={}", &fname,numchan));
                 let cca = Box::new(CountMinimal::new());
                 pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_minimal_blocks_combine_call_all(cca))));
             }
         
         } else {
             for _ in 0..numchan {
+                pb.set_message(&format!("count blocks combine primitive {}, numchan={}", &fname,numchan));
                 let cca = Box::new(CountPrim::new());
                 pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_primitive_blocks_combine_call_all(cca))));
             }
         }
         let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        let (a,b) = read_file_block::read_all_blocks_parallel(fbufs, locsv, readb);
-        
-        println!("{} {}", a, b);
+        let (a,_b) = read_all_blocks_parallel_prog(fbufs, locsv, readb, &pb);
+        pb.finish();
         
         let mut cc = Count::new();
-        for (x,y) in &a.others {
-            println!("{}\n{}\n", x, y);
+        for (_,y) in &a.others {
             cc.add_other(y);
         }
         

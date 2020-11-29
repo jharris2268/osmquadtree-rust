@@ -156,7 +156,13 @@ impl<R> ReadFileBlocks<'_, R>
         ReadFileBlocks{file, p}
     }
 }
-
+impl<R> ReadFileBlocks<'_, R>
+    where R: Read
+{
+    pub fn new_at_start(file: &mut R) -> ReadFileBlocks<R> {
+        ReadFileBlocks{file:file, p:0}
+    }
+}
 
 
 impl<R> Iterator for ReadFileBlocks<'_, R>
@@ -210,27 +216,26 @@ pub fn read_all_blocks<T,U>(fname: &str, mut pp: Box<T>) -> (U, f64)
     (pp.finish().expect("finish failed"), ct.gettime())
 }      
 
-pub fn read_all_blocks_prog<T,U>(fname: &str, mut pp: Box<T>, prog: &ProgBarWrap) -> (U, f64)
+pub fn file_length(fname: &str) -> u64 {
+    std::fs::metadata(fname).expect(&format!("failed to open {}", fname)).len()
+}
+
+pub fn read_all_blocks_prog<R:Read,T,U>(fobj: &mut R, flen: u64, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
     where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
             U: Send+Sync+'static
 {
     let ct=Checktime::new();
     
-    let pf = 100.0 / (std::fs::metadata(fname).expect(&format!("failed to open {}", fname)).len() as f64);
-    let f = File::open(fname).expect("fail");
-    let mut fbuf = BufReader::new(f);
-    for (i,fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {
-        /*match ct.checktime() {
-            Some(d) => {
-                print!("\r{:8.3}s: {:6.1}% {:9.1}mb block {:10}", d, (fb.pos as f64)*pf, (fb.pos as f64)/1024.0/1024.0, i);
-                io::stdout().flush().expect("");
-            },
-            None => {}
-        }*/
-        prog.prog((fb.pos as f64)*pf);
+    let pf = 100.0 / (flen as f64);
+    
+    for (i,fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
+        if (i%131) == 0 {
+            pb.prog((fb.pos as f64) * pf);
+        }
         pp.call((i,fb));
         
     }
+    pb.prog(100.0);
     (pp.finish().expect("finish failed"), ct.gettime())
 }    
 
@@ -270,7 +275,7 @@ impl ProgBarWrap {
     pub fn new(total: u64) -> ProgBarWrap {
         let pb = ProgressBar::new(total);
         pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent:4.1%} ({eta_precise}) {msg}")
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:-4}% ({eta_precise}) {msg}")
             .progress_chars("#>-"));
             
         ProgBarWrap{start:0, end: 0, pb: pb}
@@ -311,10 +316,13 @@ pub fn read_all_blocks_locs_prog<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64
         fobj.seek(SeekFrom::Start(*l)).expect(&format!("failed to read {} @ {}", fname, *l));
         let (_,fb) = read_file_block_with_pos(fobj, *l).expect(&format!("failed to read {} @ {}", fname, *l));
         
-        pb.prog((i as f64) * pf);
+        if (i%131) == 0 {
+            pb.prog(((i+1) as f64) * pf);
+        }
         
         pp.call((i,fb));
     }
+    pb.prog(100.0);
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
@@ -355,3 +363,38 @@ pub fn read_all_blocks_parallel<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(
     }
     (pp.finish().expect("finish failed"), ct.gettime())
 }      
+
+
+pub fn read_all_blocks_parallel_prog<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(usize,u64)>)>,mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
+    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U>,
+            U: Send+Sync+'static,
+            F: Seek+Read
+{
+    let ct=Checktime::new();
+    
+    let mut fposes = Vec::new();
+    for f in fbufs.iter_mut() {
+        fposes.push(file_position(f).expect("!"));
+    }
+    let pf = 100.0 / (locs.len() as f64);
+    for (j,(i,ll)) in locs.iter().enumerate() {
+        let mut fbs = Vec::new();
+        for (a,b) in ll {
+            if fposes[*a]!=*b {
+                fbufs[*a].seek(SeekFrom::Start(*b)).expect(&format!("failed to read {} @ {}", *a,*b));
+            }
+            
+            let (x,y) = read_file_block_with_pos(&mut fbufs[*a],*b).expect(&format!("failed to read {} @ {}", *a,*b));
+            
+            fbs.push(y);
+            fposes[*a]=x;
+        }
+        if (j%131) == 0 {
+            pb.prog(((j+1) as f64)*pf);
+        }
+        
+        pp.call((*i,fbs));
+    }
+    pb.prog(100.0);
+    (pp.finish().expect("finish failed"), ct.gettime())
+}  
