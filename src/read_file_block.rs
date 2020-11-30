@@ -267,7 +267,7 @@ pub fn read_all_blocks_locs<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, pr
 pub struct ProgBarWrap {
     start: u64,
     end: u64,
-    
+    asb: bool,
     pb: ProgressBar
 }
 
@@ -278,7 +278,16 @@ impl ProgBarWrap {
             .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:-4}% ({eta_precise}) {msg}")
             .progress_chars("#>-"));
             
-        ProgBarWrap{start:0, end: 0, pb: pb}
+        ProgBarWrap{start:0, end: 0, pb: pb, asb: false}
+    }
+    
+    pub fn new_filebytes(filelen: u64) -> ProgBarWrap {
+        let pb = ProgressBar::new(filelen);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {bytes} / {total_bytes} ({eta_precise}) {msg}")
+            .progress_chars("#>-"));
+            
+        ProgBarWrap{start:0, end: 0, pb: pb, asb: true}
     }
     
     pub fn set_range(&mut self, x: u64) {
@@ -289,8 +298,13 @@ impl ProgBarWrap {
         self.pb.set_message(msg);
     }
     pub fn prog(&self, val: f64) {
-        let v= ((self.end-self.start) as f64)*val/100.0;
-        self.pb.set_position(v as u64 + self.start);
+        if self.asb {
+            self.pb.set_position(val as u64);
+        } else {
+            
+            let v= ((self.end-self.start) as f64)*val/100.0;
+            self.pb.set_position(v as u64 + self.start);
+        }
     }
     pub fn finish(&self) {
         self.pb.finish();

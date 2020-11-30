@@ -12,7 +12,7 @@ use osmquadtree::header_block;
 use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,Way,Relation,ElementType,Bbox};
 use osmquadtree::read_file_block;
 use osmquadtree::sortblocks::{QuadtreeTree,WriteFileInternalLocs};
-
+use osmquadtree::stringutils::StringUtils;
 
 use std::fs::File;
 use std::collections::{BTreeSet,BTreeMap};
@@ -323,20 +323,6 @@ fn find_tile(tree: &QuadtreeTree, q: Option<Quadtree>) -> Option<Quadtree> {
     }
 }
 
-fn find_node<'a>(changeblock: &'a ChangeBlock, id: &i64) -> std::io::Result<&'a Node> {
-    match changeblock.nodes.get(id) {
-        Some(n) => { 
-            if n.changetype == Changetype::Delete {
-                Err(Error::new(ErrorKind::Other,format!("node {} deleted", id)))
-            } else {
-                Ok(n)
-            }
-        },
-        None => Err(Error::new(ErrorKind::Other,format!("node {} missing", id))),
-    }
-    
-}
-
 
 struct AllocBlocks {
     st: i64,
@@ -389,18 +375,36 @@ impl AllocBlocks {
         }
     }
 }
-
+const MISSING_NODES_LIMIT:usize = 0;
 fn calc_qts(changeblock: &ChangeBlock, orig_data: &mut OrigData, tree: &QuadtreeTree, maxlevel: usize, buffer: f64, st: i64, et: i64) -> std::io::Result<BTreeMap<Quadtree, PrimitiveBlock>> {
     
     let mut nq = BTreeSet::new();
     let mut rel_rels = Vec::new();
-    
+    let mut missing_nodes=0;
     for (_,w) in changeblock.ways.iter() {
         if w.changetype != Changetype::Delete {
             let mut bbox = Bbox::empty();
             for r in w.refs.iter() {
-                let n = find_node(changeblock, r)?;
-                bbox.expand(n.lon, n.lat);
+                match changeblock.nodes.get(&r) {
+                    Some(n) => {
+                        if n.changetype == Changetype::Delete {
+                            println!("[{}] missing node deleted {:?} from {}", missing_nodes, n, format!("{:?}",w).substr(0,100));
+                            missing_nodes+=1;
+                            if missing_nodes > MISSING_NODES_LIMIT {
+                                return Err(Error::new(ErrorKind::Other,"too many missing nodes"));
+                            }
+                        } else {
+                            bbox.expand(n.lon, n.lat);
+                        }
+                    },  
+                    None => {
+                        println!("[{}] missing node {} from {:?}", missing_nodes, r, w);
+                        missing_nodes+=1;
+                        if missing_nodes > MISSING_NODES_LIMIT {
+                            return Err(Error::new(ErrorKind::Other,"too many missing nodes"));
+                        }
+                    }
+                }
             }
             
             let q = Quadtree::calculate(&bbox, maxlevel, buffer);

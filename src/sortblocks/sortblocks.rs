@@ -10,8 +10,8 @@ mod osmquadtree {
 use osmquadtree::callback::{Callback,CallbackSync,CallbackMerge,CallFinish};
 use osmquadtree::elements::{Quadtree,PrimitiveBlock,Node,Way,Relation};
 
-use osmquadtree::utils::{Timer,MergeTimings,ReplaceNoneWithTimings,Checktime};
-use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unpack_file_block,pack_file_block};
+use osmquadtree::utils::{Timer,MergeTimings,ReplaceNoneWithTimings};
+use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unpack_file_block,pack_file_block,ProgBarWrap,read_all_blocks_prog,file_length};
 use osmquadtree::sortblocks::{QuadtreeTree,Timings,OtherData};
 use osmquadtree::stringutils::StringUtils;
 pub use osmquadtree::sortblocks::addquadtree::{AddQuadtree,make_unpackprimblock};
@@ -386,13 +386,22 @@ fn write_temp_blocks(infn: &str, qtsfn: &str, tempfn: &str, groups: Box<Quadtree
     
     let wt = Box::new(WriteTemp::new(&tempfn));
     
+    let mut prog = ProgBarWrap::new(100);
+    prog.set_range(100);
+    prog.set_message(&format!("write_temp_blocks {} to {}, numchan={}", infn,tempfn,numchan));
+    let flen = file_length(&infn);
+    let inf = File::open(&infn)?;
+    let mut infb = BufReader::new(inf);
+            
     let (mut res,d) = 
         if numchan == 0 {
             let pc = make_packprimblock(wt,true);
             let cc = Box::new(CollectTemp::new(pc, limit, splitat, groups));
             let aq = Box::new(AddQuadtree::new(qtsfn, cc));
             let pp = make_unpackprimblock(aq);
-            read_all_blocks(infn, pp)
+            
+            
+            read_all_blocks_prog(&mut infb, flen, pp, &prog)
         } else {
             let wts = CallbackSync::new(wt, numchan);
             let mut pcs: Vec<Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>>> = Vec::new();
@@ -411,7 +420,7 @@ fn write_temp_blocks(infn: &str, qtsfn: &str, tempfn: &str, groups: Box<Quadtree
             }
             
             let pp = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-            read_all_blocks(infn, pp)
+            read_all_blocks_prog(&mut infb, flen, pp, &prog)
         };
     println!("write_temp_blocks {} {}", res, d);
     let mut groups: Option<Box<QuadtreeTree>> = None;
@@ -523,43 +532,55 @@ impl<T> CallFinish for CollectBlocksTemp<T>
 }
 
 fn read_temp_data<T: CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=Timings>>(xx: TempData, mut out: Box<T>) -> io::Result<Timings> {
-    let mut ct = Checktime::with_threshold(2.0);
+    //let mut ct = Checktime::with_threshold(2.0);
+    
+    
     match xx {
         TempData::TempBlocks(tb) => {
+            
+            let tbl = tb.iter().map(|(_,x)| { x.iter().map(|y| { y.len()  as u64 }).sum::<u64>() }).sum::<u64>();
+            let prog = ProgBarWrap::new_filebytes(tbl);
+            prog.set_message("read tempblocks from memory");
+            let mut tl=0;
             for (a,t) in tb {
                 
                 let mut mm = Vec::new();
-                let mut tl=0;
+                
                 for x in t {
                     tl+=x.len();
                     mm.push(unpack_file_block(0,&x)?);
                 }
-                match ct.checktime() {
+                /*match ct.checktime() {
                     Some(d) => {
                         print!("\r[{:6.1}s] tile {}, {} // {}", d,a, mm.len(),tl);
                         io::stdout().flush().expect("");
                     },
                     None => {}
                 }
-                //println!("{:6.1}s] tile {}, {} // {}", ct.gettime(),a, mm.len(),tl);
+                //println!("{:6.1}s] tile {}, {} // {}", ct.gettime(),a, mm.len(),tl);*/
+                prog.prog(tl as f64);
+                
                 out.call((a,mm));
             }
+            prog.finish();
             return out.finish();
         },
         TempData::TempFile((fname, locs)) => {
-            
+            let tbl = file_length(&fname);            
+            let prog = ProgBarWrap::new_filebytes(tbl);
+            prog.set_message(&format!("read temp blocks from {}", fname));
             let ff = File::open(&fname)?;
             let mut fb = BufReader::new(ff);
-            
+            let mut tl=0;
             for (a,b) in locs {
                 let mut mm = Vec::new();
-                let mut tl=0;
+                
                 for (p,q) in b {
                     fb.seek(SeekFrom::Start(p))?;
                     mm.push(read_file_block(&mut fb)?);
                     tl+=q;
                 }
-                match ct.checktime() {
+                /*match ct.checktime() {
                     Some(d) => {
                         print!("\r[{:6.1}s] tile {}, {} // {}", d,a, mm.len(),tl);
                         io::stdout().flush().expect("");
@@ -567,9 +588,12 @@ fn read_temp_data<T: CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=Timings
                     None => {}
                 }
                 //println!("{:6.1}s] tile {}, {} // {}", ct.gettime(),a, mm.len(),tl);
+                */
+                prog.prog(tl as f64);
                 
                 out.call((a,mm));
             }
+            prog.finish();
             return out.finish();
         }
     }
