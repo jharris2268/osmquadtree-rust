@@ -5,7 +5,7 @@ use std::fs::File;
 
 use std::env;
 
-use osmquadtree::read_file_block::{FileBlock,read_all_blocks_prog,read_all_blocks_parallel_prog,ProgBarWrap,file_length};
+use osmquadtree::read_file_block::{FileBlock,read_all_blocks_parallel_prog,ProgBarWrap,file_length,read_all_blocks_prog_fpos};
 use osmquadtree::read_pbf::{read_delta_packed_int};
 
 use osmquadtree::elements::{Changetype,PrimitiveBlock,MinimalBlock,Bbox,Node,Way,Relation,get_changetype,MinimalNode,MinimalWay,MinimalRelation};
@@ -613,8 +613,7 @@ fn main() {
     let f = File::open(&fname).expect("file not present");
     
    
-    let mut pb = ProgBarWrap::new(100);
-    pb.set_range(100);
+    
     
     if fname.ends_with(".osc") {
         let mut cn = CountChange::new();
@@ -633,12 +632,13 @@ fn main() {
         cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".pbfc") {
+        let pb = ProgBarWrap::new_filebytes(file_length(&fname));
         pb.set_message(&format!("count change blocks minimal {}, numchan=1", &fname));
-        let flen = file_length(&fname);
+        
         let mut fbuf = BufReader::new(f);
         let cc = Box::new(CountChangeMinimal::new());
         let cn = Box::new(Callback::new(make_convert_minimal_block(true,cc)));
-        let (mut a,_) = read_all_blocks_prog(&mut fbuf, flen, cn, &pb);
+        let (mut a,_) = read_all_blocks_prog_fpos(&mut fbuf, cn, &pb);
         pb.finish();
         let cn = std::mem::take(&mut a.others).pop().unwrap().1;
         
@@ -646,8 +646,10 @@ fn main() {
         //println!("{:?}", cn.relation.get(&Changetype::Create));
         
     } else if std::fs::metadata(&fname).expect("failed to open file").is_file() {
-        let flen = file_length(&fname);
         let mut cc = Count::new();
+        
+        let pb = ProgBarWrap::new_filebytes(file_length(&fname));
+        
         if numchan == 0 {
             let mut fbuf=BufReader::new(f);
             
@@ -655,12 +657,12 @@ fn main() {
                 pb.set_message(&format!("count blocks minimal {}, numchan=0", &fname));
                 let cm = Box::new(CountMinimal::new());
                 let cc = make_convert_minimal_block(false,cm);
-                read_all_blocks_prog(&mut fbuf, flen, cc, &pb)
+                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
             } else {
                 pb.set_message(&format!("count blocks primitive {}, numchan=0", &fname));
                 let cm = Box::new(CountPrim::new());
                 let cc = make_convert_primitive_block(false,cm);
-                read_all_blocks_prog(&mut fbuf, flen, cc, &pb)
+                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
             };
             pb.finish();
             cc.add_other(&a.others[0].1);
@@ -689,7 +691,7 @@ fn main() {
                 }
             }
             let cm = Box::new(CallbackMerge::new(ccs, Box::new(MergeTimings::new())));
-            let (a,_)  = read_all_blocks_prog(&mut fbuf, flen, cm, &pb);
+            let (a,_)  = read_all_blocks_prog_fpos(&mut fbuf, cm, &pb);
             pb.finish();
             for (_,x) in a.others {
                 cc.add_other(&x);
@@ -703,6 +705,7 @@ fn main() {
         let (fbufs, locsv) = get_file_locs(&fname, filter).expect("?");
         
         
+        let pb = ProgBarWrap::new(100);
         
         
         

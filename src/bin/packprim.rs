@@ -7,7 +7,8 @@ use osmquadtree::callback::{CallFinish,Callback,CallbackSync,CallbackMerge};
 use osmquadtree::read_file_block::{FileBlock,read_all_blocks};
 use osmquadtree::elements::{PrimitiveBlock};
 use osmquadtree::stringutils::StringUtils;
-use osmquadtree::sortblocks::sortblocks::{AddQuadtree,make_packprimblock,make_unpackprimblock,WriteFile,HeaderType};
+use osmquadtree::sortblocks::sortblocks::{AddQuadtree,make_packprimblock,make_unpackprimblock,WriteFile};
+use osmquadtree::header_block::HeaderType;
 use osmquadtree::sortblocks::{Timings,OtherData};
 
 

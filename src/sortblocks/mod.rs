@@ -6,9 +6,9 @@ pub mod addquadtree;
 
 use super::elements::PrimitiveBlock;
 
-
+type FileLocs = Vec<(i64,Vec<(u64,u64)>)>;
 pub enum OtherData {
-    FileLocs(Vec<(i64,Vec<(u64,u64)>)>),
+    FileLocs(FileLocs),
     TempData(Vec<(i64,Vec<Vec<u8>>)>),
     QuadtreeTree(Box<quadtreetree::QuadtreeTree>),
     AllBlocks(Vec<PrimitiveBlock>),

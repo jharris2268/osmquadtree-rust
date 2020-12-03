@@ -15,7 +15,8 @@ use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unp
 use osmquadtree::sortblocks::{QuadtreeTree,Timings,OtherData};
 use osmquadtree::stringutils::StringUtils;
 pub use osmquadtree::sortblocks::addquadtree::{AddQuadtree,make_unpackprimblock};
-pub use osmquadtree::sortblocks::writepbf::{make_packprimblock,WriteFile,HeaderType,make_packprimblock_many};
+pub use osmquadtree::sortblocks::writepbf::{make_packprimblock,WriteFile,make_packprimblock_many};
+use osmquadtree::header_block::HeaderType;
 
 fn get_block<'a>(blocks: &'a mut HashMap<i64,PrimitiveBlock>, groups: &'a Box<QuadtreeTree>, q: Quadtree) -> &'a mut PrimitiveBlock {
     let (_,b) = groups.find(q);
@@ -401,7 +402,7 @@ fn write_temp_blocks(infn: &str, qtsfn: &str, tempfn: &str, groups: Box<Quadtree
             let pp = make_unpackprimblock(aq);
             
             
-            read_all_blocks_prog(&mut infb, flen, pp, &prog)
+            read_all_blocks_prog(&mut infb, flen, pp, &prog, 100.0)
         } else {
             let wts = CallbackSync::new(wt, numchan);
             let mut pcs: Vec<Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>>> = Vec::new();
@@ -420,7 +421,7 @@ fn write_temp_blocks(infn: &str, qtsfn: &str, tempfn: &str, groups: Box<Quadtree
             }
             
             let pp = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-            read_all_blocks_prog(&mut infb, flen, pp, &prog)
+            read_all_blocks_prog(&mut infb, flen, pp, &prog, 100.0)
         };
     println!("write_temp_blocks {} {}", res, d);
     let mut groups: Option<Box<QuadtreeTree>> = None;

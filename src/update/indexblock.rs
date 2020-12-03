@@ -252,7 +252,7 @@ pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Op
         
         let (mut tm,x) = match pb {
             None => read_all_blocks(indexfn, ca),
-            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb),
+            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb, 100.0),
         };
         
         //println!("{} {}", tm, x);
@@ -282,7 +282,7 @@ pub fn check_index_file(indexfn: &str, idset: Arc<IdSet>, numchan: usize, pb: Op
         //let (tm,x) = read_all_blocks(indexfn, ca);
         let (tm,x) = match pb {
             None => read_all_blocks(indexfn, ca),
-            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb),
+            Some(pb) => read_all_blocks_prog(&mut fbuf, flen, ca, pb, 100.0),
         };
         
         //println!("{} {}", tm, x);

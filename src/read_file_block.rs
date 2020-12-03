@@ -220,24 +220,48 @@ pub fn file_length(fname: &str) -> u64 {
     std::fs::metadata(fname).expect(&format!("failed to open {}", fname)).len()
 }
 
-pub fn read_all_blocks_prog<R:Read,T,U>(fobj: &mut R, flen: u64, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
+pub fn read_all_blocks_prog<R:Read,T,U>(fobj: &mut R, flen: u64, mut pp: Box<T>, pb: &ProgBarWrap, pfs: f64) -> (U, f64)
     where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
             U: Send+Sync+'static
 {
     let ct=Checktime::new();
     
-    let pf = 100.0 / (flen as f64);
+    let pf = pfs / (flen as f64);
     
     for (i,fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        if (i%131) == 0 {
+        //if (i%131) == 0 {
             pb.prog((fb.pos as f64) * pf);
-        }
+        //}
         pp.call((i,fb));
         
     }
+    pb.prog(pfs);
+    let r = pp.finish().expect("finish failed");
+    
     pb.prog(100.0);
+    (r, ct.gettime())
+}
+
+pub fn read_all_blocks_prog_fpos<R:Read,T,U>(fobj: &mut R, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+            U: Send+Sync+'static
+{
+    let ct=Checktime::new();
+    
+    //let pf = 100.0 / (flen as f64);
+    
+    for (i,fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
+        //i//f (i%131) == 0 {
+            pb.prog(fb.pos as f64);
+        //}
+        pp.call((i,fb));
+        
+    }
+    //pb.prog(100.0);
+    pb.finish();
     (pp.finish().expect("finish failed"), ct.gettime())
 }    
+
 
 pub fn read_all_blocks_locs<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, print_msgs: bool, mut pp: Box<T>) -> (U, f64)
     where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
@@ -330,9 +354,9 @@ pub fn read_all_blocks_locs_prog<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64
         fobj.seek(SeekFrom::Start(*l)).expect(&format!("failed to read {} @ {}", fname, *l));
         let (_,fb) = read_file_block_with_pos(fobj, *l).expect(&format!("failed to read {} @ {}", fname, *l));
         
-        if (i%131) == 0 {
+        //if (i%131) == 0 {
             pb.prog(((i+1) as f64) * pf);
-        }
+        //}
         
         pp.call((i,fb));
     }
@@ -403,9 +427,9 @@ pub fn read_all_blocks_parallel_prog<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,
             fbs.push(y);
             fposes[*a]=x;
         }
-        if (j%131) == 0 {
+        //if (j%131) == 0 {
             pb.prog(((j+1) as f64)*pf);
-        }
+        //}
         
         pp.call((*i,fbs));
     }

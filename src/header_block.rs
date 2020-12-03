@@ -1,4 +1,5 @@
 use super::read_pbf;
+use super::write_pbf;
 use super::elements::Quadtree;
 
 use std::fs::File;
@@ -110,7 +111,61 @@ impl HeaderBlock {
     }
     
 }
-                    
+
+
+fn pack_bbox()->Vec<u8> {
+    let mut res=Vec::new();
+    write_pbf::pack_value(&mut res, 1, write_pbf::zig_zag(-180000000000));
+    write_pbf::pack_value(&mut res, 2, write_pbf::zig_zag(180000000000));
+    write_pbf::pack_value(&mut res, 3, write_pbf::zig_zag(90000000000));
+    write_pbf::pack_value(&mut res, 4, write_pbf::zig_zag(-90000000000));
+    res
+}
+
+pub fn make_header_block(withlocs: bool) -> Vec<u8> {
+    let mut res=Vec::new();
+    
+    write_pbf::pack_data(&mut res, 1, &pack_bbox());
+    write_pbf::pack_data(&mut res, 4, b"OsmSchema-V0.6");
+    write_pbf::pack_data(&mut res, 4, b"DenseNodes");
+    write_pbf::pack_data(&mut res, 16, b"osmquadtree-cpp"); //b"osmquadtree-rust"
+    if withlocs {
+        write_pbf::pack_data(&mut res, 23, b"-filelocs.json");
+    }
+    
+    res
+}
+
+fn pack_index_item(q: &Quadtree, _ischange: bool, l: u64) -> Vec<u8> {
+    let mut res=Vec::with_capacity(25);
+    //if ischange { write_pbf::pack_value(&mut res, 2, 1); }
+    write_pbf::pack_value(&mut res, 2, 0);
+    write_pbf::pack_value(&mut res, 3, write_pbf::zig_zag(l as i64));
+    write_pbf::pack_value(&mut res, 4, write_pbf::zig_zag(q.as_int()));
+    res
+}
+
+pub fn make_header_block_stored_locs(ischange: bool, locs: Vec<(Quadtree,u64)>) -> Vec<u8> {
+    let mut res=Vec::new();
+    
+    write_pbf::pack_data(&mut res, 1, &pack_bbox());
+    write_pbf::pack_data(&mut res, 4, b"OsmSchema-V0.6");
+    write_pbf::pack_data(&mut res, 4, b"DenseNodes");
+    write_pbf::pack_data(&mut res, 16, b"osmquadtree-cpp"); //b"osmquadtree-rust"
+    for (a,b) in &locs {
+        write_pbf::pack_data(&mut res, 22, &pack_index_item(a,ischange,*b));
+    }
+    
+    res
+}
+
+pub enum HeaderType {
+    None,
+    NoLocs,
+    InternalLocs,
+    ExternalLocs
+}
+
                 
                 
     
