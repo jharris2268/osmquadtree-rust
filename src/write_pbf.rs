@@ -144,3 +144,13 @@ pub fn packed_delta_int_ref_length<'a>(vals: impl Iterator<Item=&'a i64>) -> usi
     }
     r
 }
+
+pub fn write_packed_delta_data(res: &mut Vec<u8>, key: u64, vals: &Vec<i64>) {
+    write_varint(res, (key << 3) | 2);
+    write_varint(res, packed_delta_int_ref_length(vals.iter()) as u64);
+    let mut curr=0;
+    for v in vals.iter() {
+        write_varint(res, zig_zag(v-curr));
+        curr=*v;
+    }
+}

@@ -288,3 +288,31 @@ pub fn date_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts,0);
     dt.format("%Y%m%d").to_string()
 }
+
+use std::io::Read;
+
+pub fn get_mem() -> u64 {
+    let pid = std::process::id();
+    let procfn = format!("/proc/{}/statm", pid);
+    let mut s = String::new();
+    std::fs::File::open(procfn).unwrap().read_to_string(&mut s).unwrap();
+    let tt:Vec<&str> = s.split(" ").collect();
+    tt[1].parse::<u64>().unwrap()*4096
+}
+
+extern {
+    pub fn malloc_trim(__pad: usize) -> std::os::raw::c_int;
+}
+pub fn trim_memory() -> bool {
+    
+    let a = get_mem();
+    let b = 
+    unsafe {
+        malloc_trim(0)
+    };
+    
+    let c = get_mem();
+    println!("before={:.1}mb, success={}, after={:.1}mb", (a as f64)/1024.0/1024.0,b,(c as f64)/1024.0/1024.0);
+    b==1
+}
+    
