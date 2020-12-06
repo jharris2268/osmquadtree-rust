@@ -2,7 +2,7 @@ extern crate osmquadtree;
 
 use std::fs::File;
 use std::io;
-use std::io::{Write,Seek,SeekFrom,BufReader,ErrorKind};
+use std::io::{Seek,SeekFrom,BufReader,ErrorKind};
 use std::fmt;
 use std::collections::BTreeMap;
 use std::thread;
@@ -105,18 +105,14 @@ impl WayNodeTile {
         let nn = write_pbf::pack_delta_int_ref(self.vals[s..t].iter().map(|(n,_w)| { n }));
         let ww = write_pbf::pack_delta_int_ref(self.vals[s..t].iter().map(|(_n,w)| { w }));
         
-        let mut l = 0;
-        l+=write_pbf::value_length(1, write_pbf::zig_zag(self.key));
-        l+=write_pbf::value_length(2, self.vals.len() as u64);
-        l+=write_pbf::data_length(3, nn.len());
-        l+=write_pbf::data_length(4, ww.len());
+        let l = 20+nn.len()+ww.len();
         
         let mut res = Vec::with_capacity(l);
         
         write_pbf::pack_value(&mut res, 1, write_pbf::zig_zag(self.key));
-        write_pbf::pack_value(&mut res, 2, (t-s) as u64);
-        write_pbf::pack_data(&mut res, 3, &nn[..]);
-        write_pbf::pack_data(&mut res, 4, &ww[..]);
+        write_pbf::pack_data(&mut res, 2, &nn[..]);
+        write_pbf::pack_data(&mut res, 3, &ww[..]);
+        write_pbf::pack_value(&mut res, 4, (t-s) as u64);
         
         return res;
     }
@@ -138,21 +134,20 @@ impl WayNodeTile {
                         return Err(io::Error::new(ErrorKind::Other,"wrong key"));
                     }
                 },
-                read_pbf::PbfTag::Value(2, l) => {
-                    nv.reserve(l as usize);
-                    wv.reserve(l as usize);
-                    self.vals.reserve(l as usize + ti);
-                }
-                    
-                read_pbf::PbfTag::Data(3, nn) => {
+                read_pbf::PbfTag::Data(2, nn) => {
                     nv.extend(read_pbf::DeltaPackedInt::new(&nn));
                     
                 },
                 
-                read_pbf::PbfTag::Data(4, ww) => {
+                read_pbf::PbfTag::Data(3, ww) => {
                     wv.extend(read_pbf::DeltaPackedInt::new(&ww));
                     
                 },
+                read_pbf::PbfTag::Value(4, l) => {
+                    nv.reserve(l as usize);
+                    wv.reserve(l as usize);
+                    self.vals.reserve(l as usize + ti);
+                }
                 _ => { return Err(io::Error::new(ErrorKind::Other,"unexpected tag")); }
             };
         }
@@ -332,20 +327,21 @@ fn unpack_relation_node_vals(nqts: &mut QuadtreeSimple, data: &[u8]) {
                 for n in read_pbf::DeltaPackedInt::new(x) {
                     nqts.set(n, Quadtree::new(-1));
                 }
-            }
+            },
+            _ => {}
         }
     }
 }
 
-fn prep_relation_node_vals(relmems: &RelMems) -> QuadtreeSimple {
-    let mut nqts = QuadtreeSimple::new();
-    for (_,b) in relmems.nodes {
-        nqts.set(*n, Quadtree::new(-1));
+fn prep_relation_node_vals(relmems: &RelMems) -> Box<QuadtreeSimple> {
+    let mut nqts = Box::new(QuadtreeSimple::new());
+    for (_,b) in relmems.nodes.iter() {
+        nqts.set(*b, Quadtree::new(-1));
     }
     
-    for p in relmems.packed {
-        let f = unpack_file_block(0, p).expect("?");
-        unpack_relation_node_vals(&mut nqts, p.data());
+    for p in relmems.packed.iter() {
+        let f = unpack_file_block(0, &p).expect("?");
+        unpack_relation_node_vals(&mut nqts, &f.data());
     }
     nqts
 }
@@ -2624,6 +2620,7 @@ fn main() {
     let mut qt_level=17usize;
     let mut qt_buffer=0.05;
     let mut seperate=false;
+    let mut resort_waynodes=true;
     if args.len()>2 {
         for i in 2..args.len() {
             if args[i].starts_with("numchan=") {
@@ -2640,6 +2637,8 @@ fn main() {
                 qt_buffer = args[i].substr(10,args[i].len()).parse().unwrap();
             } else if args[i] == "seperate" {
                 seperate=true
+            } else if args[i] == "dont_resort_waynodes" {
+                resort_waynodes=false;
             }
         }
     }
@@ -2694,8 +2693,13 @@ fn main() {
                 match nodewaynodes {
                     NodeWayNodes::InMem(inf,w) => {
                         //let (a,b) = write_waynode_sorted(w,&outfn);
-                        let a = write_waynode_sorted_resort(w,&outfn);
-                        NodeWayNodes::Seperate(inf,a,vec![])
+                        if resort_waynodes {
+                            let a = write_waynode_sorted_resort(w,&outfn);
+                            NodeWayNodes::Seperate(inf,a,vec![])
+                        } else {
+                            let (a,b) = write_waynode_sorted(w,&outfn);
+                            NodeWayNodes::Seperate(inf,a,b)
+                        }
                     },
                     p => p
                 }

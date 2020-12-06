@@ -3,6 +3,7 @@ pub mod read_file_block;
 pub mod write_pbf;
 pub mod header_block;
 pub mod writefile;
+pub mod count;
 
 pub mod callback;
 pub mod stringutils;
