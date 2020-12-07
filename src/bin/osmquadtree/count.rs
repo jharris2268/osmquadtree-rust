@@ -1,5 +1,5 @@
 extern crate osmquadtree;
-extern crate cpuprofiler;
+//extern crate cpuprofiler;
 
 use std::fs::File;
 
@@ -21,7 +21,7 @@ use osmquadtree::convertblocks::{make_convert_minimal_block,make_convert_primiti
 use std::io::{Error,ErrorKind,Result};
 use std::io::BufReader;
 
-use cpuprofiler::PROFILER;
+//use cpuprofiler::PROFILER;
 
 
 struct CountChangeMinimal {
@@ -143,7 +143,7 @@ fn parse_bbox(fstr: &str) -> Result<Bbox> {
     
     
 
-
+/*
 fn main() {
     
     
@@ -156,7 +156,7 @@ fn main() {
         
     
     let mut prof = String::from("");
-    let mut minimal = false;
+    let mut primitive = false;
     let mut numchan = 4;
     let mut filter: Option<Bbox> = None;
     
@@ -164,8 +164,8 @@ fn main() {
         for i in 2..args.len() {
             if args[i].starts_with("prof=") {
                 prof = args[i].substr(5,args[i].len());
-            } else if args[i] == "minimal" {
-                minimal=true;
+            } else if args[i] == "primitive" {
+                primitive=true;
             } else if args[i].starts_with("numchan=") {
                 numchan = args[i].substr(8,args[i].len()).parse().unwrap();
             } else if args[i].starts_with("filter=") {
@@ -173,14 +173,20 @@ fn main() {
             }
         }
     }
-     
-    if prof.len()>0 {
+     */
+    
+
+pub fn run_count(fname: &str, use_primitive: bool, numchan: usize, filter_in: Option<&str>) -> Result<()> {
+    
+    /*if prof.len()>0 {
         PROFILER.lock().unwrap().start(prof.clone()).expect("couldn't start");
-    }
+    }*/
+    let filter = match filter_in {
+        None => None,
+        Some(s) => Some(parse_bbox(s)?)
+    };
     
-    let f = File::open(&fname).expect("file not present");
-    
-   
+    let f = File::open(fname).expect("file not present");
     
     
     if fname.ends_with(".osc") {
@@ -200,8 +206,8 @@ fn main() {
         cn.add_changeblock(&data);
         println!("{}", cn);
     } else if fname.ends_with(".pbfc") {
-        let pb = ProgBarWrap::new_filebytes(file_length(&fname));
-        pb.set_message(&format!("count change blocks minimal {}, numchan=1", &fname));
+        let pb = ProgBarWrap::new_filebytes(file_length(fname));
+        pb.set_message(&format!("count change blocks minimal {}, numchan=1", fname));
         
         let mut fbuf = BufReader::new(f);
         let cc = Box::new(CountChangeMinimal::new());
@@ -213,49 +219,46 @@ fn main() {
         println!("{}", cn);
         //println!("{:?}", cn.relation.get(&Changetype::Create));
         
-    } else if std::fs::metadata(&fname).expect("failed to open file").is_file() {
+    } else if std::fs::metadata(fname).expect("failed to open file").is_file() {
         let mut cc = Count::new();
         
-        let pb = ProgBarWrap::new_filebytes(file_length(&fname));
+        let pb = ProgBarWrap::new_filebytes(file_length(fname));
         
         if numchan == 0 {
             let mut fbuf=BufReader::new(f);
             
-            let (a,_) = if minimal {
-                pb.set_message(&format!("count blocks minimal {}, numchan=0", &fname));
-                let cm = Box::new(CountMinimal::new());
-                let cc = make_convert_minimal_block(false,cm);
-                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
-            } else {
-                pb.set_message(&format!("count blocks primitive {}, numchan=0", &fname));
+            let (a,_) = if use_primitive {
+                pb.set_message(&format!("count blocks primitive {}, numchan=0", fname));
                 let cm = Box::new(CountPrim::new());
                 let cc = make_convert_primitive_block(false,cm);
+                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
+            } else {
+                pb.set_message(&format!("count blocks minimal {}, numchan=0", fname));
+                let cm = Box::new(CountMinimal::new());
+                let cc = make_convert_minimal_block(false,cm);
                 read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
             };
             pb.finish();
             cc.add_other(&a.others[0].1);
             
-            //cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, &fname, minimal, false);
+            //cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, fname, minimal, false);
         
         } else if numchan > 8 {
-            panic!("numchan must be between 0 & 8");
+            return Err(Error::new(ErrorKind::Other,"numchan must be between 0 and 8"));
         } else {
             
             let mut fbuf=f;
             
-            
-            
-            
             let mut ccs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>> = Vec::new();
             for _ in  0..numchan {
-                if minimal {
-                    pb.set_message(&format!("count blocks minimal {}, numchan={}", &fname,numchan));
-                    let cm = Box::new(CountMinimal::new());
-                    ccs.push(Box::new(Callback::new(make_convert_minimal_block(false,cm))));
-                } else {
-                    pb.set_message(&format!("count blocks primitive {}, numchan={}", &fname,numchan));
+                if use_primitive {
+                    pb.set_message(&format!("count blocks primitive {}, numchan={}", fname,numchan));
                     let cm = Box::new(CountPrim::new());
                     ccs.push(Box::new(Callback::new(make_convert_primitive_block(false,cm))));
+                } else {
+                    pb.set_message(&format!("count blocks minimal {}, numchan={}", fname,numchan));
+                    let cm = Box::new(CountMinimal::new());
+                    ccs.push(Box::new(Callback::new(make_convert_minimal_block(false,cm))));
                 }
             }
             let cm = Box::new(CallbackMerge::new(ccs, Box::new(MergeTimings::new())));
@@ -270,7 +273,7 @@ fn main() {
     } else {
         
         
-        let (fbufs, locsv) = get_file_locs(&fname, filter).expect("?");
+        let (fbufs, locsv) = get_file_locs(fname, filter).expect("?");
         
         
         let pb = ProgBarWrap::new(100);
@@ -279,18 +282,17 @@ fn main() {
         
         let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>>> = Vec::new();
         
-        if minimal { 
+        if use_primitive { 
+            pb.set_message(&format!("count blocks combine primitive {}, numchan={}", fname,numchan));
             for _ in 0..numchan {
-                pb.set_message(&format!("count blocks combine minimal {}, numchan={}", &fname,numchan));
-                let cca = Box::new(CountMinimal::new());
-                pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_minimal_blocks_combine_call_all(cca))));
-            }
-        
-        } else {
-            for _ in 0..numchan {
-                pb.set_message(&format!("count blocks combine primitive {}, numchan={}", &fname,numchan));
                 let cca = Box::new(CountPrim::new());
                 pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_primitive_blocks_combine_call_all(cca))));
+            }
+        } else {
+            pb.set_message(&format!("count blocks combine minimal {}, numchan={}", fname,numchan));
+            for _ in 0..numchan {
+                let cca = Box::new(CountMinimal::new());
+                pps.push(Box::new(Callback::new(osmquadtree::convertblocks::make_read_minimal_blocks_combine_call_all(cca))));
             }
         }
         let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
@@ -304,13 +306,11 @@ fn main() {
         
         println!("{}", cc);
         
-        
-        
     }
-        
-    if prof.len()>0 {
+    Ok(())
+    /*if prof.len()>0 {
         PROFILER.lock().unwrap().stop().expect("couldn't stop");
-    }
+    }*/
     
     
     
