@@ -3,14 +3,13 @@ extern crate osmquadtree;
 
 use std::fs::File;
 
-use std::env;
 
 use osmquadtree::read_file_block::{FileBlock,read_all_blocks_parallel_prog,ProgBarWrap,file_length,read_all_blocks_prog_fpos};
 
 use osmquadtree::count::{CountBlocks,Count,CountChange};
 
 use osmquadtree::elements::{PrimitiveBlock,MinimalBlock,Bbox};
-use osmquadtree::stringutils::StringUtils;
+
 use osmquadtree::update::{read_xml_change,get_file_locs};
 
 

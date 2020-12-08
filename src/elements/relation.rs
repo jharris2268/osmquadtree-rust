@@ -30,7 +30,7 @@ pub enum ElementType {
     Relation
 }
 
-fn make_elementtype(t: u64) -> ElementType {
+pub fn make_elementtype(t: u64) -> ElementType {
     if t==0 { return ElementType::Node; }
     if t==1 { return ElementType::Way; }
     if t==2 { return ElementType::Relation; }

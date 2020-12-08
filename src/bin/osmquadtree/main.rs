@@ -1,9 +1,9 @@
 extern crate clap;
 
-use clap::{App, SubCommand,AppSettings,Arg,value_t,Error};
+use clap::{App, SubCommand,AppSettings,Arg,value_t};
 mod count;
 use count::run_count;
-
+/*
 fn parse_numchan(numchan: Option<&str>) -> usize {
     match numchan {
         None => 4, 
@@ -16,7 +16,7 @@ fn parse_numchan(numchan: Option<&str>) -> usize {
             }
         },
     }
-}
+}*/
 
 
 //fn run_calcqts(input: String, qtsfn: Option<String>, numchan: usize, combined: bool, inmem: bool) {}
