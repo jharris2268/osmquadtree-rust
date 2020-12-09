@@ -4,7 +4,7 @@ pub mod write_pbf;
 pub mod header_block;
 pub mod writefile;
 pub mod count;
-
+pub mod calcqts;
 pub mod callback;
 pub mod stringutils;
 pub mod utils;

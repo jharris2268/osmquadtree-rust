@@ -140,7 +140,7 @@ pub fn make_read_minimal_blocks_combine_call_all<V: Sync+Send+'static, O: CallFi
 pub fn make_convert_minimal_block<T: CallFinish<CallType=MinimalBlock,ReturnType=Timings<U>>,U: Sync+Send+'static>(ischange: bool, out: Box<T>) -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<U>>> {
     let convert_minimal = move |(i,fb): (usize, FileBlock)| -> MinimalBlock {
         if fb.block_type == "OSMData" {
-            MinimalBlock::read(i as i64, fb.pos, &fb.data(),ischange).expect("?")
+            MinimalBlock::read(i as i64, fb.pos, &fb.data(),ischange).expect("failed to read minimalblock")
         } else {
             MinimalBlock::new()
         }
@@ -148,6 +148,20 @@ pub fn make_convert_minimal_block<T: CallFinish<CallType=MinimalBlock,ReturnType
     
     Box::new(CallAll::new(out, "convert minimal", Box::new(convert_minimal)))
     
+}
+
+pub fn make_convert_minimal_block_parts<T: CallFinish<CallType=MinimalBlock,ReturnType=Timings<U>>,U: Sync+Send+'static>
+    (ischange: bool, readnodes: bool, readways: bool, readrelations: bool, out: Box<T>) -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<U>>> {
+        
+    let convert_minimal = move |(i,fb): (usize, FileBlock)| -> MinimalBlock {
+        if fb.block_type=="OSMData" {
+            MinimalBlock::read_parts(i as i64, fb.pos, &fb.data(), ischange, readnodes, readways, readrelations).expect("failed to read minimalblock")
+        } else {
+            MinimalBlock::new()
+        }
+    };
+    
+    Box::new(CallAll::new(out, "convert minimal", Box::new(convert_minimal)))
 }
 
 pub fn make_convert_primitive_block<T: CallFinish<CallType=PrimitiveBlock,ReturnType=Timings<U>>,U: Sync+Send+'static>(ischange: bool, out: Box<T>) -> Box<impl CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<U>>> {

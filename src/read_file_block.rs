@@ -195,7 +195,7 @@ impl<R> Iterator for ReadFileBlocks<'_, R>
 
 
 pub fn read_all_blocks<T,U>(fname: &str, mut pp: Box<T>) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
             U: Send+Sync+'static
 {
     let mut ct=Checktime::new();
@@ -221,7 +221,7 @@ pub fn file_length(fname: &str) -> u64 {
 }
 
 pub fn read_all_blocks_prog<R:Read,T,U>(fobj: &mut R, flen: u64, mut pp: Box<T>, pb: &ProgBarWrap, pfs: f64) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
             U: Send+Sync+'static
 {
     let ct=Checktime::new();
@@ -242,8 +242,9 @@ pub fn read_all_blocks_prog<R:Read,T,U>(fobj: &mut R, flen: u64, mut pp: Box<T>,
     (r, ct.gettime())
 }
 
+
 pub fn read_all_blocks_prog_fpos<R:Read,T,U>(fobj: &mut R, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
             U: Send+Sync+'static
 {
     let ct=Checktime::new();
@@ -262,9 +263,24 @@ pub fn read_all_blocks_prog_fpos<R:Read,T,U>(fobj: &mut R, mut pp: Box<T>, pb: &
     (pp.finish().expect("finish failed"), ct.gettime())
 }    
 
+pub fn read_all_blocks_with_progbar<T, U>(fname: &str, pp: Box<T>, msg: &str) -> (U,f64)
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
+            U: Send+Sync+'static
+{
+    let fl = file_length(fname);
+    let pb = ProgBarWrap::new_filebytes(fl);
+    pb.set_message(msg);
+    
+    let fobj = File::open(fname).expect("failed to open file");
+    let mut fbuf = BufReader::new(fobj);
+    
+    read_all_blocks_prog_fpos(&mut fbuf, pp, &pb)
+}
+    
+    
 
 pub fn read_all_blocks_locs<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, print_msgs: bool, mut pp: Box<T>) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
             U: Send+Sync+'static,
             R: Read+Seek
 {
@@ -340,7 +356,7 @@ impl ProgBarWrap {
 
 
 pub fn read_all_blocks_locs_prog<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64>, mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,FileBlock), ReturnType=U> + ?Sized,
             U: Send+Sync+'static,
             R: Read+Seek
 {
@@ -366,7 +382,7 @@ pub fn read_all_blocks_locs_prog<R,T,U>(fobj: &mut R, fname: &str, locs: Vec<u64
 
 
 pub fn read_all_blocks_parallel<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(usize,u64)>)>,mut pp: Box<T>) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U> + ?Sized,
             U: Send+Sync+'static,
             F: Seek+Read
 {
@@ -404,7 +420,7 @@ pub fn read_all_blocks_parallel<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(
 
 
 pub fn read_all_blocks_parallel_prog<T,U,F>(mut fbufs: Vec<F>, locs: Vec<(usize,Vec<(usize,u64)>)>,mut pp: Box<T>, pb: &ProgBarWrap) -> (U, f64)
-    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U>,
+    where   T: CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=U> + ?Sized,
             U: Send+Sync+'static,
             F: Seek+Read
 {
