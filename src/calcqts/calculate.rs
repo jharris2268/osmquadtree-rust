@@ -2,7 +2,7 @@
 
 use std::fs::File;
 
-use std::io::{BufReader,Result};
+use std::io::{BufReader,Result,Error,ErrorKind};
 
 use std::collections::BTreeMap;
 
@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex};
 use crate::read_file_block;
 use crate::read_file_block::{ProgBarWrap, pack_file_block};
 use crate::read_pbf;
-
 
 use crate::header_block::HeaderType;
 use crate::writefile::{WriteFile};
@@ -679,8 +678,17 @@ pub fn run_calcqts_load_existing(fname: &str, outfn: &str, qt_level: usize, qt_b
     Ok(())
 }
 
-pub fn run_calcqts(fname: &str, outfn: &str, qt_level: usize, qt_buffer: f64, use_simple: bool, seperate: bool, resort_waynodes: bool, numchan: usize) -> Result<()> {
-        
+pub fn run_calcqts(fname: &str, outfn: Option<&str>, qt_level: usize, qt_buffer: f64, use_simple: bool, seperate: bool, resort_waynodes: bool, numchan: usize) -> Result<()> {
+    
+    let outfn_ = match outfn {
+        Some(o) => String::from(o),
+        None => format!("{}-qts.pbf", &fname[0..fname.len()-4]),
+    };
+    let outfn = &outfn_;
+    
+    if use_simple && crate::read_file_block::file_length(fname) > 8*1024*1024*1024 {
+        return Err(Error::new(ErrorKind::Other,"run_calcqts use_simple=true only suitable for pbf files smaller than 8gb"));
+    }
     
     let (relmems,waynodevals) = prep_way_nodes(fname,numchan).expect("prep_way_nodes failed");
 

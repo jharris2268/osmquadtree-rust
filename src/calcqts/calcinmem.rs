@@ -70,8 +70,16 @@ impl CallFinish for CollectTiles {
 }
 
     
-pub fn run_calcqts_inmem(fname: &str, outfn: &str, qt_level: usize, qt_buffer: f64, numchan: usize) -> Result<()> {
+pub fn run_calcqts_inmem(fname: &str,outfn: Option<&str>, qt_level: usize, qt_buffer: f64, numchan: usize) -> Result<()> {
+    let outfn_ = match outfn {
+        Some(o) => String::from(o),
+        None => format!("{}-qts.pbf", &fname[0..fname.len()-4]),
+    };
+    let outfn = &outfn_;
     
+    if crate::read_file_block::file_length(fname) > 1024*1024*1024 {
+        return Err(Error::new(ErrorKind::Other,"run_calcqts_inmem only suitable for pbf files smaller than 1gb"));
+    }
     
     let data = {
         let conv: CallFinishFileBlocks = 
