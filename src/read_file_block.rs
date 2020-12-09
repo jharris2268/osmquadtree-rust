@@ -1,10 +1,7 @@
 use std::fs::File;
 use std::io;
-use std::io::{BufReader,Read,Write,ErrorKind};
+use std::io::{BufReader,Read,Write,ErrorKind,Cursor,Seek,SeekFrom};
 
-use std::io::Seek;
-use std::io::SeekFrom;
-//use std::collections::HashMap;
 
 extern crate flate2;
 use self::flate2::read::ZlibDecoder;
@@ -108,7 +105,7 @@ pub fn read_file_block_with_pos<F: Read>(file: &mut F, mut pos: u64) -> io::Resu
 
 pub fn unpack_file_block(pos: u64, data: &[u8]) -> io::Result<FileBlock> {
     
-    let s = read_file_block_with_pos(&mut data.as_ref(),pos)?;
+    let s = read_file_block_with_pos(&mut Cursor::new(data), pos)?;
     Ok(s.1)
 
 }
