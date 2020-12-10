@@ -3,20 +3,16 @@ use std::io;
 use std::io::{Write,BufReader,Seek,SeekFrom};
 use std::collections::{HashMap,BTreeMap};
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
+use crate::callback::{Callback,CallbackSync,CallbackMerge,CallFinish};
+use crate::elements::{Quadtree,PrimitiveBlock,Node,Way,Relation};
 
-use osmquadtree::callback::{Callback,CallbackSync,CallbackMerge,CallFinish};
-use osmquadtree::elements::{Quadtree,PrimitiveBlock,Node,Way,Relation};
-
-use osmquadtree::utils::{Timer,MergeTimings,ReplaceNoneWithTimings};
-use osmquadtree::read_file_block::{read_all_blocks,FileBlock,read_file_block,unpack_file_block,pack_file_block,ProgBarWrap,read_all_blocks_prog,file_length};
-use osmquadtree::sortblocks::{QuadtreeTree,Timings,OtherData};
-use osmquadtree::stringutils::StringUtils;
-pub use osmquadtree::sortblocks::addquadtree::{AddQuadtree,make_unpackprimblock};
-pub use osmquadtree::sortblocks::writepbf::{make_packprimblock,WriteFile,make_packprimblock_many};
-use osmquadtree::header_block::HeaderType;
+use crate::utils::{Timer,MergeTimings,ReplaceNoneWithTimings};
+use crate::pbfformat::read_file_block::{read_all_blocks,FileBlock,read_file_block,unpack_file_block,pack_file_block,ProgBarWrap,read_all_blocks_prog,file_length};
+use crate::sortblocks::{QuadtreeTree,Timings,OtherData};
+use crate::stringutils::StringUtils;
+pub use crate::sortblocks::addquadtree::{AddQuadtree,make_unpackprimblock};
+pub use crate::sortblocks::writepbf::{make_packprimblock,WriteFile,make_packprimblock_many};
+use crate::pbfformat::header_block::HeaderType;
 
 fn get_block<'a>(blocks: &'a mut HashMap<i64,PrimitiveBlock>, groups: &'a Box<QuadtreeTree>, q: Quadtree) -> &'a mut PrimitiveBlock {
     let (_,b) = groups.find(q);

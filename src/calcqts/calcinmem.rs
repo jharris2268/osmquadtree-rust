@@ -2,13 +2,13 @@
 use crate::elements::{MinimalBlock,Bbox,Quadtree,ElementType,make_elementtype};
 use crate::callback::{CallFinish,Callback,CallbackMerge};
 use crate::utils::{MergeTimings,};
-use crate::read_pbf;
-use crate::read_file_block::read_all_blocks_with_progbar;
-use crate::convertblocks::make_convert_minimal_block_parts;
+use crate::pbfformat::read_pbf;
+use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar,file_length};
+use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
 
-use super::quadtree_store::{QuadtreeSimple,QuadtreeGetSet};
-use super::write_quadtrees::{WriteQuadTree,PackQuadtrees};
-use super::{Timings,OtherData,CallFinishFileBlocks};
+use crate::calcqts::quadtree_store::{QuadtreeSimple,QuadtreeGetSet};
+use crate::calcqts::write_quadtrees::{WriteQuadTree,PackQuadtrees};
+use crate::calcqts::{Timings,OtherData,CallFinishFileBlocks};
 
 use std::collections::BTreeMap;
 use std::io::{Result,Error,ErrorKind};
@@ -77,7 +77,7 @@ pub fn run_calcqts_inmem(fname: &str,outfn: Option<&str>, qt_level: usize, qt_bu
     };
     let outfn = &outfn_;
     
-    if crate::read_file_block::file_length(fname) > 1024*1024*1024 {
+    if file_length(fname) > 1024*1024*1024 {
         return Err(Error::new(ErrorKind::Other,"run_calcqts_inmem only suitable for pbf files smaller than 1gb"));
     }
     

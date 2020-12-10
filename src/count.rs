@@ -3,22 +3,22 @@
 use std::fs::File;
 
 
-use super::read_file_block::{FileBlock,read_all_blocks_parallel_prog,ProgBarWrap,file_length,read_all_blocks_prog_fpos};
+use crate::pbfformat::read_file_block::{FileBlock,read_all_blocks_parallel_prog,ProgBarWrap,file_length,read_all_blocks_prog_fpos};
 
 
-use super::update::{read_xml_change,get_file_locs,ChangeBlock};
+use crate::update::{read_xml_change,get_file_locs,ChangeBlock};
 
 
-use super::callback::{Callback,CallbackMerge,CallFinish};
-use super::utils::{ThreadTimer,MergeTimings};
-use super::convertblocks::{make_convert_minimal_block,make_convert_primitive_block,make_read_minimal_blocks_combine_call_all,make_read_primitive_blocks_combine_call_all};
+use crate::callback::{Callback,CallbackMerge,CallFinish};
+use crate::utils::{ThreadTimer,MergeTimings};
+use crate::pbfformat::convertblocks::{make_convert_minimal_block,make_convert_primitive_block,make_read_minimal_blocks_combine_call_all,make_read_primitive_blocks_combine_call_all};
 
 use std::io::{Error,ErrorKind,Result};
 use std::io::BufReader;
-use super::elements::{Changetype,PrimitiveBlock,MinimalBlock,Node,Way,Relation,MinimalNode,MinimalWay,MinimalRelation,get_changetype,Bbox};
+use crate::elements::{Changetype,PrimitiveBlock,MinimalBlock,Node,Way,Relation,MinimalNode,MinimalWay,MinimalRelation,get_changetype,Bbox};
 
-use super::utils::timestamp_string;
-use super::read_pbf::read_delta_packed_int;
+use crate::utils::timestamp_string;
+use crate::pbfformat::read_pbf::read_delta_packed_int;
 
 use std::fmt;
 use std::collections::BTreeMap;

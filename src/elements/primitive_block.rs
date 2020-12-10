@@ -1,22 +1,19 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::read_pbf;
-use osmquadtree::write_pbf;
+use crate::pbfformat::read_pbf;
+use crate::pbfformat::write_pbf;
 
-use super::quadtree;
+use crate::elements::quadtree;
 
-pub use super::node::Node;
-pub use super::way::Way;
-pub use super::relation::{Relation,ElementType,Member};
-pub use super::tags::Tag;
-pub use super::common::Changetype;
-pub use super::info::Info;
-pub use super::idset::IdSet;
+pub use crate::elements::node::Node;
+pub use crate::elements::way::Way;
+pub use crate::elements::relation::{Relation,ElementType,Member};
+pub use crate::elements::tags::Tag;
+pub use crate::elements::common::Changetype;
+pub use crate::elements::info::Info;
+pub use crate::elements::idset::IdSet;
 
-use super::dense::Dense;
-use super::common::{PackStringTable,get_changetype,changetype_int};
+use crate::elements::dense::Dense;
+use crate::elements::common::{PackStringTable,get_changetype,changetype_int};
 
 use std::io::{Error,Result,ErrorKind};
 

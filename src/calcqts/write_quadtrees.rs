@@ -1,12 +1,12 @@
 
 use crate::elements::{QuadtreeBlock,Quadtree};
 use crate::callback::{CallFinish,Callback,CallbackSync};
-use crate::header_block::HeaderType;
-use crate::writefile::WriteFile;
+use crate::pbfformat::header_block::HeaderType;
+use crate::pbfformat::writefile::WriteFile;
 use crate::utils::{Checktime,ReplaceNoneWithTimings};
 
-use super::{OtherData,Timings};
-use crate::read_file_block;
+use crate::calcqts::{OtherData,Timings};
+use crate::pbfformat::read_file_block;
 
 use std::io::Result;
 

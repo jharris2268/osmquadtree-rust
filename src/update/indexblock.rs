@@ -1,13 +1,10 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::elements::{MinimalBlock,Quadtree,IdSet};
-use osmquadtree::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
-use osmquadtree::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
-use osmquadtree::read_file_block::{pack_file_block, read_all_blocks, FileBlock,ProgBarWrap,read_all_blocks_prog,file_length};
-use osmquadtree::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
-use osmquadtree::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
+use crate::elements::{MinimalBlock,Quadtree,IdSet};
+use crate::pbfformat::write_pbf::{pack_data,pack_value,pack_delta_int, zig_zag};
+use crate::pbfformat::read_pbf::{IterTags,DeltaPackedInt,PbfTag,un_zig_zag};
+use crate::pbfformat::read_file_block::{pack_file_block, read_all_blocks, FileBlock,ProgBarWrap,read_all_blocks_prog,file_length};
+use crate::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
+use crate::utils::{ThreadTimer,ReplaceNoneWithTimings,MergeTimings,CallAll};
 
 
 pub enum ResultType {
@@ -16,7 +13,7 @@ pub enum ResultType {
     CheckIndexResultWrap(Vec<Quadtree>)
 }
 
-type Timings = osmquadtree::utils::Timings<ResultType>;
+type Timings = crate::utils::Timings<ResultType>;
 
 use std::fs::File;
 use std::io::{Result,Write,BufReader/*Error,ErrorKind*/};

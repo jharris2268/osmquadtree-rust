@@ -1,13 +1,10 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::read_pbf;
+use crate::pbfformat::read_pbf;
 
-use super::common::{read_common,common_cmp,common_eq,Changetype,PackStringTable,SetCommon};
-use super::info::Info;
-use super::tags::Tag;
-use super::quadtree::Quadtree;
+use crate::elements::common::{read_common,common_cmp,common_eq,Changetype,PackStringTable,SetCommon};
+use crate::elements::info::Info;
+use crate::elements::tags::Tag;
+use crate::elements::quadtree::Quadtree;
 
 
 use std::io::{Error,ErrorKind,Result};

@@ -10,12 +10,12 @@ use std::sync::{Arc, Mutex};
 
 
 
-use crate::read_file_block;
-use crate::read_file_block::{ProgBarWrap, pack_file_block};
-use crate::read_pbf;
+use crate::pbfformat::read_file_block;
+use crate::pbfformat::read_file_block::{ProgBarWrap, pack_file_block,file_length};
+use crate::pbfformat::read_pbf;
 
-use crate::header_block::HeaderType;
-use crate::writefile::{WriteFile};
+use crate::pbfformat::header_block::HeaderType;
+use crate::pbfformat::writefile::{WriteFile};
 use crate::elements::{QuadtreeBlock};
 use crate::callback::{CallFinish, Callback,CallbackSync};
 use crate::elements::{Quadtree};
@@ -23,12 +23,12 @@ use crate::elements::{Quadtree};
 use crate::utils::{Timer,ReplaceNoneWithTimings,CallAll,trim_memory};
 
 
-use super::quadtree_store::{QuadtreeGetSet,QuadtreeSimple,QuadtreeTileInt,QuadtreeSplit,WAY_SPLIT_VAL};
-use super::packwaynodes::{RelMems,prep_way_nodes, prep_relation_node_vals};
-use super::expand_wayboxes::{WayBoxesSimple,WayBoxesVec,WayBoxesSplit};
-use super::node_waynodes::{NodeWayNodeCombTile,write_waynode_sorted, write_waynode_sorted_resort,read_nodewaynodes,write_nodewaynode_file};
-use super::write_quadtrees::{WrapWriteFile,WriteQuadTree,PackQuadtrees};
-use super::{OtherData,Timings,NodeWayNodes,};
+use crate::calcqts::quadtree_store::{QuadtreeGetSet,QuadtreeSimple,QuadtreeTileInt,QuadtreeSplit,WAY_SPLIT_VAL};
+use crate::calcqts::packwaynodes::{RelMems,prep_way_nodes, prep_relation_node_vals};
+use crate::calcqts::expand_wayboxes::{WayBoxesSimple,WayBoxesVec,WayBoxesSplit};
+use crate::calcqts::node_waynodes::{NodeWayNodeCombTile,write_waynode_sorted, write_waynode_sorted_resort,read_nodewaynodes,write_nodewaynode_file};
+use crate::calcqts::write_quadtrees::{WrapWriteFile,WriteQuadTree,PackQuadtrees};
+use crate::calcqts::{OtherData,Timings,NodeWayNodes,};
 
 
 
@@ -686,7 +686,7 @@ pub fn run_calcqts(fname: &str, outfn: Option<&str>, qt_level: usize, qt_buffer:
     };
     let outfn = &outfn_;
     
-    if use_simple && crate::read_file_block::file_length(fname) > 8*1024*1024*1024 {
+    if use_simple && file_length(fname) > 8*1024*1024*1024 {
         return Err(Error::new(ErrorKind::Other,"run_calcqts use_simple=true only suitable for pbf files smaller than 8gb"));
     }
     

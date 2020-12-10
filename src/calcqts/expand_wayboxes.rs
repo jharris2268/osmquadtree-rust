@@ -1,9 +1,9 @@
-use super::node_waynodes::NodeWayNodeCombTile;
-use super::quadtree_store::{QuadtreeSimple,QuadtreeTileInt,WAY_SPLIT_VAL,WAY_SPLIT_SHIFT,WAY_SPLIT_MASK};
+use crate::calcqts::node_waynodes::NodeWayNodeCombTile;
+use crate::calcqts::quadtree_store::{QuadtreeSimple,QuadtreeTileInt,WAY_SPLIT_VAL,WAY_SPLIT_SHIFT,WAY_SPLIT_MASK};
 use crate::callback::{CallFinish};
 use crate::utils::Timer;
 
-use super::{Timings,OtherData};
+use crate::calcqts::{Timings,OtherData};
 
 use crate::elements::{Bbox,QuadtreeBlock,Quadtree};
 use std::io::Result;

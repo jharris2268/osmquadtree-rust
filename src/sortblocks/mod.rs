@@ -4,7 +4,7 @@ pub mod quadtreetree;
 pub mod writepbf;
 pub mod addquadtree;
 
-use super::elements::PrimitiveBlock;
+use crate::elements::PrimitiveBlock;
 
 type FileLocs = Vec<(i64,Vec<(u64,u64)>)>;
 pub enum OtherData {
@@ -14,7 +14,7 @@ pub enum OtherData {
     AllBlocks(Vec<PrimitiveBlock>),
 }
 
-pub type Timings = super::utils::Timings<OtherData>;
+pub type Timings = crate::utils::Timings<OtherData>;
 
 pub use prepgraph::find_groups;
 pub use quadtreetree::{QuadtreeTree,QuadtreeTreeItem};

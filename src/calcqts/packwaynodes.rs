@@ -1,14 +1,14 @@
-use crate::read_pbf;
-use crate::write_pbf;
+use crate::pbfformat::read_pbf;
+use crate::pbfformat::write_pbf;
 
-use crate::read_file_block::{pack_file_block,unpack_file_block,FileBlock,read_all_blocks_with_progbar};
+use crate::pbfformat::read_file_block::{pack_file_block,unpack_file_block,FileBlock,read_all_blocks_with_progbar};
 use crate::callback::{CallFinish,CallbackSync,Callback,CallbackMerge};
 use crate::elements::{Quadtree,MinimalBlock};
 use crate::utils::{Timer,ReplaceNoneWithTimings,MergeTimings};
 
 
-use super::quadtree_store::{QuadtreeSimple,QuadtreeGetSet};
-use super::{Timings,OtherData,WayNodeVals,CallFinishFileBlocks};
+use crate::calcqts::quadtree_store::{QuadtreeSimple,QuadtreeGetSet};
+use crate::calcqts::{Timings,OtherData,WayNodeVals,CallFinishFileBlocks};
 
 use std::fmt;
 use std::io::{Result,Error,ErrorKind};

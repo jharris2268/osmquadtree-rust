@@ -1,6 +1,6 @@
 use std::fmt;
 use std::collections::HashMap;
-use super::callback::{CallFinish,CollectResult};
+use crate::callback::{CallFinish,CollectResult};
 use std::marker::PhantomData;
 use std::io::{Result,Error,ErrorKind};
 

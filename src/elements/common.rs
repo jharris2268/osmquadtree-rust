@@ -1,14 +1,10 @@
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
+use crate::pbfformat::read_pbf::{PbfTag,read_packed_int,un_zig_zag};
+use crate::pbfformat::write_pbf;
 
-use osmquadtree::read_pbf::{PbfTag,read_packed_int,un_zig_zag};
-use osmquadtree::write_pbf;
-
-use super::info::Info;
-use super::tags::Tag;
-use super::quadtree::Quadtree;
+use crate::elements::info::Info;
+use crate::elements::tags::Tag;
+use crate::elements::quadtree::Quadtree;
 
 
 

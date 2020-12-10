@@ -1,11 +1,7 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
-
 
 use std::fmt;
 use std::io::{Error,ErrorKind,Result};
-use osmquadtree::read_pbf;
+use crate::pbfformat::read_pbf;
 
 
 use std::f64::consts::PI;

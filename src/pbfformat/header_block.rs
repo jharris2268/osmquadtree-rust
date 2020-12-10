@@ -1,6 +1,6 @@
-use super::read_pbf;
-use super::write_pbf;
-use super::elements::Quadtree;
+use crate::pbfformat::read_pbf;
+use crate::pbfformat::write_pbf;
+use crate::elements::Quadtree;
 
 use std::fs::File;
 use std::io::{Result,Error,ErrorKind};

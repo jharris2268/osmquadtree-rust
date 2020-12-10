@@ -4,18 +4,14 @@ use std::fs::File;
 use std::io::{Write};
 use std::io;
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
+use crate::elements::{PrimitiveBlock,Quadtree};
+use crate::pbfformat::read_file_block::{pack_file_block};
+use crate::callback::{CallFinish,};
+use crate::utils::{CallAll,ThreadTimer};
+use crate::pbfformat::writefile;
+use crate::pbfformat::header_block::{make_header_block_stored_locs,HeaderType};
 
-use osmquadtree::elements::{PrimitiveBlock,Quadtree};
-use osmquadtree::read_file_block::{pack_file_block};
-use osmquadtree::callback::{CallFinish,};
-use osmquadtree::utils::{CallAll,ThreadTimer};
-use osmquadtree::writefile;
-use osmquadtree::header_block::{make_header_block_stored_locs,HeaderType};
-
-use super::{Timings,OtherData};
+use crate::sortblocks::{Timings,OtherData};
 
 
 

@@ -3,12 +3,10 @@ use std::iter::Iterator;
 use std::io;
 use std::io::Write;
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::elements::Quadtree;
-use osmquadtree::utils::Checktime;
+
+use crate::elements::Quadtree;
+use crate::utils::Checktime;
 
 #[derive(Copy, Clone)]
 pub struct QuadtreeTreeItem { 

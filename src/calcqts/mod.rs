@@ -9,7 +9,8 @@ pub mod calculate;
 pub use calcinmem::run_calcqts_inmem;
 pub use calculate::{run_calcqts,run_calcqts_load_existing};
 
-use crate::writefile::FileLocs;
+use crate::pbfformat::writefile::FileLocs;
+use crate::pbfformat::read_file_block::FileBlock;
 
 use std::sync::Arc;
 use std::collections::BTreeMap;
@@ -39,4 +40,4 @@ pub enum OtherData {
 
 pub type Timings = crate::utils::Timings<OtherData>;
 
-pub type CallFinishFileBlocks = Box<dyn crate::callback::CallFinish<CallType=(usize,crate::read_file_block::FileBlock),ReturnType=Timings>>;
+pub type CallFinishFileBlocks = Box<dyn crate::callback::CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>>;

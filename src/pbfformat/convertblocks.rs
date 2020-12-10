@@ -1,10 +1,10 @@
 
 
-use super::elements::{PrimitiveBlock,apply_change_primitive, combine_block_primitive,IdSet};
-use super::elements::{MinimalBlock,apply_change_minimal, combine_block_minimal};
-use super::read_file_block::FileBlock;
-use super::utils::{CallAll,Timings,ThreadTimer};
-use super::callback::CallFinish;
+use crate::elements::{PrimitiveBlock,apply_change_primitive, combine_block_primitive,IdSet};
+use crate::elements::{MinimalBlock,apply_change_minimal, combine_block_minimal};
+use crate::pbfformat::read_file_block::FileBlock;
+use crate::utils::{CallAll,Timings,ThreadTimer};
+use crate::callback::CallFinish;
 use std::io::Result;
 use std::sync::Arc;
 use std::marker::PhantomData;

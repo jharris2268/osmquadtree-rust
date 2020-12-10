@@ -1,10 +1,6 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
-
-use osmquadtree::read_pbf;
-use super::common;  
-use osmquadtree::write_pbf;
+use crate::pbfformat::read_pbf;
+use crate::elements::common;  
+use crate::pbfformat::write_pbf;
 use std::io::{Error,Result,ErrorKind};
 
 #[derive(Debug,Eq,PartialEq,Clone)]

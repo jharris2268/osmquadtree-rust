@@ -7,20 +7,17 @@ use std::io;
 use std::thread;
 
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::elements::PrimitiveBlock;
-use osmquadtree::read_file_block::{ReadFileBlocks,FileBlock};
+use crate::elements::PrimitiveBlock;
+use crate::pbfformat::read_file_block::{ReadFileBlocks,FileBlock};
 
-use osmquadtree::callback::{CallFinish,};
-use osmquadtree::elements::ElementType;
-use osmquadtree::elements::minimal_block::QuadtreeBlock;
-use osmquadtree::elements::Quadtree;
-use osmquadtree::utils::{Checktime,CallAll};
+use crate::callback::{CallFinish,};
+use crate::elements::ElementType;
+use crate::elements::minimal_block::QuadtreeBlock;
+use crate::elements::Quadtree;
+use crate::utils::{Checktime,CallAll};
 
-use super::{Timings,};
+use crate::sortblocks::{Timings,};
 
 
 

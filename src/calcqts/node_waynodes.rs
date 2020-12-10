@@ -2,11 +2,11 @@
 use crate::elements::{MinimalBlock,MinimalNode};
 use crate::callback::{CallFinish,CallbackSync,Callback,CallbackMerge};
 use crate::utils::{Timer,CallAll,ReplaceNoneWithTimings,MergeTimings};
-use crate::{read_pbf,write_pbf,read_file_block};
-use crate::convertblocks::make_convert_minimal_block_parts;
-use crate::read_file_block::{FileBlock,read_all_blocks_with_progbar};
-use crate::header_block::HeaderType;
-use crate::writefile::{WriteFile,};
+use crate::pbfformat::{read_pbf,write_pbf,read_file_block};
+use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
+use crate::pbfformat::read_file_block::{FileBlock,read_all_blocks_with_progbar};
+use crate::pbfformat::header_block::HeaderType;
+use crate::pbfformat::writefile::{WriteFile,};
 
 use std::sync::{mpsc,Arc,Mutex};
 use std::thread;
@@ -14,9 +14,9 @@ use std::fmt;
 use std::io::{Result,Error,ErrorKind,BufReader,SeekFrom,Seek};
 use std::fs::File;
 
-use super::{Timings,OtherData,WayNodeVals,FileLocs,NodeWayNodes,CallFinishFileBlocks};
-use super::write_quadtrees::{WrapWriteFileVec,WrapWriteFile};
-use super::packwaynodes::{WayNodeTile,};
+use crate::calcqts::{Timings,OtherData,WayNodeVals,FileLocs,NodeWayNodes,CallFinishFileBlocks};
+use crate::calcqts::write_quadtrees::{WrapWriteFileVec,WrapWriteFile};
+use crate::calcqts::packwaynodes::{WayNodeTile,};
 
 pub struct NodeWayNodeComb {
     pub id: i64,

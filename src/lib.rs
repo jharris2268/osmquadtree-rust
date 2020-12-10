@@ -1,17 +1,15 @@
-pub mod read_pbf;
-pub mod read_file_block;
-pub mod write_pbf;
-pub mod header_block;
-pub mod writefile;
+
 pub mod count;
-pub mod calcqts;
 pub mod callback;
 pub mod stringutils;
 pub mod utils;
-pub mod convertblocks;
+
+pub mod calcqts;
 pub mod sortblocks;
 pub mod update;
 pub mod elements;
+pub mod mergechanges;
+pub mod pbfformat;
 
 #[cfg(test)]
 mod tests {

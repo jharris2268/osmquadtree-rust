@@ -6,8 +6,8 @@ use std::fs::File;
 use std::io::{Result,BufReader};
 use std::collections::BTreeMap;
 use crate::elements::Bbox;
-use crate::header_block;
-use crate::read_file_block;
+use crate::pbfformat::header_block;
+use crate::pbfformat::read_file_block;
 
 #[derive(Debug,Deserialize,Serialize)]
 #[serde(rename_all = "PascalCase")]

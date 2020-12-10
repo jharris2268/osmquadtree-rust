@@ -1,18 +1,15 @@
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use super::node;
-use osmquadtree::read_pbf;
-use super::quadtree;
-use super::tags;
-use super::info::Info;
-use super::common::{Changetype,PackStringTable};
-use osmquadtree::write_pbf;
+use crate::elements::node;
+use crate::pbfformat::read_pbf;
+use crate::elements::quadtree;
+use crate::elements::tags;
+use crate::elements::info::Info;
+use crate::elements::common::{Changetype,PackStringTable};
+use crate::pbfformat::write_pbf;
 use std::io::{Result,Error,ErrorKind};
 
-use super::relation::ElementType;
-use super::idset::IdSet;
+use crate::elements::relation::ElementType;
+use crate::elements::idset::IdSet;
 
 fn check_id(id: i64, idset: Option<&IdSet>) -> bool {
     match idset {

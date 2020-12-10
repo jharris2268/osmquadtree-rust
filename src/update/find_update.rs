@@ -1,18 +1,14 @@
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
 
-
-use osmquadtree::update::{FilelistEntry, read_xml_change,check_index_file,ChangeBlock};
-use osmquadtree::utils::{Timings,MergeTimings,Timer,ThreadTimer};
-use osmquadtree::callback::{Callback,CallbackMerge,CallFinish};
-use osmquadtree::header_block;
-use osmquadtree::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,Way,Relation,ElementType,Bbox};
-use osmquadtree::read_file_block;
-use osmquadtree::sortblocks::{QuadtreeTree,WriteFileInternalLocs};
-use osmquadtree::stringutils::StringUtils;
+use crate::update::{FilelistEntry, read_xml_change,check_index_file,ChangeBlock};
+use crate::utils::{Timings,MergeTimings,Timer,ThreadTimer};
+use crate::callback::{Callback,CallbackMerge,CallFinish};
+use crate::pbfformat::header_block;
+use crate::elements::{IdSet,Quadtree,PrimitiveBlock,Changetype,Node,Way,Relation,ElementType,Bbox};
+use crate::pbfformat::read_file_block;
+use crate::sortblocks::{QuadtreeTree,WriteFileInternalLocs};
+use crate::stringutils::StringUtils;
 
 use std::fs::File;
 use std::collections::{BTreeSet,BTreeMap};

@@ -1,6 +1,6 @@
 
-use super::primitive_block::{ElementType};
-//use super::minimal_block::{MinimalNode,MinimalWay,MinimalRelation,MinimalBlock};
+use crate::elements::primitive_block::{ElementType};
+
 
 use std::collections::BTreeSet;
 use std::fmt;

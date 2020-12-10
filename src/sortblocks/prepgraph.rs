@@ -6,18 +6,16 @@ use std::io;
 use std::io::{BufReader,Write};
 use std::collections::BTreeMap;
 
-mod osmquadtree { 
-    pub use super::super::super::*;
-}
 
-use osmquadtree::elements::Quadtree;
-use osmquadtree::sortblocks::quadtreetree::{QuadtreeTree,find_tree_groups};
-use osmquadtree::elements::QuadtreeBlock;
-use osmquadtree::read_file_block::{FileBlock,ReadFileBlocks};
-use osmquadtree::callback::{CallbackSync,CallFinish,Callback,CallbackMerge};
-use osmquadtree::utils::{Checktime,ReplaceNoneWithTimings,CallAll,MergeTimings,Timer};
 
-use osmquadtree::sortblocks::{Timings,OtherData};
+use crate::elements::Quadtree;
+use crate::sortblocks::quadtreetree::{QuadtreeTree,find_tree_groups};
+use crate::elements::QuadtreeBlock;
+use crate::pbfformat::read_file_block::{FileBlock,ReadFileBlocks};
+use crate::callback::{CallbackSync,CallFinish,Callback,CallbackMerge};
+use crate::utils::{Checktime,ReplaceNoneWithTimings,CallAll,MergeTimings,Timer};
+
+use crate::sortblocks::{Timings,OtherData};
     
 struct AddAll {
     groups: Option<Box<QuadtreeTree>>,

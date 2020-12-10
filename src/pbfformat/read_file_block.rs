@@ -3,15 +3,15 @@ use std::io;
 use std::io::{BufReader,Read,Write,ErrorKind,Cursor,Seek,SeekFrom};
 
 
-extern crate flate2;
-use self::flate2::read::ZlibDecoder;
-use self::flate2::write::ZlibEncoder;
+//extern crate flate2;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
 
 
-use super::read_pbf;
-use super::write_pbf;
-use super::callback::CallFinish;
-use super::utils::{Checktime};
+use crate::pbfformat::read_pbf;
+use crate::pbfformat::write_pbf;
+use crate::callback::CallFinish;
+use crate::utils::{Checktime};
 use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn read_file_data<R: Read>(file: &mut R, nbytes: u64) -> io::Result<Vec<u8>> {

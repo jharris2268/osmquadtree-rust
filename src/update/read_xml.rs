@@ -1,12 +1,10 @@
 use std::io::{BufRead,Error,Result,ErrorKind};
 use std::collections::BTreeMap;
 
-mod osmquadtree {
-    pub use super::super::super::*;
-}
 
-use osmquadtree::elements::{Node,Way,Relation,Tag,Member,Info,ElementType,Changetype};
-use osmquadtree::utils::Checktime;
+
+use crate::elements::{Node,Way,Relation,Tag,Member,Info,ElementType,Changetype};
+use crate::utils::Checktime;
 
 use quick_xml::Reader;
 use quick_xml::events::{Event,BytesStart};
