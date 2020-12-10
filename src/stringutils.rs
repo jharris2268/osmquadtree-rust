@@ -7,4 +7,3 @@ impl StringUtils for String {
         self.chars().skip(start).take(len).collect()
     }
 }
-

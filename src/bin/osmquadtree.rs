@@ -1,80 +1,82 @@
 extern crate clap;
 
-use clap::{App, SubCommand,AppSettings,Arg,value_t};
+use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
 
-use osmquadtree::calcqts::{run_calcqts,run_calcqts_inmem};
+use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem};
+use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem};
+use osmquadtree::update::{run_update, run_update_initial};
 use osmquadtree::utils::parse_timestamp;
-use osmquadtree::sortblocks::{find_groups,sort_blocks, sort_blocks_inmem};
-use osmquadtree::update::{run_update,run_update_initial};
 
-use std::io::{Error,ErrorKind,Result};
+use std::io::{Error, ErrorKind, Result};
 
-fn run_sortblocks(infn: &str, qtsfn: Option<&str>, outfn: Option<&str>, 
-    maxdepth: usize, target: i64, mut mintarget: i64, use_inmem: bool,
+fn run_sortblocks(
+    infn: &str,
+    qtsfn: Option<&str>,
+    outfn: Option<&str>,
+    maxdepth: usize,
+    target: i64,
+    mut mintarget: i64,
+    use_inmem: bool,
     //splitat: i64, tempinmem: bool, limit: usize,
-    timestamp: Option<&str>, numchan: usize) -> Result<()> {
-    
+    timestamp: Option<&str>,
+    numchan: usize,
+) -> Result<()> {
     let mut splitat = 0i64;
-    let tempinmem = true; 
-    let mut limit=0usize;
-    
-    
-    
-    if splitat==0 {
+    let tempinmem = true;
+    let mut limit = 0usize;
+
+    if splitat == 0 {
         splitat = 3000000i64 / target;
-        
     }
     let qtsfn_ = match qtsfn {
         Some(q) => String::from(q),
-        None => format!("{}-qts.pbf", &infn[0..infn.len()-4])
+        None => format!("{}-qts.pbf", &infn[0..infn.len() - 4]),
     };
     let qtsfn = &qtsfn_;
-    
+
     let outfn_ = match outfn {
         Some(q) => String::from(q),
-        None => format!("{}-blocks.pbf", &infn[0..infn.len()-4])
+        None => format!("{}-blocks.pbf", &infn[0..infn.len() - 4]),
     };
     let outfn = &outfn_;
-    
+
     let timestamp = match timestamp {
-        Some(t) => { parse_timestamp(t)? },
-        None => 0
+        Some(t) => parse_timestamp(t)?,
+        None => 0,
     };
-    
-    
+
     if mintarget < 0 {
-        mintarget = target/2;
+        mintarget = target / 2;
     }
-    
+
     let groups = find_groups(&qtsfn, numchan, maxdepth, target, mintarget)?;
     println!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
         limit = 60000000usize / (groups.len() / (splitat as usize));
         if tempinmem {
-            limit = usize::max(1000, limit/ 10);
+            limit = usize::max(1000, limit / 10);
         }
-        
     }
     if use_inmem {
         sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp)?;
     } else {
-        sort_blocks(&infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit, timestamp)?;
+        sort_blocks(
+            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit, timestamp,
+        )?;
     }
-    
+
     Ok(())
 }
-
 
 fn run_update_w(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Result<()> {
-    let t = run_update(prfx,limit,as_demo,numchan)?;
-    for (a,b) in t {
-        println!("{:-50}: {:0.1}s", a,b);
+    let t = run_update(prfx, limit, as_demo, numchan)?;
+    for (a, b) in t {
+        println!("{:-50}: {:0.1}s", a, b);
     }
     Ok(())
 }
-
 
 fn main() {
     // basic app information
@@ -163,90 +165,97 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
         );
-        
-        
-    let mut help=Vec::new();
+
+    let mut help = Vec::new();
     app.write_help(&mut help).expect("?");
-    
-    let res = 
-        match app.get_matches().subcommand() {
-            ("count", Some(count)) => { run_count(
-                    count.value_of("INPUT").unwrap(),
-                    count.is_present("PRIMITIVE"),
-                    value_t!(count,"NUMCHAN",usize).unwrap_or(4),
-                    count.value_of("FILTER"))
-                    },
-            ("calcqts", Some(calcqts)) => { run_calcqts(
-                    calcqts.value_of("INPUT").unwrap(),
-                    calcqts.value_of("QTSFN"),
-                    value_t!(calcqts,"QT_LEVEL",usize).unwrap_or(17),
-                    value_t!(calcqts,"QT_BUFFER",f64).unwrap_or(0.05),
-                    calcqts.is_present("SIMPLE"),
-                    !calcqts.is_present("COMBINED"), //seperate
-                    true, //resort_waynodes
-                    value_t!(calcqts,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("calcqts_inmem", Some(calcqts)) => { run_calcqts_inmem(
-                    calcqts.value_of("INPUT").unwrap(),
-                    calcqts.value_of("QTSFN"),
-                    value_t!(calcqts,"QT_LEVEL",usize).unwrap_or(17),
-                    value_t!(calcqts,"QT_BUFFER",f64).unwrap_or(0.05),
-                    value_t!(calcqts,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("sortblocks", Some(sortblocks)) => { run_sortblocks(
-                    sortblocks.value_of("INPUT").unwrap(),
-                    sortblocks.value_of("QTSFN"),
-                    sortblocks.value_of("OUTFN"),
-                    value_t!(sortblocks,"QT_MAX_LEVEL",usize).unwrap_or(17),
-                    value_t!(sortblocks,"TARGET",i64).unwrap_or(40000),
-                    value_t!(sortblocks,"MINTARGET",i64).unwrap_or(-1),
-                    false, //use_inmem
-                    sortblocks.value_of("TIMESTAMP"),
-                    value_t!(sortblocks,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("sortblocks_inmem", Some(sortblocks)) => { run_sortblocks(
-                    sortblocks.value_of("INPUT").unwrap(),
-                    sortblocks.value_of("QTSFN"),
-                    sortblocks.value_of("OUTFN"),
-                    value_t!(sortblocks,"QT_MAX_LEVEL",usize).unwrap_or(17),
-                    value_t!(sortblocks,"TARGET",i64).unwrap_or(40000),
-                    value_t!(sortblocks,"MINTARGET",i64).unwrap_or(-1),
-                    true, //use_inmem
-                    sortblocks.value_of("TIMESTAMP"),
-                    value_t!(sortblocks,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("update_initial", Some(update)) => { run_update_initial(
-                    update.value_of("INPUT").unwrap(),
-                    update.value_of("INFN").unwrap(),
-                    update.value_of("TIMESTAMP").unwrap(),
-                    value_t!(update, "INITIAL_STATE", i64).unwrap_or(0),
-                    update.value_of("DIFFS_LOCATION").unwrap(),
-                    value_t!(update,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("update", Some(update)) => { run_update_w(
-                    update.value_of("INPUT").unwrap(),
-                    value_t!(update, "LIMIT", usize).unwrap_or(0),
-                    false, //as_demo
-                    value_t!(update,"NUMCHAN",usize).unwrap_or(4))
-                    },
-            ("update_demo", Some(update)) => { run_update_w(
-                    update.value_of("INPUT").unwrap(),
-                    value_t!(update, "LIMIT", usize).unwrap_or(0),
-                    true, //as_demo
-                    value_t!(update,"NUMCHAN",usize).unwrap_or(4))
-                    },
-                    
-            _ => { Err(Error::new(ErrorKind::Other,"??")) }
-        };
-    
-    
+
+    let res = match app.get_matches().subcommand() {
+        ("count", Some(count)) => run_count(
+            count.value_of("INPUT").unwrap(),
+            count.is_present("PRIMITIVE"),
+            value_t!(count, "NUMCHAN", usize).unwrap_or(4),
+            count.value_of("FILTER"),
+        ),
+        ("calcqts", Some(calcqts)) => {
+            run_calcqts(
+                calcqts.value_of("INPUT").unwrap(),
+                calcqts.value_of("QTSFN"),
+                value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
+                value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+                calcqts.is_present("SIMPLE"),
+                !calcqts.is_present("COMBINED"), //seperate
+                true,                            //resort_waynodes
+                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(4),
+            )
+        }
+        ("calcqts_inmem", Some(calcqts)) => run_calcqts_inmem(
+            calcqts.value_of("INPUT").unwrap(),
+            calcqts.value_of("QTSFN"),
+            value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
+            value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(4),
+        ),
+        ("sortblocks", Some(sortblocks)) => {
+            run_sortblocks(
+                sortblocks.value_of("INPUT").unwrap(),
+                sortblocks.value_of("QTSFN"),
+                sortblocks.value_of("OUTFN"),
+                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(17),
+                value_t!(sortblocks, "TARGET", i64).unwrap_or(40000),
+                value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
+                false, //use_inmem
+                sortblocks.value_of("TIMESTAMP"),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(4),
+            )
+        }
+        ("sortblocks_inmem", Some(sortblocks)) => {
+            run_sortblocks(
+                sortblocks.value_of("INPUT").unwrap(),
+                sortblocks.value_of("QTSFN"),
+                sortblocks.value_of("OUTFN"),
+                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(17),
+                value_t!(sortblocks, "TARGET", i64).unwrap_or(40000),
+                value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
+                true, //use_inmem
+                sortblocks.value_of("TIMESTAMP"),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(4),
+            )
+        }
+        ("update_initial", Some(update)) => run_update_initial(
+            update.value_of("INPUT").unwrap(),
+            update.value_of("INFN").unwrap(),
+            update.value_of("TIMESTAMP").unwrap(),
+            value_t!(update, "INITIAL_STATE", i64).unwrap_or(0),
+            update.value_of("DIFFS_LOCATION").unwrap(),
+            value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+        ),
+        ("update", Some(update)) => {
+            run_update_w(
+                update.value_of("INPUT").unwrap(),
+                value_t!(update, "LIMIT", usize).unwrap_or(0),
+                false, //as_demo
+                value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+            )
+        }
+        ("update_demo", Some(update)) => {
+            run_update_w(
+                update.value_of("INPUT").unwrap(),
+                value_t!(update, "LIMIT", usize).unwrap_or(0),
+                true, //as_demo
+                value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+            )
+        }
+
+        _ => Err(Error::new(ErrorKind::Other, "??")),
+    };
+
     match res {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(err) => {
             println!("FAILED: {}", err);
             println!("{}", String::from_utf8(help).unwrap());
         }
     }
-    
+
     //println!("count: {:?}", matches);
 }

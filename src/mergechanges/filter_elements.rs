@@ -1,2 +1,1 @@
-use crate::elements::{MinimalBlock,Quadtree,Bbox};
-
+use crate::elements::{Bbox, MinimalBlock, Quadtree};

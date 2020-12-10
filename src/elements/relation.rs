@@ -1,36 +1,44 @@
-
 use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 
-use crate::elements::common::{read_common,pack_head,pack_tail,pack_length,common_cmp,common_eq,Changetype,PackStringTable,SetCommon};
+use crate::elements::common::{
+    common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, Changetype,
+    PackStringTable, SetCommon,
+};
 use crate::elements::info::Info;
-use crate::elements::tags::Tag;
 use crate::elements::quadtree::Quadtree;
+use crate::elements::tags::Tag;
 
-use std::io::{Result,Error,ErrorKind};
 use core::cmp::Ordering;
+use std::io::{Error, ErrorKind, Result};
 
-#[derive(Debug,Eq,Clone)]
+#[derive(Debug, Eq, Clone)]
 pub struct Relation {
     pub id: i64,
     pub changetype: Changetype,
-    pub info: Option<Info>, 
+    pub info: Option<Info>,
     pub tags: Vec<Tag>,
     pub members: Vec<Member>,
     pub quadtree: Quadtree,
 }
 
-#[derive(Debug,Eq,PartialEq,Clone,Ord,PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
 pub enum ElementType {
     Node,
     Way,
-    Relation
+    Relation,
 }
 
 pub fn make_elementtype(t: u64) -> ElementType {
-    if t==0 { return ElementType::Node; }
-    if t==1 { return ElementType::Way; }
-    if t==2 { return ElementType::Relation; }
+    if t == 0 {
+        return ElementType::Node;
+    }
+    if t == 1 {
+        return ElementType::Way;
+    }
+    if t == 2 {
+        return ElementType::Relation;
+    }
     panic!("wrong type");
 }
 
@@ -42,56 +50,75 @@ fn elementtype_int(t: &ElementType) -> u64 {
     }
 }
 
-#[derive(Debug,Eq,PartialEq,Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Member {
-    pub role: String, 
+    pub role: String,
     pub mem_type: ElementType,
     pub mem_ref: i64,
 }
 impl Member {
     pub fn new(role: String, mem_type: ElementType, mem_ref: i64) -> Member {
-        Member{role,mem_type,mem_ref}
+        Member {
+            role,
+            mem_type,
+            mem_ref,
+        }
     }
 }
 impl Relation {
     pub fn new(id: i64, changetype: Changetype) -> Relation {
-        Relation{id: id, changetype: changetype, info: None, tags: Vec::new(), members: Vec::new(), quadtree: Quadtree::empty()}
+        Relation {
+            id: id,
+            changetype: changetype,
+            info: None,
+            tags: Vec::new(),
+            members: Vec::new(),
+            quadtree: Quadtree::empty(),
+        }
     }
-    pub fn read(changetype: Changetype, strings: &Vec<String>, data: &[u8], minimal: bool) -> Result<Relation> {
-        
-        let mut rel = Relation::new(0,changetype);
-        
-        let tgs = read_pbf::read_all_tags(&data,0);
+    pub fn read(
+        changetype: Changetype,
+        strings: &Vec<String>,
+        data: &[u8],
+        minimal: bool,
+    ) -> Result<Relation> {
+        let mut rel = Relation::new(0, changetype);
+
+        let tgs = read_pbf::read_all_tags(&data, 0);
         //let mut rem=Vec::new();
         //(rel.id, rel.info, rel.tags, rel.quadtree, rem) = read_common(&strings,&tgs, minimal)?;
         let rem = read_common(&mut rel, &strings, &tgs, minimal)?;
-        
+
         let mut roles = Vec::new();
         let mut refs = Vec::new();
         let mut types = Vec::new();
-        
+
         for t in rem {
             match t {
                 read_pbf::PbfTag::Data(8, d) => {
                     if !minimal {
                         roles = read_pbf::read_packed_int(&d)
                     }
-                },
-                    
+                }
+
                 read_pbf::PbfTag::Data(9, d) => refs = read_pbf::read_delta_packed_int(&d),
                 read_pbf::PbfTag::Data(10, d) => types = read_pbf::read_packed_int(&d),
-                _ => {},
+                _ => {}
             }
         }
-        if types.len()!= refs.len() || (!minimal && types.len() != roles.len()) {
-            return Err(Error::new(ErrorKind::Other,"member lens don't match"));
+        if types.len() != refs.len() || (!minimal && types.len() != roles.len()) {
+            return Err(Error::new(ErrorKind::Other, "member lens don't match"));
         }
-        if types.len()!=0 {
+        if types.len() != 0 {
             for i in 0..types.len() {
                 if minimal {
-                    rel.members.push(Member{role: String::from(""), mem_type: make_elementtype(types[i]), mem_ref: refs[i]});
+                    rel.members.push(Member {
+                        role: String::from(""),
+                        mem_type: make_elementtype(types[i]),
+                        mem_ref: refs[i],
+                    });
                 } else {
-                    let m = Member{
+                    let m = Member {
                         role: strings[roles[i] as usize].clone(),
                         mem_type: make_elementtype(types[i]),
                         mem_ref: refs[i],
@@ -100,54 +127,86 @@ impl Relation {
                 }
             }
         }
-        
+
         Ok(rel)
     }
-    pub fn pack(&self, pack_strings: &mut Box<PackStringTable>, include_qts: bool) -> Result<Vec<u8>> {
-        
-        
-        let l = pack_length(&self.tags, pack_strings, include_qts)
-            + self.members.len()*10 + 6;
-        
+    pub fn pack(
+        &self,
+        pack_strings: &mut Box<PackStringTable>,
+        include_qts: bool,
+    ) -> Result<Vec<u8>> {
+        let l = pack_length(&self.tags, pack_strings, include_qts) + self.members.len() * 10 + 6;
+
         let mut res = Vec::with_capacity(l);
-        pack_head(&self.id, &self.info, &self.tags, &mut res,pack_strings)?;
-        
+        pack_head(&self.id, &self.info, &self.tags, &mut res, pack_strings)?;
+
         if !self.members.is_empty() {
-            let roles = write_pbf::pack_int(self.members.iter().map( |m| { pack_strings.call(&m.role) }));
-            let refs = write_pbf::pack_delta_int(self.members.iter().map( |m| { m.mem_ref }));
-            let types = write_pbf::pack_int(self.members.iter().map( |m| { elementtype_int(&m.mem_type) }));
-            
+            let roles =
+                write_pbf::pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
+            let refs = write_pbf::pack_delta_int(self.members.iter().map(|m| m.mem_ref));
+            let types =
+                write_pbf::pack_int(self.members.iter().map(|m| elementtype_int(&m.mem_type)));
+
             write_pbf::pack_data(&mut res, 8, &roles);
             write_pbf::pack_data(&mut res, 9, &refs);
             write_pbf::pack_data(&mut res, 10, &types);
         }
         pack_tail(&self.quadtree, &mut res, include_qts)?;
         Ok(res)
-        
+
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
 
 impl SetCommon for Relation {
-    fn set_id(&mut self, id: i64) { self.id=id; }
-    fn set_info(&mut self, info: Info) { self.info=Some(info); }
-    fn set_tags(&mut self, tags: Vec<Tag>) { self.tags=tags; }
-    fn set_quadtree(&mut self, quadtree: Quadtree) { self.quadtree=quadtree; }
+    fn set_id(&mut self, id: i64) {
+        self.id = id;
+    }
+    fn set_info(&mut self, info: Info) {
+        self.info = Some(info);
+    }
+    fn set_tags(&mut self, tags: Vec<Tag>) {
+        self.tags = tags;
+    }
+    fn set_quadtree(&mut self, quadtree: Quadtree) {
+        self.quadtree = quadtree;
+    }
 }
 
 impl Ord for Relation {
     fn cmp(&self, other: &Self) -> Ordering {
-        common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)
+        common_cmp(
+            &self.id,
+            &self.info,
+            &self.changetype,
+            &other.id,
+            &other.info,
+            &other.changetype,
+        )
     }
 }
 impl PartialOrd for Relation {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(common_cmp(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype))
+        Some(common_cmp(
+            &self.id,
+            &self.info,
+            &self.changetype,
+            &other.id,
+            &other.info,
+            &other.changetype,
+        ))
     }
 }
 
 impl PartialEq for Relation {
     fn eq(&self, other: &Self) -> bool {
-        common_eq(&self.id,&self.info,&self.changetype, &other.id,&other.info,&other.changetype)
+        common_eq(
+            &self.id,
+            &self.info,
+            &self.changetype,
+            &other.id,
+            &other.info,
+            &other.changetype,
+        )
     }
-}  
+}

@@ -1,4 +1,4 @@
-#[derive(Debug,Eq,PartialEq,Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Tag {
     pub key: String,
     pub val: String,
@@ -6,6 +6,6 @@ pub struct Tag {
 
 impl Tag {
     pub fn new(key: String, val: String) -> Tag {
-        Tag{key,val}
+        Tag { key, val }
     }
 }
