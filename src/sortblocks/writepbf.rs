@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 
 use crate::callback::CallFinish;
-use crate::elements::{PrimitiveBlock, Quadtree};
+use crate::elements::{PrimitiveBlock, Quadtree,Bbox};
 use crate::pbfformat::header_block::{make_header_block_stored_locs, HeaderType};
 use crate::pbfformat::read_file_block::pack_file_block;
 use crate::pbfformat::writefile;
@@ -21,6 +21,11 @@ impl WriteFile {
     pub fn new(outfn: &str, header_type: HeaderType) -> WriteFile {
         WriteFile {
             writefile: writefile::WriteFile::new(outfn, header_type),
+        }
+    }
+    pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
+        WriteFile {
+            writefile: writefile::WriteFile::with_bbox(outfn, header_type, bbox),
         }
     }
 }

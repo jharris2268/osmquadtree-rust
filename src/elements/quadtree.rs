@@ -113,6 +113,51 @@ impl Bbox {
     pub fn empty() -> Bbox {
         Bbox::new(1800000000, 900000000, -1800000000, -900000000)
     }
+    
+    pub fn from_str(fstr: &str) -> Result<Bbox> {
+        let vv: Vec<&str> = fstr.split(",").collect();
+        if vv.len() != 4 {
+            return Err(Error::new(ErrorKind::Other, "expected four vals"));
+        }
+        let mut vvi = Vec::new();
+        for v in vv {
+            vvi.push(v.parse().unwrap());
+        }
+        Ok(Bbox::new(vvi[0], vvi[1], vvi[2], vvi[3]))
+    }
+    
+    pub fn contains(&self,other: &Bbox) -> bool {
+        if self.minlon > other.minlon {
+            return false;
+        }
+        if self.minlat > other.minlat {
+            return false;
+        }
+        if self.maxlon < other.maxlon {
+            return false;
+        }
+        if self.maxlat < other.maxlat {
+            return false;
+        }
+        true
+    }
+    pub fn contains_point(&self, ln: i32, lt: i32) -> bool {
+        if self.minlon > ln {
+            return false;
+        }
+        if self.minlat > lt {
+            return false;
+        }
+        if self.maxlon < ln {
+            return false;
+        }
+        if self.maxlat < lt {
+            return false;
+        }
+        true
+    }
+        
+    
     pub fn expand(&mut self, lon: i32, lat: i32) {
         if lon < self.minlon {
             self.minlon = lon;

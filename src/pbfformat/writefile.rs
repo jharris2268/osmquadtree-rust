@@ -1,4 +1,5 @@
 use crate::callback::CallFinish;
+use crate::elements::Bbox;
 use crate::pbfformat::header_block::{make_header_block, HeaderType};
 use crate::pbfformat::read_file_block::pack_file_block;
 use crate::utils::ThreadTimer;
@@ -20,19 +21,23 @@ pub struct WriteFile {
 
 impl WriteFile {
     pub fn new(outfn: &str, header_type: HeaderType) -> WriteFile {
+        WriteFile::with_bbox(outfn, header_type, None)
+    }
+    
+    pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
         let mut outf = File::create(outfn).expect("failed to create");
         let mut write_external_locs = false;
         match header_type {
             HeaderType::None => {}
             HeaderType::NoLocs => {
                 outf.write_all(
-                    &pack_file_block("OSMHeader", &make_header_block(false), true).expect("?"),
+                    &pack_file_block("OSMHeader", &make_header_block(false, bbox), true).expect("?"),
                 )
                 .expect("?");
             }
             HeaderType::ExternalLocs => {
                 outf.write_all(
-                    &pack_file_block("OSMHeader", &make_header_block(true), true).expect("?"),
+                    &pack_file_block("OSMHeader", &make_header_block(true, bbox), true).expect("?"),
                 )
                 .expect("?");
                 write_external_locs = true;

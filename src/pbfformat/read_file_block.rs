@@ -466,8 +466,8 @@ where
 }
 
 pub fn read_all_blocks_parallel_prog<T, U, F>(
-    mut fbufs: Vec<F>,
-    locs: Vec<(usize, Vec<(usize, u64)>)>,
+    fbufs: &mut Vec<F>,
+    locs: &Vec<(usize, Vec<(usize, u64)>)>,
     mut pp: Box<T>,
     pb: &ProgBarWrap,
 ) -> (U, f64)

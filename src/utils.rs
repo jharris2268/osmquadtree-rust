@@ -346,3 +346,11 @@ pub fn trim_memory() -> bool {
     );
     b == 1
 }
+
+pub fn as_int(v: f64) -> i32 {
+    if v < 0.0 {
+        return ((v * 10000000.0) - 0.5) as i32;
+    }
+
+    return ((v * 10000000.0) + 0.5) as i32;
+}

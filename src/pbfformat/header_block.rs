@@ -1,4 +1,4 @@
-use crate::elements::Quadtree;
+use crate::elements::{Quadtree,Bbox};
 use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 
@@ -135,7 +135,7 @@ impl HeaderBlock {
     }
 }
 
-fn pack_bbox() -> Vec<u8> {
+fn pack_bbox_planet() -> Vec<u8> {
     let mut res = Vec::new();
     write_pbf::pack_value(&mut res, 1, write_pbf::zig_zag(-180000000000));
     write_pbf::pack_value(&mut res, 2, write_pbf::zig_zag(180000000000));
@@ -143,11 +143,22 @@ fn pack_bbox() -> Vec<u8> {
     write_pbf::pack_value(&mut res, 4, write_pbf::zig_zag(-90000000000));
     res
 }
+fn pack_bbox(bbox: &Bbox) -> Vec<u8> {
+    let mut res = Vec::new();
+    write_pbf::pack_value(&mut res, 1, write_pbf::zig_zag((bbox.minlon as i64) * 100));
+    write_pbf::pack_value(&mut res, 2, write_pbf::zig_zag((bbox.maxlon as i64) * 100));
+    write_pbf::pack_value(&mut res, 3, write_pbf::zig_zag((bbox.maxlat as i64) * 100));
+    write_pbf::pack_value(&mut res, 4, write_pbf::zig_zag((bbox.minlat as i64) * 100));
+    res
+}
 
-pub fn make_header_block(withlocs: bool) -> Vec<u8> {
+pub fn make_header_block(withlocs: bool, bbox: Option<&Bbox>) -> Vec<u8> {
     let mut res = Vec::new();
 
-    write_pbf::pack_data(&mut res, 1, &pack_bbox());
+    match bbox {
+        Some(bbox) => { write_pbf::pack_data(&mut res, 1, &pack_bbox(bbox)); },
+        None => { write_pbf::pack_data(&mut res, 1, &pack_bbox_planet()); },
+    }
     write_pbf::pack_data(&mut res, 4, b"OsmSchema-V0.6");
     write_pbf::pack_data(&mut res, 4, b"DenseNodes");
     write_pbf::pack_data(&mut res, 16, b"osmquadtree-cpp"); //b"osmquadtree-rust"
@@ -170,7 +181,7 @@ fn pack_index_item(q: &Quadtree, _ischange: bool, l: u64) -> Vec<u8> {
 pub fn make_header_block_stored_locs(ischange: bool, locs: Vec<(Quadtree, u64)>) -> Vec<u8> {
     let mut res = Vec::new();
 
-    write_pbf::pack_data(&mut res, 1, &pack_bbox());
+    write_pbf::pack_data(&mut res, 1, &pack_bbox_planet());
     write_pbf::pack_data(&mut res, 4, b"OsmSchema-V0.6");
     write_pbf::pack_data(&mut res, 4, b"DenseNodes");
     write_pbf::pack_data(&mut res, 16, b"osmquadtree-cpp"); //b"osmquadtree-rust"

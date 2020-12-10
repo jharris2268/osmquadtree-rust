@@ -704,17 +704,7 @@ impl CallFinish for CountMinimal {
     }
 }
 
-fn parse_bbox(fstr: &str) -> Result<Bbox> {
-    let vv: Vec<&str> = fstr.split(",").collect();
-    if vv.len() != 4 {
-        return Err(Error::new(ErrorKind::Other, "expected four vals"));
-    }
-    let mut vvi = Vec::new();
-    for v in vv {
-        vvi.push(v.parse().unwrap());
-    }
-    Ok(Bbox::new(vvi[0], vvi[1], vvi[2], vvi[3]))
-}
+
 
 pub fn run_count(
     fname: &str,
@@ -727,7 +717,7 @@ pub fn run_count(
     }*/
     let filter = match filter_in {
         None => None,
-        Some(s) => Some(parse_bbox(s)?),
+        Some(s) => Some(Bbox::from_str(s)?),
     };
 
     let f = File::open(fname).expect("file not present");
@@ -833,7 +823,7 @@ pub fn run_count(
         }
         println!("{}", cc);
     } else {
-        let (fbufs, locsv) = get_file_locs(fname, filter).expect("?");
+        let (mut fbufs, locsv) = get_file_locs(fname, filter).expect("?");
 
         let pb = ProgBarWrap::new(100);
 
@@ -870,7 +860,7 @@ pub fn run_count(
             }
         }
         let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        let (a, _b) = read_all_blocks_parallel_prog(fbufs, locsv, readb, &pb);
+        let (a, _b) = read_all_blocks_parallel_prog(&mut fbufs, &locsv, readb, &pb);
         pb.finish();
 
         let mut cc = Count::new();

@@ -40,10 +40,12 @@ pub fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
     serde_json::to_writer(&flfile, &filelist).expect("failed to write filelist json");
 }
 
+pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(usize, Vec<(usize, u64)>)>);
+
 pub fn get_file_locs(
     prfx: &str,
     filter: Option<Bbox>,
-) -> Result<(Vec<BufReader<File>>, Vec<(usize, Vec<(usize, u64)>)>)> {
+) -> Result<ParallelFileLocs> {
     let filelist = read_filelist(&prfx);
 
     //let pf = 100.0 / (std::fs::metadata(&format!("{}{}", fname, filelist[0].filename)).expect("fail").len() as f64);

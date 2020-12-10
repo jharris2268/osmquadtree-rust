@@ -8,7 +8,7 @@ use crate::elements::common::{
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
-
+use crate::elements::IdSet;
 use core::cmp::Ordering;
 use std::io::{Error, ErrorKind, Result};
 
@@ -76,6 +76,7 @@ impl Relation {
             quadtree: Quadtree::empty(),
         }
     }
+    
     pub fn read(
         changetype: Changetype,
         strings: &Vec<String>,
@@ -156,6 +157,17 @@ impl Relation {
 
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
+    
+    pub fn filter_relations(&mut self, ids: &IdSet) -> bool {
+        let nm = self.members.len();
+        for m in std::mem::take(&mut self.members) {
+            if ids.contains(m.mem_type.clone(),m.mem_ref) {
+                self.members.push(m);
+            }
+        }
+        self.members.len() != nm
+    }
+    
 }
 
 impl SetCommon for Relation {

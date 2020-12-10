@@ -6,8 +6,10 @@ use osmquadtree::count::run_count;
 
 use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem};
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem};
-use osmquadtree::update::{run_update, run_update_initial};
+use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::parse_timestamp;
+
+use osmquadtree::mergechanges::run_mergechanges_inmem;
 
 use std::io::{Error, ErrorKind, Result};
 
@@ -77,6 +79,18 @@ fn run_update_w(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Resu
     }
     Ok(())
 }
+
+fn write_index_file_w(prfx: &str, outfn: Option<&str>, numchan: usize) -> Result<()> {
+    match outfn {
+        Some(o) => write_index_file(prfx, o, numchan),
+        None => write_index_file(prfx, "", numchan)
+    };
+    Ok(())
+}
+
+    
+
+const NUMCHAN_DEFAULT: usize = 4;
 
 fn main() {
     // basic app information
@@ -164,6 +178,23 @@ fn main() {
                 .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
+        )
+        .subcommand(
+            SubCommand::with_name("write_index_file")   
+                .about("write pbf index file")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input file to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("out filename, defaults to INPUT-index.pbf"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
+        )
+        .subcommand(
+            SubCommand::with_name("mergechanges_inmem")   
+                .about("prep_bbox_filter")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, defaults to INPUT-index.pbf"))
+                .arg(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"))            
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
         );
 
     let mut help = Vec::new();
@@ -173,7 +204,7 @@ fn main() {
         ("count", Some(count)) => run_count(
             count.value_of("INPUT").unwrap(),
             count.is_present("PRIMITIVE"),
-            value_t!(count, "NUMCHAN", usize).unwrap_or(4),
+            value_t!(count, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             count.value_of("FILTER"),
         ),
         ("calcqts", Some(calcqts)) => {
@@ -185,7 +216,7 @@ fn main() {
                 calcqts.is_present("SIMPLE"),
                 !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes
-                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(4),
+                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
         ("calcqts_inmem", Some(calcqts)) => run_calcqts_inmem(
@@ -193,7 +224,7 @@ fn main() {
             calcqts.value_of("QTSFN"),
             value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
             value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
-            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(4),
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
         ("sortblocks", Some(sortblocks)) => {
             run_sortblocks(
@@ -205,7 +236,7 @@ fn main() {
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 false, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
-                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(4),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
         ("sortblocks_inmem", Some(sortblocks)) => {
@@ -218,7 +249,7 @@ fn main() {
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 true, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
-                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(4),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
         ("update_initial", Some(update)) => run_update_initial(
@@ -227,25 +258,40 @@ fn main() {
             update.value_of("TIMESTAMP").unwrap(),
             value_t!(update, "INITIAL_STATE", i64).unwrap_or(0),
             update.value_of("DIFFS_LOCATION").unwrap(),
-            value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+            value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
         ("update", Some(update)) => {
             run_update_w(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 false, //as_demo
-                value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+                value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        }
+        },
         ("update_demo", Some(update)) => {
             run_update_w(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 true, //as_demo
-                value_t!(update, "NUMCHAN", usize).unwrap_or(4),
+                value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        }
-
+            
+        },
+        ("write_index_file", Some(write)) => {
+            write_index_file_w(
+                write.value_of("INPUT").unwrap(),
+                write.value_of("OUTFN"),
+                value_t!(write, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("mergechanges_inmem", Some(filter)) => {
+            run_mergechanges_inmem(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("FILTER").unwrap(),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
         _ => Err(Error::new(ErrorKind::Other, "??")),
     };
 
