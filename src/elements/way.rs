@@ -131,3 +131,8 @@ impl PartialEq for Way {
         )
     }
 }
+impl crate::elements::WithId for Way {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}

@@ -16,10 +16,14 @@ pub use combine_block::{
     merge_changes_minimal, merge_changes_primitive,
 };
 pub use common::get_changetype;
-pub use idset::IdSet;
+pub use idset::{IdSet,IdSetSet,IdSetBool,IdSetAll};
 pub use minimal_block::{MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, QuadtreeBlock};
 pub use primitive_block::{
     Changetype, ElementType, Info, Member, Node, PrimitiveBlock, Relation, Tag, Way,
 };
 pub use quadtree::{Bbox, Quadtree};
 pub use relation::make_elementtype;
+
+pub trait WithId {
+    fn get_id(&self) -> i64;
+}

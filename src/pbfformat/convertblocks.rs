@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub fn read_primitive_blocks_combine(
     idx: i64,
     mut blocks: Vec<FileBlock>,
-    ids: Option<&IdSet>,
+    ids: Option<&dyn IdSet>,
 ) -> Result<PrimitiveBlock> {
     if blocks.is_empty() {
         return Ok(PrimitiveBlock::new(idx, 0));
@@ -58,15 +58,17 @@ pub fn make_read_primitive_blocks_combine_call_all<
 
 struct Rpbccai<O, V> {
     out: Box<O>,
-    ids: Arc<IdSet>,
+    ids: Arc<dyn IdSet>,
+    filter_relations: bool,
     x: PhantomData<V>,
     tm: f64,
 }
 impl<O, V> Rpbccai<O, V> {
-    pub fn new(out: Box<O>, ids: Arc<IdSet>) -> Rpbccai<O, V> {
+    pub fn new(out: Box<O>, ids: Arc<dyn IdSet>, filter_relations: bool) -> Rpbccai<O, V> {
         Rpbccai {
             out: out,
             ids: ids,
+            filter_relations: filter_relations,
             x: PhantomData,
             tm: 0.0,
         }
@@ -83,12 +85,17 @@ where
 
     fn call(&mut self, idx_blocks: (usize, Vec<FileBlock>)) {
         let tx = ThreadTimer::new();
-        let b = read_primitive_blocks_combine(
+        let mut b = read_primitive_blocks_combine(
             idx_blocks.0 as i64,
             idx_blocks.1,
             Some(self.ids.as_ref()),
         )
         .expect("?");
+        if self.filter_relations {
+            for r in b.relations.iter_mut() {
+                r.filter_relations(self.ids.as_ref());
+            }
+        }
         //println!("block {} {} nodes, {} ways, {} relations", b.quadtree.as_string(),b.nodes.len(),b.ways.len(),b.relations.len());
         self.tm += tx.since();
         self.out.call(b);
@@ -105,10 +112,11 @@ pub fn make_read_primitive_blocks_combine_call_all_idset<
     O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>>,
 >(
     out: Box<O>,
-    idset: Arc<IdSet>,
+    idset: Arc<dyn IdSet>,
+    filter_relations: bool
 ) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>>> {
     //Box::new(CallAll::new(out, "read_primitive_blocks_combine_idset", Box::new(move |pp| { wrap_read_primitive_blocks_combine(pp, Some(idset)) })))
-    Box::new(Rpbccai::new(out, idset))
+    Box::new(Rpbccai::new(out, idset, filter_relations))
 }
 
 pub fn read_minimal_blocks_combine(idx: i64, mut blocks: Vec<FileBlock>) -> Result<MinimalBlock> {

@@ -1,10 +1,9 @@
 use crate::elements::{Quadtree,Bbox};
 use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
-
 use serde_json;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, ErrorKind, Result,BufReader};
 
 #[derive(Debug)]
 pub struct IndexItem {
@@ -116,10 +115,12 @@ impl HeaderBlock {
     }
 
     fn read_file_locs(&mut self, filelocs_fn: &str) -> Result<()> {
+        
         let fl = File::open(filelocs_fn)?;
+        let mut flb = BufReader::new(fl);
         let ff: Vec<(i64, u64, u64)>;
 
-        match serde_json::from_reader(&fl) {
+        match serde_json::from_reader(&mut flb) {
             Ok(r) => {
                 ff = r;
             }
@@ -131,6 +132,7 @@ impl HeaderBlock {
             self.index
                 .push(IndexItem::new(Quadtree::new(a), false, b, c));
         }
+        
         Ok(())
     }
 }

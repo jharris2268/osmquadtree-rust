@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-//use std::io::{Read,Write};
-use crate::elements::Bbox;
+use crate::elements::{Bbox,Quadtree};
 use crate::pbfformat::header_block;
 use crate::pbfformat::read_file_block;
+use crate::utils::{parse_timestamp};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, Result};
@@ -31,7 +31,8 @@ impl FilelistEntry {
 
 pub fn read_filelist(prfx: &str) -> Vec<FilelistEntry> {
     let ff = File::open(format!("{}filelist.json", prfx)).expect("failed to open filelist file");
-    serde_json::from_reader(ff).expect("failed to read filelist")
+    let mut ffb = BufReader::new(ff);
+    serde_json::from_reader(&mut ffb).expect("failed to read filelist")
 }
 
 pub fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
@@ -40,16 +41,18 @@ pub fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
     serde_json::to_writer(&flfile, &filelist).expect("failed to write filelist json");
 }
 
-pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(usize, Vec<(usize, u64)>)>);
+pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(Quadtree, Vec<(usize, u64)>)>);
 
 pub fn get_file_locs(
     prfx: &str,
     filter: Option<Bbox>,
+    timestamp: Option<i64>
 ) -> Result<ParallelFileLocs> {
+    
+    
+    
     let filelist = read_filelist(&prfx);
-
-    //let pf = 100.0 / (std::fs::metadata(&format!("{}{}", fname, filelist[0].filename)).expect("fail").len() as f64);
-
+    
     let mut fbufs = Vec::new();
     let mut locs = BTreeMap::new();
 
@@ -57,58 +60,51 @@ pub fn get_file_locs(
         Some(_) => 8 * 1024,
         None => 5 * 1024 * 1024,
     };
-
+    let mut all_locs=0;
     for (i, fle) in filelist.iter().enumerate() {
+        let fle_ts = parse_timestamp(&fle.end_date)?;
+        if !timestamp.is_none() && fle_ts > timestamp.unwrap() {
+            break;
+        }
+        
         let fle_fn = format!("{}{}", prfx, fle.filename);
         let f = File::open(&fle_fn).expect("fail");
         let mut fbuf = BufReader::with_capacity(cap, f);
-
+        
         let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
         let filepos = read_file_block::file_position(&mut fbuf).expect("?");
         let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
-
+                
+        all_locs += head.index.len();
         for entry in head.index {
-            if !locs.contains_key(&entry.quadtree) {
-                if i != 0 {
-                    panic!(format!(
-                        "quadtree {} not in first file?",
-                        entry.quadtree.as_string()
-                    ));
+            if i==0 {
+                if filter.as_ref().is_none() || filter.as_ref().unwrap().overlaps(&entry.quadtree.as_bbox(0.05)) {
+                    locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+                    locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
                 }
-                locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+            } else {
+                if locs.contains_key(&entry.quadtree) {
+                    locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
+                }
             }
-
-            locs.get_mut(&entry.quadtree)
-                .unwrap()
-                .1
-                .push((i, entry.location));
         }
-
+        
         fbufs.push(fbuf);
+        
     }
-
-    //let bbox=osmquadtree::elements::Bbox::new(-5000000,495000000,13000000,535000000);
-
+    
     let mut locsv = Vec::new();
-    for (a, (_b, c)) in &locs {
-        match filter {
-            None => {
-                locsv.push((locsv.len(), c.clone()));
-            }
-            Some(ref bbox) => {
-                if bbox.overlaps(&a.as_bbox(0.05)) {
-                    locsv.push((locsv.len(), c.clone()));
-                }
-            }
-        }
+    for (a,(_b,c)) in locs {
+        locsv.push((a,c));
     }
 
+    
     println!(
         "{} files, {} / {} tiles",
         fbufs.len(),
         locsv.len(),
-        locs.len()
+        all_locs
     );
-
+    
     Ok((fbufs, locsv))
 }

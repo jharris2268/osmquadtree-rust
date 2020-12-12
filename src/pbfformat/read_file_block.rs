@@ -465,9 +465,9 @@ where
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
-pub fn read_all_blocks_parallel_prog<T, U, F>(
+pub fn read_all_blocks_parallel_prog<T, U, F, Q>(
     fbufs: &mut Vec<F>,
-    locs: &Vec<(usize, Vec<(usize, u64)>)>,
+    locs: &Vec<(Q, Vec<(usize, u64)>)>,
     mut pp: Box<T>,
     pb: &ProgBarWrap,
 ) -> (U, f64)
@@ -483,7 +483,7 @@ where
         fposes.push(file_position(f).expect("!"));
     }
     let pf = 100.0 / (locs.len() as f64);
-    for (j, (i, ll)) in locs.iter().enumerate() {
+    for (j, (_, ll)) in locs.iter().enumerate() {
         let mut fbs = Vec::new();
         for (a, b) in ll {
             if fposes[*a] != *b {
@@ -502,7 +502,7 @@ where
         pb.prog(((j + 1) as f64) * pf);
         //}
 
-        pp.call((*i, fbs));
+        pp.call((j, fbs));
     }
     pb.prog(100.0);
     (pp.finish().expect("finish failed"), ct.gettime())

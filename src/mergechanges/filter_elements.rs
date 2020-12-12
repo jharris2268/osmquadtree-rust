@@ -1,4 +1,4 @@
-use crate::elements::{Bbox, MinimalBlock, IdSet, ElementType, MinimalNode, MinimalRelation, MinimalWay,make_elementtype};
+use crate::elements::{Bbox, MinimalBlock, IdSet, IdSetBool, ElementType, MinimalNode, MinimalRelation, MinimalWay,make_elementtype};
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,as_int};
 use crate::pbfformat::read_file_block::{read_all_blocks_parallel_prog, FileBlock,ProgBarWrap};
@@ -6,15 +6,17 @@ use crate::pbfformat::read_pbf::{DeltaPackedInt,PackedInt};
 use crate::pbfformat::convertblocks::make_read_minimal_blocks_combine_call_all;
 use crate::update::{ParallelFileLocs};
 
+use std::sync::Arc;
 use std::io::{Result,/*Error,ErrorKind,*/ BufReader, BufRead};
 use std::fs::File;
 
-type Timings = crate::utils::Timings<Box<IdSet>>;
+type Timings = crate::utils::Timings<Arc<dyn IdSet>>;
 
 
 use regex::Regex;
-const REGEX_STR: &str = r"^\s*(\d\.\d+E[-|+]\d+)\s+(\d\.\d+E[-|+]\d+)\s*$";
+const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$";
 
+#[derive(Debug)]
 pub struct Poly {
     vertsx: Vec<f64>,
     vertsy: Vec<f64>
@@ -33,16 +35,22 @@ impl Poly {
             let ln = ln?;
             let caps = re.captures(&ln);
             match caps {
-                None => {println!("miss: {}", ln); },
+                None => {
+                    if ln == "1" || ln == "none" || ln == "END" {
+                        //pass
+                    } else {
+                        println!("!!!: {}", ln);
+                    }
+                },
                 Some(cp) => {
                     if cp.len()!=3 {
-                        println!("?? {}", ln);
+                        /*println!("?? {}", ln);*/
                     } else {
                         
                         let ln = cp.get(1).unwrap().as_str().parse().unwrap();
                         let lt = cp.get(2).unwrap().as_str().parse().unwrap();
                         
-                        println!("found {} & {}", ln, lt);
+                        /*println!("found {} & {}", ln, lt);*/
                         vertsx.push(ln);
                         vertsy.push(lt);
                         
@@ -60,6 +68,12 @@ impl Poly {
             bx.expand(as_int(*a),as_int(*b));
         }
         bx
+    }
+    pub fn check_box(&self, bx: &Bbox) -> bool {
+        self.contains_point(bx.minlon, bx.minlat) &&
+        self.contains_point(bx.minlon, bx.maxlat) &&
+        self.contains_point(bx.maxlon, bx.minlat) &&
+        self.contains_point(bx.maxlon, bx.maxlat)
     }
     
     pub fn contains_point(&self, ln: i32, lt: i32) -> bool {
@@ -106,17 +120,17 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
         
 
 
-struct FilterBbox {
+struct FilterObjs {
     bbox: Bbox,
     poly: Option<Poly>,
-    idset: Option<Box<IdSet>>,
+    idset: Option<Box<IdSetBool>>,
     pending_rels: Vec<MinimalRelation>,
     tm: f64,
 }
 
-fn has_node(idset: &IdSet, w: &MinimalWay) -> bool {
+fn has_node<T: IdSet>(idset: &Box<T>, w: &MinimalWay) -> bool {
     for rf in DeltaPackedInt::new(&w.refs_data) {
-        if idset.nodes.contains(&rf) {
+        if idset.contains(ElementType::Node, rf) {
             return true;
         }
     }
@@ -125,21 +139,21 @@ fn has_node(idset: &IdSet, w: &MinimalWay) -> bool {
 
 
 
-impl FilterBbox {
+impl FilterObjs {
     
     
-    pub fn new(bbox: Bbox, poly: Option<Poly>) -> FilterBbox {
+    pub fn new(bbox: Bbox, poly: Option<Poly>) -> FilterObjs {
         
-        FilterBbox{bbox: bbox, poly: poly, idset: Some(Box::new(IdSet::new())), tm: 0.0, pending_rels: Vec::new()}
+        FilterObjs{bbox: bbox, poly: poly, idset: Some(Box::new(IdSetBool::new())), tm: 0.0, pending_rels: Vec::new()}
     }
     
-    fn get_idset<'a>(&'a mut self) -> &'a mut Box<IdSet> {
+    fn get_idset<'a>(&'a mut self) -> &'a mut Box<IdSetBool> {
         self.idset.as_mut().unwrap()
     }
     
     fn check_block(&mut self, mb: MinimalBlock) {
         let qb = mb.quadtree.as_bbox(0.05);
-        if self.poly.is_none() && self.bbox.contains(&qb) {
+        if (self.poly.is_none() || self.poly.as_ref().unwrap().check_box(&qb)) && self.bbox.contains(&qb) {
             self.add_all(mb)
         } else if self.bbox.overlaps(&qb) {
             for n in mb.nodes {
@@ -153,6 +167,8 @@ impl FilterBbox {
                     self.pending_rels.push(r);
                 }
             }
+        } else {
+            println!("?? {} {} // {}", mb.quadtree.as_string(), qb, self.bbox);
         }
     }
     fn add_all(&mut self, mb: MinimalBlock) {
@@ -218,7 +234,10 @@ impl FilterBbox {
     
     fn check_pending_relations(&mut self){
         let exn = std::mem::take(&mut self.get_idset().exnodes);
-        self.get_idset().nodes.extend(exn);
+        let ii = self.get_idset();
+        for e in exn {
+            ii.nodes.insert(e);
+        }
         
         let mut relrels = Vec::new();
         for r in std::mem::take(&mut self.pending_rels) {
@@ -238,7 +257,7 @@ impl FilterBbox {
 }
 
 
-impl CallFinish for FilterBbox {
+impl CallFinish for FilterObjs {
     type CallType = MinimalBlock;
     type ReturnType = Timings;
     
@@ -255,12 +274,14 @@ impl CallFinish for FilterBbox {
         self.check_pending_relations();
         tm.add("FilterBBox::finish", tx.since());
         
-        tm.add_other("idset", std::mem::take(&mut self.idset).unwrap());
+        let aa: Arc<IdSetBool> = Arc::from(std::mem::take(&mut self.idset).unwrap());
+        
+        tm.add_other("idset", aa);
         Ok(tm)
     }
 }
 
-pub fn prep_bbox_filter(pfilelocs: &mut ParallelFileLocs, bbox: Bbox, poly: Option<Poly>, numchan: usize) -> Result<Box<IdSet>> {
+pub fn prep_bbox_filter(pfilelocs: &mut ParallelFileLocs, bbox: Bbox, poly: Option<Poly>, numchan: usize) -> Result<Arc<dyn IdSet>> {
     
     
     
@@ -268,7 +289,7 @@ pub fn prep_bbox_filter(pfilelocs: &mut ParallelFileLocs, bbox: Bbox, poly: Opti
     pb.set_range(100);
     pb.set_message("prep_bbox_filter");
     
-    let fb = Box::new(FilterBbox::new(bbox, poly));
+    let fb = Box::new(FilterObjs::new(bbox, poly));
     
     let conv: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = 
     if numchan == 0 {

@@ -9,7 +9,7 @@ use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::parse_timestamp;
 
-use osmquadtree::mergechanges::run_mergechanges_inmem;
+use osmquadtree::mergechanges::{run_mergechanges_inmem,run_mergechanges};
 
 use std::io::{Error, ErrorKind, Result};
 
@@ -191,8 +191,20 @@ fn main() {
             SubCommand::with_name("mergechanges_inmem")   
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, defaults to INPUT-index.pbf"))
-                .arg(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"))            
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename"))
+                .arg(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))            
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
+        )
+        .subcommand(
+            SubCommand::with_name("mergechanges")   
+                .about("prep_bbox_filter")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
+                .arg(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))            
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
         );
@@ -288,7 +300,18 @@ fn main() {
             run_mergechanges_inmem(
                 filter.value_of("INPUT").unwrap(),
                 filter.value_of("OUTFN").unwrap(),
-                filter.value_of("FILTER").unwrap(),
+                filter.value_of("FILTER"),
+                filter.value_of("TIMESTAMP"),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        }
+        ("mergechanges", Some(filter)) => {
+            run_mergechanges(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("TEMPFN"),
+                filter.value_of("FILTER"),
+                filter.value_of("TIMESTAMP"),
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },

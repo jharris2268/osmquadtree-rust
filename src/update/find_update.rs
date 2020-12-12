@@ -1,6 +1,6 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge};
 use crate::elements::{
-    Bbox, Changetype, ElementType, IdSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
+    Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
 use crate::pbfformat::header_block;
 use crate::pbfformat::read_file_block;
@@ -31,7 +31,7 @@ impl OrigData {
         }
     }
 
-    pub fn add(&mut self, pb: PrimitiveBlock, idset: &IdSet) {
+    pub fn add(&mut self, pb: PrimitiveBlock, idset: &IdSetSet) {
         for n in pb.nodes {
             match n.changetype {
                 Changetype::Normal
@@ -192,13 +192,13 @@ impl fmt::Display for OrigData {
 struct ReadPB {
     origdata: Option<OrigData>,
 
-    ids: Arc<IdSet>,
+    ids: Arc<IdSetSet>,
     ischange: bool,
 
     tm: f64,
 }
 impl ReadPB {
-    pub fn new(ischange: bool, ids: Arc<IdSet>) -> ReadPB {
+    pub fn new(ischange: bool, ids: Arc<IdSetSet>) -> ReadPB {
         ReadPB {
             origdata: Some(OrigData::new()),
             ids: ids,
@@ -239,7 +239,7 @@ impl CallFinish for ReadPB {
 fn read_change_tiles(
     fname: &str,
     tiles: &BTreeSet<Quadtree>,
-    idset: Arc<IdSet>,
+    idset: Arc<IdSetSet>,
     numchan: usize,
     pb: Option<&read_file_block::ProgBarWrap>,
 ) -> std::io::Result<(OrigData, f64)> {
@@ -302,7 +302,7 @@ fn read_change_tiles(
 fn collect_existing(
     prfx: &str,
     filelist: &Vec<FilelistEntry>,
-    idset: Arc<IdSet>,
+    idset: Arc<IdSetSet>,
     numchan: usize,
 ) -> std::io::Result<(OrigData, f64, f64)> {
     let mut origdata = OrigData::new();
@@ -691,8 +691,8 @@ fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<Quadt
     Ok(tree)
 }
 
-fn prep_idset(changeblock: &ChangeBlock) -> IdSet {
-    let mut idset = IdSet::new();
+fn prep_idset(changeblock: &ChangeBlock) -> Arc<IdSetSet> {
+    let mut idset = Box::new(IdSetSet::new());
 
     for (_, n) in changeblock.nodes.iter() {
         idset.nodes.insert(n.id);
@@ -726,7 +726,7 @@ fn prep_idset(changeblock: &ChangeBlock) -> IdSet {
         }
     }
     println!("{}", idset);
-    idset
+    Arc::<IdSetSet>::from(idset)
 }
 
 pub fn find_update(
@@ -750,7 +750,7 @@ pub fn find_update(
 
     let a = tx.since();
 
-    let idset = Arc::new(prep_idset(&changeblock));
+    let idset = prep_idset(&changeblock);
 
     let b = tx.since();
 

@@ -10,7 +10,7 @@ use std::io::{Error, ErrorKind, Result};
 use crate::elements::idset::IdSet;
 use crate::elements::relation::ElementType;
 
-fn check_id(id: i64, idset: Option<&IdSet>) -> bool {
+fn check_id(id: i64, idset: Option<&dyn IdSet>) -> bool {
     match idset {
         None => true,
         Some(idset) => idset.contains(ElementType::Node, id),
@@ -25,7 +25,7 @@ impl Dense {
         strings: &Vec<String>,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<Vec<node::Node>> {
         let mut res = Vec::new();
 

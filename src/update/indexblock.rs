@@ -1,5 +1,5 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::{IdSet, MinimalBlock, Quadtree};
+use crate::elements::{IdSet, MinimalBlock, Quadtree,ElementType};
 use crate::pbfformat::read_file_block::{
     file_length, pack_file_block, read_all_blocks_prog, read_all_blocks, read_all_blocks_with_progbar, FileBlock,
     ProgBarWrap,
@@ -44,28 +44,28 @@ fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
     res
 }
 
-fn check_index_block(bl: Vec<u8>, idset: &IdSet) -> Option<Quadtree> {
+fn check_index_block(bl: Vec<u8>, idset: &dyn IdSet) -> Option<Quadtree> {
     let mut qt = Quadtree::new(-2);
     for tg in IterTags::new(&bl, 0) {
         match tg {
             PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {
                 for n in DeltaPackedInt::new(&nn) {
-                    if idset.nodes.contains(&n) {
+                    if idset.contains(ElementType::Node,n) {
                         return Some(qt);
                     }
                 }
             }
             PbfTag::Data(3, ww) => {
                 for w in DeltaPackedInt::new(&ww) {
-                    if idset.ways.contains(&w) {
+                    if idset.contains(ElementType::Way,w) {
                         return Some(qt);
                     }
                 }
             }
             PbfTag::Data(4, rr) => {
                 for r in DeltaPackedInt::new(&rr) {
-                    if idset.relations.contains(&r) {
+                    if idset.contains(ElementType::Relation,r) {
                         return Some(qt);
                     }
                 }
@@ -161,13 +161,13 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
 }
 
 struct CheckIndexFile {
-    idset: Arc<IdSet>,
+    idset: Arc<dyn IdSet>,
     quadtrees: Vec<Quadtree>,
     tm: f64,
 }
 
 impl CheckIndexFile {
-    pub fn new(idset: Arc<IdSet>) -> CheckIndexFile {
+    pub fn new(idset: Arc<dyn IdSet>) -> CheckIndexFile {
         CheckIndexFile {
             idset: idset,
             quadtrees: Vec::new(),
@@ -210,7 +210,7 @@ fn unpack_fb(i_fb: (usize, FileBlock)) -> Vec<u8> {
 
 pub fn check_index_file(
     indexfn: &str,
-    idset: Arc<IdSet>,
+    idset: Arc<dyn IdSet>,
     numchan: usize,
     pb: Option<&ProgBarWrap>,
 ) -> Result<(Vec<Quadtree>, f64)> {

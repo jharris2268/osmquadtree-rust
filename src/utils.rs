@@ -24,6 +24,32 @@ impl Timer {
     }
 }
 
+pub struct LogTimes {
+    timer: Timer,
+    msgs: Vec<(String,f64)>,
+    longest: usize,
+}
+impl LogTimes {
+    pub fn new() -> LogTimes {
+        LogTimes{timer: Timer::new(), msgs: Vec::new(), longest: 5}
+    }
+    pub fn add(&mut self, msg: &str) {
+        self.longest = usize::max(self.longest, msg.len());
+        self.msgs.push((String::from(msg), self.timer.since()));
+        self.timer.reset();
+    }
+}
+impl fmt::Display for LogTimes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut tot =0.0;
+        for (a,b) in &self.msgs {
+            write!(f, "{}:{}{:6.2}s\n", a," ".repeat(self.longest-a.len()),b)?;
+            tot+=b;
+        }
+        write!(f, "TOTAL:{}{:6.2}s", " ".repeat(self.longest-5),tot)
+    }
+}
+
 pub struct ThreadTimer(cpu_time::ThreadTime);
 
 impl ThreadTimer {

@@ -158,7 +158,7 @@ impl Relation {
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
     
-    pub fn filter_relations(&mut self, ids: &IdSet) -> bool {
+    pub fn filter_relations(&mut self, ids: &dyn IdSet) -> bool {
         let nm = self.members.len();
         for m in std::mem::take(&mut self.members) {
             if ids.contains(m.mem_type.clone(),m.mem_ref) {
@@ -168,6 +168,11 @@ impl Relation {
         self.members.len() != nm
     }
     
+}
+impl crate::elements::WithId for Relation {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
 }
 
 impl SetCommon for Relation {

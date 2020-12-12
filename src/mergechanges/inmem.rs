@@ -1,9 +1,9 @@
-use crate::elements::{PrimitiveBlock,IdSet,Bbox};
+use crate::elements::{PrimitiveBlock,IdSet, Bbox};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_prog,FileBlock};
-use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings};
+use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,LogTimes};
 use crate::mergechanges::filter_elements::{prep_bbox_filter,Poly};
 use crate::sortblocks::{WriteFile};
 use crate::sortblocks::writepbf::make_packprimblock;
@@ -51,7 +51,7 @@ impl CallFinish for CollectObjs {
 }
 
 
-pub fn collect_blocks_filtered(pfilelocs: &mut ParallelFileLocs, ids: Arc<IdSet>, numchan: usize) -> Result<PrimitiveBlock> {
+pub fn collect_blocks_filtered(pfilelocs: &mut ParallelFileLocs, ids: Arc<dyn IdSet>, numchan: usize) -> Result<PrimitiveBlock> {
     
     
     
@@ -66,13 +66,13 @@ pub fn collect_blocks_filtered(pfilelocs: &mut ParallelFileLocs, ids: Arc<IdSet>
     let conv: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = 
     if numchan == 0 {
         let co = Box::new(CollectObjs::new());
-        make_read_primitive_blocks_combine_call_all_idset(co, ids.clone())
+        make_read_primitive_blocks_combine_call_all_idset(co, ids.clone(), true)
     } else {
         
         let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>>>=Vec::new();
         for _ in 0..numchan {
             let co = Box::new(CollectObjs::new());
-            convs.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(co, ids.clone()))));
+            convs.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(co, ids.clone(), true))));
         }
         Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())))
     };
@@ -92,71 +92,87 @@ pub fn collect_blocks_filtered(pfilelocs: &mut ParallelFileLocs, ids: Arc<IdSet>
 }
 
 
-fn group_blocks<T: CallFinish<CallType=PrimitiveBlock, ReturnType=crate::sortblocks::Timings> + ?Sized>(pb: PrimitiveBlock, size: usize, ids: &IdSet, mut out: Box<T>) -> Result<crate::sortblocks::Timings> {
-    
-    let mut curr = PrimitiveBlock::new(0,0);
-    
-    for n in pb.nodes {
-        curr.nodes.push(n);
-        if curr.len() >= size {
-            out.call(std::mem::replace(&mut curr, PrimitiveBlock::new(0,0)));
-        }
+struct GroupBlocks<T: ?Sized> {
+    out: Box<T>,
+    block_size: usize,
+    curr: PrimitiveBlock,
+    tm: f64
+}
+
+impl<T> GroupBlocks<T>
+where T: CallFinish<CallType=PrimitiveBlock, ReturnType=crate::sortblocks::Timings> + ?Sized
+{
+    pub fn new(out: Box<T>, block_size: usize) -> GroupBlocks<T> {
+        GroupBlocks{out: out, block_size: block_size, curr: PrimitiveBlock::new(0,0), tm: 0.0}
     }
     
-    for w in pb.ways {
-        curr.ways.push(w);
-        if curr.len() >= size {
-            out.call(std::mem::replace(&mut curr, PrimitiveBlock::new(0,0)));
+}
+
+impl<T> CallFinish for GroupBlocks<T> 
+where T: CallFinish<CallType=PrimitiveBlock, ReturnType=crate::sortblocks::Timings> + ?Sized
+{
+    type CallType=PrimitiveBlock;
+    type ReturnType=crate::sortblocks::Timings;
+    
+    fn call(&mut self, pb: PrimitiveBlock) {
+        let tx=ThreadTimer::new();
+        for n in pb.nodes {
+            self.curr.nodes.push(n);
+            if self.curr.len() >= self.block_size {
+                self.out.call(std::mem::replace(&mut self.curr, PrimitiveBlock::new(0,0)));
+            }
         }
-    }
-    let mut nr=0;
-    for mut r in pb.relations {
-        if r.filter_relations(ids) {
-            nr+=1;
+        
+        for w in pb.ways {
+            self.curr.ways.push(w);
+            if self.curr.len() >= self.block_size {
+                self.out.call(std::mem::replace(&mut self.curr, PrimitiveBlock::new(0,0)));
+            }
         }
-        curr.relations.push(r);
-        if curr.len() >= size {
-            out.call(std::mem::replace(&mut curr, PrimitiveBlock::new(0,0)));
+        
+        for r in pb.relations {
+            self.curr.relations.push(r);
+            if self.curr.len() >= self.block_size {
+                self.out.call(std::mem::replace(&mut self.curr, PrimitiveBlock::new(0,0)));
+            }
         }
+        self.tm += tx.since();
     }
-    if curr.len() > 0{
-        out.call(std::mem::replace(&mut curr, PrimitiveBlock::new(0,0)));
+    
+    fn finish(&mut self) -> Result<Self::ReturnType> {
+        let tx=ThreadTimer::new();
+        if self.curr.len() > 0{
+            self.out.call(std::mem::replace(&mut self.curr, PrimitiveBlock::new(0,0)));
+        }
+        self.tm += tx.since();
+        //println!("filtered {} rels", nr);
+        let mut tms = self.out.finish()?;
+        tms.add("GroupTiles", self.tm);
+        Ok(tms)
     }
-    println!("filtered {} rels", nr);
-    out.finish()
 }
 
 
             
-fn read_filter(filter: &str) -> Result<(Bbox, Option<Poly>)> {
+pub fn read_filter(filter: Option<&str>) -> Result<(Bbox, Option<Poly>)> {
+    match filter {
+        None => Ok((Bbox::planet(), None)),
+        Some(filter) => {
     
-    match Bbox::from_str(filter) {
-        Ok(bbox) => { return Ok((bbox, None)); },
-        Err(_) => {}
+            match Bbox::from_str(filter) {
+                Ok(bbox) => { return Ok((bbox, None)); },
+                Err(_) => {}
+            }
+            
+            let poly = Poly::from_file(filter)?;
+            let bbox = poly.bounds();
+            
+            Ok((bbox, Some(poly)))
+        }
     }
-    
-    let poly = Poly::from_file(filter)?;
-    let bbox = poly.bounds();
-    
-    Ok((bbox, Some(poly)))
 }
 
-
-pub fn run_mergechanges_inmem(inprfx: &str, outfn: &str, filter: &str, numchan: usize) -> Result<()> {
-    
-    let (bbox, poly) = read_filter(filter)?;
-    
-    let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()))?;
-    
-    let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
-    
-    
-    let ids:Arc<IdSet> = Arc::from(ids);
-    
-    let pb = collect_blocks_filtered(&mut pfilelocs, ids.clone(), numchan)?;
-    
-    println!("have {} nodes, {} ways, {} relations", pb.nodes.len(), pb.ways.len(), pb.relations.len());
-    
+pub fn make_write_file(outfn: &str, bbox: Bbox, block_size: usize, numchan: usize) -> Box<impl CallFinish<CallType=PrimitiveBlock, ReturnType=crate::sortblocks::Timings>> {
     let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(&bbox)));
     
     let pack: Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=crate::sortblocks::Timings>> = if numchan == 0 {
@@ -172,10 +188,40 @@ pub fn run_mergechanges_inmem(inprfx: &str, outfn: &str, filter: &str, numchan: 
         
         Box::new(CallbackMerge::new(packs, Box::new(MergeTimings::new())))
     };
+    Box::new(GroupBlocks::new(pack, block_size))
+}
+
+pub fn run_mergechanges_inmem(inprfx: &str, outfn: &str, filter: Option<&str>, timestamp: Option<&str>, numchan: usize) -> Result<()> {
+    let mut tx=LogTimes::new();
+    let (bbox, poly) = read_filter(filter)?;
+    tx.add("read filter");
+    let timestamp = match timestamp {
+        None => None,
+        Some(ts) => Some(parse_timestamp(ts)?)
+    };
     
-    let tm = group_blocks(pb, 8000, &ids, pack)?;
+    let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()), timestamp)?;
+    tx.add("get_file_locs");
+    
+    let ids:Arc<dyn IdSet> = match filter {
+        Some(_) => {
+            let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+            tx.add("prep_bbox_filter");
+            println!("have: {}", ids);
+            Arc::from(ids)
+        },
+        None => { panic!("must have a filter"); }
+    };
+    
+    let pb = collect_blocks_filtered(&mut pfilelocs, ids.clone(), numchan)?;
+    tx.add("collect_blocks_filtered");
+    println!("have {} nodes, {} ways, {} relations", pb.nodes.len(), pb.ways.len(), pb.relations.len());
+    
+    let mut gb = make_write_file(outfn, bbox, 8000, numchan);
+    gb.call(pb);
+    let tm = gb.finish()?;
+    tx.add("write");
     println!("{}",tm);
-        
-    
+    println!("{}",tx);
     Ok(())
 }  

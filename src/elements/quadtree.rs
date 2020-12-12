@@ -113,6 +113,13 @@ impl Bbox {
     pub fn empty() -> Bbox {
         Bbox::new(1800000000, 900000000, -1800000000, -900000000)
     }
+    pub fn planet() -> Bbox {
+        Bbox::new(-1800000000, -900000000, 1800000000, 900000000)
+    }
+    
+    pub fn is_planet(&self) -> bool {
+        self.minlon <= -1800000000 && self.minlat <= -900000000 && self.maxlon >= 1800000000 && self.maxlat >= 900000000
+    }
     
     pub fn from_str(fstr: &str) -> Result<Bbox> {
         let vv: Vec<&str> = fstr.split(",").collect();

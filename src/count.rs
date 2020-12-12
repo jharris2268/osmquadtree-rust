@@ -823,7 +823,7 @@ pub fn run_count(
         }
         println!("{}", cc);
     } else {
-        let (mut fbufs, locsv) = get_file_locs(fname, filter).expect("?");
+        let (mut fbufs, locsv) = get_file_locs(fname, filter, None).expect("?");
 
         let pb = ProgBarWrap::new(100);
 

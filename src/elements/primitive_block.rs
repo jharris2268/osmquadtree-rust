@@ -103,7 +103,13 @@ impl PrimitiveBlock {
         self.ways.sort();
         self.relations.sort();
     }
-
+        
+    pub fn extend(&mut self, mut other: PrimitiveBlock) {
+        self.nodes.extend(std::mem::take(&mut other.nodes));
+        self.ways.extend(std::mem::take(&mut other.ways));
+        self.relations.extend(std::mem::take(&mut other.relations));
+    }
+    
     pub fn len(&self) -> usize {
         self.nodes.len() + self.ways.len() + self.relations.len()
     }
@@ -124,7 +130,7 @@ impl PrimitiveBlock {
         data: &[u8],
         ischange: bool,
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<PrimitiveBlock> {
         let mut res = PrimitiveBlock::new(index, location);
 
@@ -180,7 +186,7 @@ impl PrimitiveBlock {
         changetype: Changetype,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         let mut count = 0;
         for x in read_pbf::IterTags::new(&data, 0) {
@@ -210,7 +216,7 @@ impl PrimitiveBlock {
         changetype: Changetype,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         match idset {
             Some(idset) => {
@@ -230,7 +236,7 @@ impl PrimitiveBlock {
         changetype: Changetype,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         match idset {
             Some(idset) => {
@@ -250,7 +256,7 @@ impl PrimitiveBlock {
         changetype: Changetype,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         match idset {
             Some(idset) => {
@@ -270,7 +276,7 @@ impl PrimitiveBlock {
         changetype: Changetype,
         data: &[u8],
         minimal: bool,
-        idset: Option<&IdSet>,
+        idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         let nn = Dense::read(changetype, &strings, &data, minimal, idset)?;
         let nl = nn.len() as u64;

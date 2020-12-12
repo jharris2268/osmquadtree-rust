@@ -67,6 +67,13 @@ impl Node {
         Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
+
+impl crate::elements::WithId for Node {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+
 impl SetCommon for Node {
     fn set_id(&mut self, id: i64) {
         self.id = id;

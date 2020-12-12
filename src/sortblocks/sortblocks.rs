@@ -201,12 +201,12 @@ fn write_blocks(
     Ok(())
 }
 
-enum TempData {
+pub enum TempData {
     TempBlocks(Vec<(i64, Vec<Vec<u8>>)>),
     TempFile((String, Vec<(i64, Vec<(u64, u64)>)>)),
 }
 
-struct WriteTemp {
+pub struct WriteTemp {
     tempf: Option<WriteFile>,
     tempd: BTreeMap<i64, Vec<Vec<u8>>>,
     tm: f64,
@@ -617,7 +617,7 @@ where
     }
 }
 
-fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>(
+pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>(
     xx: TempData,
     mut out: Box<T>,
 ) -> io::Result<Timings> {
