@@ -1,21 +1,21 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Seek, SeekFrom, Write};
+use std::io::{BufReader, Seek, SeekFrom, Write,/*Read,Result*/};
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{Node, PrimitiveBlock, Quadtree, Relation, Way};
 
 use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{
-    file_length, pack_file_block, read_all_blocks, read_all_blocks_prog, read_file_block,
-    unpack_file_block, FileBlock, ProgBarWrap,
+    file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
+    unpack_file_block, FileBlock, ProgBarWrap, read_file_block_with_pos
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{make_packprimblock, make_packprimblock_many, WriteFile};
-use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
+use crate::sortblocks::{OtherData, QuadtreeTree, Timings,TempData};
 use crate::stringutils::StringUtils;
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer,ThreadTimer};
 
 fn get_block<'a>(
     blocks: &'a mut HashMap<i64, PrimitiveBlock>,
@@ -201,11 +201,172 @@ fn write_blocks(
     Ok(())
 }
 
-pub enum TempData {
-    TempBlocks(Vec<(i64, Vec<Vec<u8>>)>),
-    TempFile((String, Vec<(i64, Vec<(u64, u64)>)>)),
+
+
+
+pub struct WriteTempData {
+    tempd: BTreeMap<i64, Vec<Vec<u8>>>,
+    tm: f64
 }
 
+impl WriteTempData {
+    pub fn new() -> WriteTempData {
+        WriteTempData{tempd: BTreeMap::new(), tm: 0.0}
+    }
+}
+
+impl CallFinish for WriteTempData {
+    type CallType=Vec<(i64,Vec<u8>)>;
+    type ReturnType=Timings;
+    
+    fn call(&mut self, temps: Vec<(i64,Vec<u8>)>) {
+        let tx=ThreadTimer::new();
+        for (a, b) in temps {
+            match self.tempd.get_mut(&a) {
+                Some(t) => {
+                    t.push(b);
+                }
+                None => {
+                    self.tempd.insert(a, vec![b]);
+                }
+            }
+        }
+        self.tm += tx.since();
+    }
+    
+    fn finish(&mut self) -> io::Result<Timings> {
+        let mut tms = Timings::new();
+        tms.add("WriteTempData", self.tm);
+        let mut td = Vec::new();
+        for (a,b) in std::mem::take(&mut self.tempd) {
+            td.push((a,b));
+        }
+        tms.add_other("tempdata", OtherData::TempData(TempData::TempBlocks(td)));
+        Ok(tms)
+    }
+}
+
+pub struct WriteTempFile {
+    tempfn: String,
+    tempf: WriteFile,
+}
+
+impl WriteTempFile {
+    pub fn new(tempfn: &str) -> WriteTempFile {
+        WriteTempFile{tempfn: String::from(tempfn), tempf: WriteFile::new(tempfn, HeaderType::NoLocs)}
+    }
+}
+impl CallFinish for WriteTempFile {
+    type CallType = Vec<(i64, Vec<u8>)>;
+    type ReturnType = Timings;
+
+    fn call(&mut self, bl: Self::CallType) {
+        self.tempf.call(bl);
+    }
+
+    fn finish(&mut self) -> io::Result<Timings> {
+        let mut t = self.tempf.finish()?;
+        let fl = match t.others.pop().unwrap().1 {
+                OtherData::FileLocs(p) => p,
+                _ => {panic!("!!"); }
+            };
+        
+        t.add_other("tempdata", OtherData::TempData(TempData::TempFile((self.tempfn.clone(), fl))));
+        Ok(t)
+        
+        
+    }
+}
+
+pub struct WriteTempFileSplit {
+    prfx: String,
+    tempfs: BTreeMap<i64, (String,WriteFile)>,
+    splitat: i64,
+}
+impl WriteTempFileSplit {
+    pub fn new(prfx: &str, splitat: i64) -> WriteTempFileSplit {
+        WriteTempFileSplit{prfx: String::from(prfx), splitat: splitat, tempfs: BTreeMap::new()}
+    }
+}
+
+impl CallFinish for WriteTempFileSplit {
+    type CallType = Vec<(i64, Vec<u8>)>;
+    type ReturnType = Timings;
+
+    fn call(&mut self, bl: Self::CallType) {
+        for (a,b) in bl {
+            let k = a/self.splitat;
+            match self.tempfs.get_mut(&k) {
+                None => {
+                    let fname=format!("{}-part-{}.pbf", self.prfx, k);
+                    let mut tt=WriteFile::new(&fname, HeaderType::NoLocs);
+                    tt.call(vec![(a,b)]);
+                    self.tempfs.insert(k,(fname,tt));
+                },
+                Some(tempf) => {
+                    tempf.1.call(vec![(a,b)]);
+                }
+            }
+        }
+    }
+    fn finish(&mut self) -> io::Result<Timings> {
+        let mut tm = Timings::new();
+        let mut fnames =Vec::new();
+        let mut flocs = Vec::new();
+        for (_,(fname,mut wf)) in std::mem::take(&mut self.tempfs) {
+            let mut t = wf.finish()?;
+            
+            
+            let fl = match std::mem::take(&mut t.others).pop().unwrap().1 {
+                OtherData::FileLocs(p) => p,
+                _ => {panic!("!!"); }
+            };
+            let ii = fnames.len();
+            
+            fnames.push(fname);
+            for (a,b) in fl {
+                flocs.push((a,ii,b));
+            }
+            tm.combine(t);
+        }
+        flocs.sort_by_key( |x| { x.0 });
+        tm.add_other("tempdata", OtherData::TempData(TempData::TempFileSplit((fnames,flocs))));
+        Ok(tm)
+    }
+}
+    
+    
+pub enum WriteTempWhich {
+    Data(WriteTempData),
+    File(WriteTempFile),
+    Split(WriteTempFileSplit)
+}
+
+impl CallFinish for WriteTempWhich {
+    type CallType=Vec<(i64,Vec<u8>)>;
+    type ReturnType=Timings;
+    
+    fn call(&mut self, bl: Vec<(i64,Vec<u8>)>) {
+        match self {
+            WriteTempWhich::Data(t) => t.call(bl),
+            WriteTempWhich::File(t) => t.call(bl),
+            WriteTempWhich::Split(t) => t.call(bl),
+        }
+    }
+    
+    fn finish(&mut self) ->io::Result<Timings> {
+        match self {
+            WriteTempWhich::Data(t) => t.finish(),
+            WriteTempWhich::File(t) => t.finish(),
+            WriteTempWhich::Split(t) => t.finish(),
+        }
+    }
+}
+        
+        
+    
+
+/*
 pub struct WriteTemp {
     tempf: Option<WriteFile>,
     tempd: BTreeMap<i64, Vec<Vec<u8>>>,
@@ -278,7 +439,7 @@ impl CallFinish for WriteTemp {
         }
     }
 }
-
+*/
 struct CollectTemp<T> {
     out: Box<T>,
     limit: usize,
@@ -432,7 +593,20 @@ fn write_temp_blocks(
     splitat: i64,
     limit: usize,
 ) -> io::Result<(TempData, Box<QuadtreeTree>)> {
-    let wt = Box::new(WriteTemp::new(&tempfn));
+    //let wt = Box::new(WriteTemp::new(&tempfn));
+    let flen = file_length(&infn);
+    
+    let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
+        Box::new(WriteTempWhich::Data(WriteTempData::new()))
+    } else {
+        if flen < 2*1024*1024*1024 {
+            Box::new(WriteTempWhich::File(WriteTempFile::new(tempfn)))
+        } else {
+            let nsp = (flen / (5*1024*1024*1024)) as i64;
+            let sp = groups.len() as i64/splitat/nsp;
+            Box::new(WriteTempWhich::Split(WriteTempFileSplit::new(tempfn, sp)))
+        }
+    };
 
     let mut prog = ProgBarWrap::new(100);
     prog.set_range(100);
@@ -440,7 +614,7 @@ fn write_temp_blocks(
         "write_temp_blocks {} to {}, numchan={}",
         infn, tempfn, numchan
     ));
-    let flen = file_length(&infn);
+    
     let inf = File::open(&infn)?;
     let mut infb = BufReader::new(inf);
 
@@ -478,31 +652,18 @@ fn write_temp_blocks(
     println!("write_temp_blocks {} {}", res, d);
     let mut groups: Option<Box<QuadtreeTree>> = None;
     let mut td: Option<TempData> = None;
-    if tempfn == "NONE" {
-        for (_, b) in std::mem::take(&mut res.others) {
-            match b {
-                OtherData::TempData(t) => {
-                    td = Some(TempData::TempBlocks(t));
-                }
-                OtherData::QuadtreeTree(g) => {
-                    groups = Some(g);
-                }
-                _ => {}
+    for (_, b) in std::mem::take(&mut res.others) {
+        match b {
+            OtherData::TempData(t) => {
+                td = Some(t);
             }
-        }
-    } else {
-        for (_, b) in std::mem::take(&mut res.others) {
-            match b {
-                OtherData::FileLocs(fl) => {
-                    td = Some(TempData::TempFile((String::from(tempfn), fl)));
-                }
-                OtherData::QuadtreeTree(g) => {
-                    groups = Some(g);
-                }
-                _ => {}
+            OtherData::QuadtreeTree(g) => {
+                groups = Some(g);
             }
+            _ => {}
         }
     }
+    
     Ok((td.unwrap(), groups.unwrap()))
 }
 
@@ -652,12 +813,14 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                 out.call((a, mm));
             }
             prog.finish();
-            return out.finish();
+            out.finish()
         }
         TempData::TempFile((fname, locs)) => {
             let tbl = file_length(&fname);
             let prog = ProgBarWrap::new_filebytes(tbl);
             prog.set_message(&format!("read temp blocks from {}", fname));
+            
+            
             let ff = File::open(&fname)?;
             let mut fb = BufReader::new(ff);
             let mut tl = 0;
@@ -666,7 +829,8 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
 
                 for (p, q) in b {
                     fb.seek(SeekFrom::Start(p))?;
-                    mm.push(read_file_block(&mut fb)?);
+                    let t=read_file_block_with_pos(&mut fb, p)?;
+                    mm.push(t.1);
                     tl += q;
                 }
                 /*match ct.checktime() {
@@ -683,10 +847,161 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                 out.call((a, mm));
             }
             prog.finish();
-            return out.finish();
+            out.finish()
+            //return read_blocks_locs_prog_chunks(&mut fb, &locs, 1024*1024*1024, prog, out);
+        },
+        TempData::TempFileSplit((fnames, locs)) => {
+            let mut tbl = 0;
+            for f in &fnames {
+                tbl += file_length(f);
+            }
+            
+            let prog = ProgBarWrap::new_filebytes(tbl);
+            prog.set_message(&format!("read temp blocks from {} files", fnames.len()));
+            
+            let mut fbufs = BTreeMap::new();
+            for (i,f) in fnames.iter().enumerate() {
+                fbufs.insert(i,BufReader::new(File::open(f)?));
+            }
+            
+            let mut tl = 0;
+            for (a, b, c) in locs {
+                let fb = match fbufs.get_mut(&b) {
+                    Some(f) => f,
+                    None => {panic!("!!");},
+                };
+                
+                let mut mm = Vec::new();
+
+                for (p, q) in c {
+                    fb.seek(SeekFrom::Start(p))?;
+                    let t=read_file_block_with_pos(fb, p)?;
+                    mm.push(t.1);
+                    tl += q;
+                }
+                
+                prog.prog(tl as f64);
+
+                out.call((a, mm));
+            }
+            prog.finish();
+            out.finish()
         }
     }
 }
+
+
+/*
+use std::marker::PhantomData;
+struct CallBlocksEach<T,U> {
+    out: Box<T>,
+    ttl: u64,
+    pb: ProgBarWrap,
+    x: PhantomData<U>
+}
+
+impl<T,U> CallBlocksEach<T,U>
+where T: CallFinish<CallType=(i64,Vec<FileBlock>), ReturnType=U>,
+      U: Sync+Send+'static
+{
+    pub fn new(out: Box<T>,pb: ProgBarWrap) -> CallBlocksEach<T,U> {
+        CallBlocksEach{out: out,pb:pb, ttl: 0, x: PhantomData}
+    }
+}
+
+impl<T,U> CallFinish for CallBlocksEach<T,U>
+where T: CallFinish<CallType=(i64,Vec<FileBlock>), ReturnType=U>,
+      U: Sync+Send+'static
+
+{
+    type CallType=BTreeMap<i64,(Vec<FileBlock>,u64)>;
+    type ReturnType = U;
+    
+    fn call(&mut self, blocks: Self::CallType) {
+        
+        for (a,(b,c)) in blocks {
+            self.ttl += c;
+            self.pb.prog(self.ttl as f64);
+            self.out.call((a,b));
+        }
+    }
+    fn finish(&mut self) -> Result<Self::ReturnType> {
+        self.pb.finish();
+        self.out.finish()
+    }
+}
+
+
+
+fn get_blocks_locs_flat<R: Read+Seek>(fobj: &mut R, mut locs: Vec<(i64,u64,u64)>) -> Result<BTreeMap<i64,(Vec<FileBlock>,u64)>> {
+    let mut res=BTreeMap::new();
+    locs.sort_by_key(|(_,b,_)| { *b });
+    println!("read {} blocks, {} bytes [{:?} => {:?}]\n", locs.len(), locs.iter().map(|p| {p.2}).sum::<u64>(), locs[0], locs[locs.len()-1]);
+    for (a,b,c) in locs {
+        fobj.seek(SeekFrom::Start(b))?;
+        let (_,fb) = read_file_block_with_pos(fobj, b)?;
+        match res.get_mut(&a) {
+            None => { res.insert(a, (vec![fb], c)); },
+            Some(q) => {
+                q.0.push(fb);
+                q.1+=c;
+            }
+        }
+    }
+    Ok(res)
+}
+
+fn read_blocks_locs_prog_chunks<R: Read+Seek, T: CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=U>, U:Sync+Send+'static>(
+    fobj: &mut R, locs: &Vec<(i64,Vec<(u64,u64)>)>, nbytes: u64, pb: ProgBarWrap, out: Box<T>) -> Result<U> {
+    
+    
+    let mut oo = Box::new(Callback::new(Box::new(CallBlocksEach::new(out, pb))));
+    
+    let mut curr = Vec::new();
+    let mut curr_len=0;
+    //let mut ttl=0;
+    for (a,b) in locs {
+        
+        for (p,q) in b {
+            curr.push((*a,*p,*q));
+            curr_len += q;
+        }
+        
+        if curr_len > nbytes {
+            let blocks = get_blocks_locs_flat(fobj, curr.clone())?;
+                
+            oo.call(blocks);
+            /*for (a,(b,c)) in blocks {
+                ttl+=c;
+                pb.prog(ttl as f64);
+                out.call((a,b));
+            }*/
+            curr.clear();
+            curr_len=0;
+        }
+    }
+    let blocks = get_blocks_locs_flat(fobj, curr)?;
+    /*
+    for (a,(b,c)) in blocks {
+        ttl+=c;
+        pb.prog(ttl as f64);
+        out.call((a,b));
+    }
+    pb.finish();*/
+    oo.call(blocks);
+    oo.finish()
+    //out.finish()
+}
+*/
+            
+  
+    
+        
+    
+    
+    
+
+
 
 fn write_blocks_from_temp(
     xx: TempData,
@@ -779,7 +1094,18 @@ pub fn sort_blocks(
                 nl,
                 nb
             );
-        }
+        },
+        TempData::TempFileSplit((fnames, locs)) => {
+            let nl: usize = locs.iter().map(|(_, _,y)| y.len()).sum();
+            let nb: u64 = locs.iter().map(|(_, _,y)| y).flatten().map(|(_, b)| b).sum();
+            println!(
+                "temp files {:?}, {} tiles {} locs {} bytes",
+                fnames,
+                locs.len(),
+                nl,
+                nb
+            );
+        },
     }
 
     write_blocks_from_temp(xx, outfn, groups, numchan, timestamp)?;

@@ -1,4 +1,4 @@
-use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree};
+use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree,Bbox};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
 
@@ -6,13 +6,13 @@ use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_pro
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,LogTimes,parse_timestamp,CallAll};
 use crate::mergechanges::inmem::{read_filter,make_write_file};
 use crate::mergechanges::filter_elements::prep_bbox_filter;
-use crate::sortblocks::{Timings,OtherData};
+use crate::sortblocks::{Timings,OtherData,TempData};
 use crate::sortblocks::writepbf::{make_packprimblock_many};
 use crate::update::{ParallelFileLocs,get_file_locs};
-use crate::sortblocks::sortblocks::{TempData,WriteTemp,read_temp_data};
+use crate::sortblocks::sortblocks::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,read_temp_data};
 
 use std::sync::Arc;
-use std::io::{Result,Error,ErrorKind};
+use std::io::{Result,Error,ErrorKind,BufReader};
 use std::collections::BTreeMap;
 
 struct CollectObj<T: WithId> {
@@ -201,10 +201,19 @@ pub fn write_temp_blocks(
     tempfn: &str,
     limit: usize,
     splitat: (i64,i64,i64),
+    fsplit: i64,
     numchan: usize,
 ) -> Result<TempData> {
     
-    let wt = Box::new(WriteTemp::new(&tempfn));
+    let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
+        Box::new(WriteTempWhich::Data(WriteTempData::new()))
+    } else {
+        if fsplit == 0 {
+            Box::new(WriteTempWhich::File(WriteTempFile::new(tempfn.clone())))
+        } else {
+            Box::new(WriteTempWhich::Split(WriteTempFileSplit::new(tempfn.clone(),fsplit)))
+        }
+    };
 
     let mut prog = ProgBarWrap::new(100);
     prog.set_range(100);
@@ -237,8 +246,7 @@ pub fn write_temp_blocks(
     
     for (_,b) in std::mem::take(&mut res.others) {
         match b {
-            OtherData::FileLocs(fl) => { return Ok(TempData::TempFile((tempfn.to_string(), fl))); },
-            OtherData::TempData(td) => { return Ok(TempData::TempBlocks(td)); },
+            OtherData::TempData(td) => { return Ok(td); },
             _ => {}
         }
     }
@@ -290,20 +298,65 @@ pub fn run_mergechanges(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter:
         None => { format!("{}-temp.pbf", &outfn[0..outfn.len()-4]) }
     };
     
-    let mut limit=250;
+    let mut limit=500;
     if tempfn == "NONE" {
-        limit=100;
+        limit=200;
     }
-    
-    let temps = write_temp_blocks(&mut pfilelocs, ids.clone(), &tempfn, limit, (1i64<<20, 1i64<<17, 1i64<<14), numchan)?;
+    let fsplit = if filter.is_none() {
+        100
+    } else {
+        0
+    };
+        
+    let temps = write_temp_blocks(&mut pfilelocs, ids.clone(), &tempfn, limit, (1i64<<21, 1i64<<18, 1i64<<15), fsplit, numchan)?;
     tx.add("write_temp_blocks");
     match &temps {
         TempData::TempFile((a,b)) => {
             println!("wrote {} / {} blocks to {}", b.len(), b.iter().map(|(_,p)| { p.len() }).sum::<usize>(), a);
             serde_json::to_writer(std::fs::File::create(&format!("{}-locs.json", a))?,&b)?;
             },
-        TempData::TempBlocks(bl) => {println!("have {} / {} temp blocks", bl.len(), bl.iter().map(|(_,p)| { p.len() }).sum::<usize>()); }
+        TempData::TempBlocks(bl) => {println!("have {} / {} temp blocks", bl.len(), bl.iter().map(|(_,p)| { p.len() }).sum::<usize>()); },
+        TempData::TempFileSplit((a,b)) => {
+            println!("wrote {} / {} blocks to {:?}", b.len(), b.iter().map(|(_,_,p)| { p.len() }).sum::<usize>(), a);
+            let mut rr = BTreeMap::new();
+            rr.insert(String::from("filenames"),serde_json::json!(a));
+            rr.insert(String::from("locs"),serde_json::json!(b));
+            serde_json::to_writer(std::fs::File::create(&format!("{}-locs.json", &tempfn))?,&rr)?;
+            },
     }
+    
+    let wf = make_write_file(outfn, bbox, 8000, numchan);
+    
+    let res = if numchan == 0 {
+        read_temp_data(temps, Box::new(CallAll::new(wf, "unpack temp", Box::new(collect_blocks))))?
+    } else {
+        
+        let mut ccs: Vec<Box<dyn CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=Timings>>> = Vec::new();
+        for wf in CallbackSync::new(wf, numchan) {
+            let wf2 = Box::new(ReplaceNoneWithTimings::new(wf));
+            ccs.push(Box::new(Callback::new(Box::new(CallAll::new(wf2, "unpack temp", Box::new(collect_blocks))))));
+        }
+    
+        read_temp_data(temps, Box::new(CallbackMerge::new(ccs, Box::new(MergeTimings::new()))))?
+    };
+    println!("{}",res);
+    
+    tx.add("write final");
+    
+    println!("{}", tx);
+    
+    Ok(())
+    
+}
+pub fn run_mergechanges_from_existing(outfn: &str, tempfn: &str, numchan: usize) -> Result<()> {
+    let mut tx=LogTimes::new();
+    let bbox = Bbox::planet();
+    let locs: Vec<(i64,Vec<(u64,u64)>)> = 
+        serde_json::from_reader(BufReader::new(std::fs::File::open(&format!("{}-locs.json", tempfn))?))?;
+    
+    tx.add("load filelocs");
+    
+    let temps = TempData::TempFile((String::from(tempfn), locs));
     
     let wf = make_write_file(outfn, bbox, 8000, numchan);
     

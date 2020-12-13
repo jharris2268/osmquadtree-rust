@@ -106,7 +106,7 @@ impl CallFinish for WriteFileInternalLocs {
     }
 }
 
-pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>>(
+pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized>(
     out: Box<T>,
     includeqts: bool,
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
@@ -119,7 +119,7 @@ pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnTy
 }
 
 pub fn make_packprimblock_many<
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized,
 >(
     out: Box<T>,
     includeqts: bool,

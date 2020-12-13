@@ -343,7 +343,7 @@ impl ProgBarWrap {
     pub fn new(total: u64) -> ProgBarWrap {
         let pb = ProgressBar::new(total);
         pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:-4}% ({eta_precise}) {msg}")
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
             .progress_chars("#>-"));
 
         ProgBarWrap {

@@ -9,7 +9,7 @@ use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::parse_timestamp;
 
-use osmquadtree::mergechanges::{run_mergechanges_inmem,run_mergechanges};
+use osmquadtree::mergechanges::{run_mergechanges_inmem,run_mergechanges,run_mergechanges_from_existing};
 
 use std::io::{Error, ErrorKind, Result};
 
@@ -206,8 +206,15 @@ fn main() {
                 .arg(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))            
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+        )
+        .subcommand(
+            SubCommand::with_name("mergechanges_from_existing")   
+                .about("prep_bbox_filter")
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         );
+        
 
     let mut help = Vec::new();
     app.write_help(&mut help).expect("?");
@@ -312,6 +319,13 @@ fn main() {
                 filter.value_of("TEMPFN"),
                 filter.value_of("FILTER"),
                 filter.value_of("TIMESTAMP"),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("mergechanges_from_existing", Some(filter)) => {
+            run_mergechanges_from_existing(
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("TEMPFN").unwrap(),
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },

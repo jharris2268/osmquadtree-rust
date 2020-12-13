@@ -253,7 +253,7 @@ where
     }
 }
 
-pub struct CallAll<T: CallFinish, U: Sync + Send + 'static, W: Fn(U) -> T::CallType, V> {
+pub struct CallAll<T: CallFinish + ?Sized, U: Sync + Send + 'static, W: Fn(U) -> T::CallType, V> {
     out: Box<T>,
     tm: f64,
     msg: String,
@@ -264,7 +264,7 @@ pub struct CallAll<T: CallFinish, U: Sync + Send + 'static, W: Fn(U) -> T::CallT
 
 impl<T, U, W, V> CallAll<T, U, W, V>
 where
-    T: CallFinish<ReturnType = Timings<V>>,
+    T: CallFinish<ReturnType = Timings<V>> + ?Sized,
     U: Sync + Send + 'static,
     W: Fn(U) -> T::CallType + Sync + Send + 'static,
     V: Sync + Send + 'static,
@@ -283,7 +283,7 @@ where
 
 impl<T, U, W, V> CallFinish for CallAll<T, U, W, V>
 where
-    T: CallFinish<ReturnType = Timings<V>>,
+    T: CallFinish<ReturnType = Timings<V>> + ?Sized,
     U: Sync + Send + 'static,
     W: Fn(U) -> T::CallType + Sync + Send + 'static,
     V: Sync + Send + 'static,
