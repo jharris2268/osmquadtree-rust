@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Seek, SeekFrom, Write,/*Read,Result*/};
+use std::io::{BufReader, Seek, SeekFrom, Write,Read,/*Result*/};
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{Node, PrimitiveBlock, Quadtree, Relation, Way};
@@ -13,9 +13,12 @@ use crate::pbfformat::read_file_block::{
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{make_packprimblock, make_packprimblock_many, WriteFile};
-use crate::sortblocks::{OtherData, QuadtreeTree, Timings,TempData};
+use crate::sortblocks::{OtherData, QuadtreeTree, Timings,TempData,FileLocs};
 use crate::stringutils::StringUtils;
 use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer,ThreadTimer};
+
+use serde_json;
+use serde::{Serialize,Deserialize};
 
 fn get_block<'a>(
     blocks: &'a mut HashMap<i64, PrimitiveBlock>,
@@ -311,26 +314,21 @@ impl CallFinish for WriteTempFileSplit {
     }
     fn finish(&mut self) -> io::Result<Timings> {
         let mut tm = Timings::new();
-        let mut fnames =Vec::new();
-        let mut flocs = Vec::new();
-        for (_,(fname,mut wf)) in std::mem::take(&mut self.tempfs) {
+        
+        let mut parts = Vec::new();
+        for (k,(fname,mut wf)) in std::mem::take(&mut self.tempfs) {
             let mut t = wf.finish()?;
-            
             
             let fl = match std::mem::take(&mut t.others).pop().unwrap().1 {
                 OtherData::FileLocs(p) => p,
                 _ => {panic!("!!"); }
             };
-            let ii = fnames.len();
             
-            fnames.push(fname);
-            for (a,b) in fl {
-                flocs.push((a,ii,b));
-            }
+            parts.push((k,fname,fl));
             tm.combine(t);
         }
-        flocs.sort_by_key( |x| { x.0 });
-        tm.add_other("tempdata", OtherData::TempData(TempData::TempFileSplit((fnames,flocs))));
+        
+        tm.add_other("tempdata", OtherData::TempData(TempData::TempFileSplit(parts)));
         Ok(tm)
     }
 }
@@ -781,6 +779,7 @@ where
 pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>(
     xx: TempData,
     mut out: Box<T>,
+    remove_files: bool
 ) -> io::Result<Timings> {
     //let mut ct = Checktime::with_threshold(2.0);
 
@@ -800,16 +799,8 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                     tl += x.len();
                     mm.push(unpack_file_block(0, &x)?);
                 }
-                /*match ct.checktime() {
-                    Some(d) => {
-                        print!("\r[{:6.1}s] tile {}, {} // {}", d,a, mm.len(),tl);
-                        io::stdout().flush().expect("");
-                    },
-                    None => {}
-                }
-                //println!("{:6.1}s] tile {}, {} // {}", ct.gettime(),a, mm.len(),tl);*/
+                
                 prog.prog(tl as f64);
-
                 out.call((a, mm));
             }
             prog.finish();
@@ -820,184 +811,97 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
             let prog = ProgBarWrap::new_filebytes(tbl);
             prog.set_message(&format!("read temp blocks from {}", fname));
             
+            let mut tl=0;
+            let mut fbuf = BufReader::new(File::open(&fname)?);
+            read_blocks(&mut fbuf, locs, 128*1024*1024, &mut tl, &prog, &mut out)?;
             
-            let ff = File::open(&fname)?;
-            let mut fb = BufReader::new(ff);
-            let mut tl = 0;
-            for (a, b) in locs {
-                let mut mm = Vec::new();
-
-                for (p, q) in b {
-                    fb.seek(SeekFrom::Start(p))?;
-                    let t=read_file_block_with_pos(&mut fb, p)?;
-                    mm.push(t.1);
-                    tl += q;
-                }
-                /*match ct.checktime() {
-                    Some(d) => {
-                        print!("\r[{:6.1}s] tile {}, {} // {}", d,a, mm.len(),tl);
-                        io::stdout().flush().expect("");
-                    },
-                    None => {}
-                }
-                //println!("{:6.1}s] tile {}, {} // {}", ct.gettime(),a, mm.len(),tl);
-                */
-                prog.prog(tl as f64);
-
-                out.call((a, mm));
+            if remove_files {
+                std::fs::remove_file(&fname)?;
             }
+            
             prog.finish();
             out.finish()
-            //return read_blocks_locs_prog_chunks(&mut fb, &locs, 1024*1024*1024, prog, out);
+            
         },
-        TempData::TempFileSplit((fnames, locs)) => {
+        TempData::TempFileSplit(parts) => {
             let mut tbl = 0;
-            for f in &fnames {
+            for (_,f,_) in &parts {
                 tbl += file_length(f);
             }
             
             let prog = ProgBarWrap::new_filebytes(tbl);
-            prog.set_message(&format!("read temp blocks from {} files", fnames.len()));
-            
-            let mut fbufs = BTreeMap::new();
-            for (i,f) in fnames.iter().enumerate() {
-                fbufs.insert(i,BufReader::new(File::open(f)?));
-            }
+            prog.set_message(&format!("read temp blocks from {} files", parts.len()));
             
             let mut tl = 0;
-            for (a, b, c) in locs {
-                let fb = match fbufs.get_mut(&b) {
-                    Some(f) => f,
-                    None => {panic!("!!");},
-                };
+            for (_,f,locs) in parts {
+                let mut fbuf = BufReader::new(File::open(&f)?);
+                read_blocks(&mut fbuf, locs, 128*1024*1024, &mut tl, &prog, &mut out)?;
                 
-                let mut mm = Vec::new();
-
-                for (p, q) in c {
-                    fb.seek(SeekFrom::Start(p))?;
-                    let t=read_file_block_with_pos(fb, p)?;
-                    mm.push(t.1);
-                    tl += q;
+                if remove_files {
+                    std::fs::remove_file(f)?;
                 }
-                
-                prog.prog(tl as f64);
-
-                out.call((a, mm));
             }
+            
             prog.finish();
             out.finish()
         }
     }
 }
 
-
-/*
-use std::marker::PhantomData;
-struct CallBlocksEach<T,U> {
-    out: Box<T>,
-    ttl: u64,
-    pb: ProgBarWrap,
-    x: PhantomData<U>
-}
-
-impl<T,U> CallBlocksEach<T,U>
-where T: CallFinish<CallType=(i64,Vec<FileBlock>), ReturnType=U>,
-      U: Sync+Send+'static
-{
-    pub fn new(out: Box<T>,pb: ProgBarWrap) -> CallBlocksEach<T,U> {
-        CallBlocksEach{out: out,pb:pb, ttl: 0, x: PhantomData}
-    }
-}
-
-impl<T,U> CallFinish for CallBlocksEach<T,U>
-where T: CallFinish<CallType=(i64,Vec<FileBlock>), ReturnType=U>,
-      U: Sync+Send+'static
-
-{
-    type CallType=BTreeMap<i64,(Vec<FileBlock>,u64)>;
-    type ReturnType = U;
-    
-    fn call(&mut self, blocks: Self::CallType) {
-        
-        for (a,(b,c)) in blocks {
-            self.ttl += c;
-            self.pb.prog(self.ttl as f64);
-            self.out.call((a,b));
+fn read_blocks<R: Read+Seek, T: CallFinish<CallType=(i64, Vec<FileBlock>)>>(fbuf: &mut R, locs: Vec<(i64,Vec<(u64,u64)>)>, split_size: u64, tl: &mut u64, prog: &ProgBarWrap, out: &mut Box<T>) -> io::Result<()> {
+    let mut curr = Vec::new();
+    let mut curr_len = 0;
+    for (a,b) in locs {
+        curr_len += b.iter().map(|(_,q)| { q }).sum::<u64>();
+        curr.push((a,b));
+        if curr_len >= split_size {
+            for (k, (fbs, ll)) in read_blocks_parts(fbuf, &curr)? {
+                *tl += ll;
+                prog.prog(*tl as f64);
+                out.call((k,fbs));
+            }
+            curr.clear();
+            curr_len = 0;
+            
         }
     }
-    fn finish(&mut self) -> Result<Self::ReturnType> {
-        self.pb.finish();
-        self.out.finish()
+    if curr_len > 0 {
+        for (k, (fbs, ll)) in read_blocks_parts(fbuf, &curr)? {
+            *tl += ll;
+            prog.prog(*tl as f64);
+            out.call((k,fbs));
+        }
     }
+    
+    Ok(())
 }
+   
 
-
-
-fn get_blocks_locs_flat<R: Read+Seek>(fobj: &mut R, mut locs: Vec<(i64,u64,u64)>) -> Result<BTreeMap<i64,(Vec<FileBlock>,u64)>> {
-    let mut res=BTreeMap::new();
-    locs.sort_by_key(|(_,b,_)| { *b });
-    println!("read {} blocks, {} bytes [{:?} => {:?}]\n", locs.len(), locs.iter().map(|p| {p.2}).sum::<u64>(), locs[0], locs[locs.len()-1]);
-    for (a,b,c) in locs {
-        fobj.seek(SeekFrom::Start(b))?;
-        let (_,fb) = read_file_block_with_pos(fobj, b)?;
+fn read_blocks_parts<R: Read+Seek>(fbuf: &mut R, curr: &Vec<(i64,Vec<(u64,u64)>)>) -> io::Result<BTreeMap<i64,(Vec<FileBlock>,u64)>> {
+    let mut curr_flat = Vec::new();
+    for (a,b) in curr {
+        for (p,q) in b {
+            curr_flat.push((*a,*p,*q));
+        }
+    }
+    curr_flat.sort_by_key(|x| { x.1 });
+    
+    let mut res = BTreeMap::new();
+    for (a,p,q) in curr_flat {
+        
+        fbuf.seek(SeekFrom::Start(p))?;
+        let (_,t)=read_file_block_with_pos(fbuf, p)?;
         match res.get_mut(&a) {
-            None => { res.insert(a, (vec![fb], c)); },
-            Some(q) => {
-                q.0.push(fb);
-                q.1+=c;
+            None => { res.insert(a,(vec![t],q)); },
+            Some(x) => {
+                x.0.push(t);
+                x.1+=q;
             }
         }
     }
     Ok(res)
 }
-
-fn read_blocks_locs_prog_chunks<R: Read+Seek, T: CallFinish<CallType=(i64,Vec<FileBlock>),ReturnType=U>, U:Sync+Send+'static>(
-    fobj: &mut R, locs: &Vec<(i64,Vec<(u64,u64)>)>, nbytes: u64, pb: ProgBarWrap, out: Box<T>) -> Result<U> {
-    
-    
-    let mut oo = Box::new(Callback::new(Box::new(CallBlocksEach::new(out, pb))));
-    
-    let mut curr = Vec::new();
-    let mut curr_len=0;
-    //let mut ttl=0;
-    for (a,b) in locs {
-        
-        for (p,q) in b {
-            curr.push((*a,*p,*q));
-            curr_len += q;
-        }
-        
-        if curr_len > nbytes {
-            let blocks = get_blocks_locs_flat(fobj, curr.clone())?;
-                
-            oo.call(blocks);
-            /*for (a,(b,c)) in blocks {
-                ttl+=c;
-                pb.prog(ttl as f64);
-                out.call((a,b));
-            }*/
-            curr.clear();
-            curr_len=0;
-        }
-    }
-    let blocks = get_blocks_locs_flat(fobj, curr)?;
-    /*
-    for (a,(b,c)) in blocks {
-        ttl+=c;
-        pb.prog(ttl as f64);
-        out.call((a,b));
-    }
-    pb.finish();*/
-    oo.call(blocks);
-    oo.finish()
-    //out.finish()
-}
-*/
             
-  
-    
-        
-    
     
     
 
@@ -1009,13 +913,14 @@ fn write_blocks_from_temp(
     groups: Box<QuadtreeTree>,
     numchan: usize,
     timestamp: i64,
+    keep_temps: bool
 ) -> io::Result<()> {
     let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
 
     let t = if numchan == 0 {
         let cq = Box::new(CollectBlocksTemp::new(wf, groups, timestamp));
 
-        read_temp_data(xx, cq)
+        read_temp_data(xx, cq, !keep_temps)
     } else {
         let wfs = CallbackSync::new(wf, numchan);
         let mut cqs: Vec<
@@ -1033,12 +938,56 @@ fn write_blocks_from_temp(
 
         let cq = Box::new(CallbackMerge::new(cqs, Box::new(MergeTimings::new())));
 
-        read_temp_data(xx, cq)
+        read_temp_data(xx, cq, !keep_temps)
     }?;
 
     println!("{}", t);
     Ok(())
 }
+
+#[derive(Serialize,Deserialize)]
+struct TempFileLocs {
+    fname: String,
+    locs: FileLocs
+}
+
+pub fn write_tempfile_locs(tempfn: &str, locs: &FileLocs) -> io::Result<()> {
+    serde_json::to_writer(std::fs::File::create(&format!("{}-locs.json", tempfn))?,&TempFileLocs{fname: String::from(tempfn), locs:locs.clone()})?;
+    Ok(())
+}
+
+pub fn read_tempfile_locs(tempfn: &str) -> io::Result<TempData> {
+    let xx: TempFileLocs = serde_json::from_reader(BufReader::new(File::open(&format!("{}-locs.json", tempfn))?))?;
+    Ok(TempData::TempFile((xx.fname, xx.locs)))
+}
+
+
+#[derive(Serialize,Deserialize)]
+struct TempFileSplitLocs {
+    idx: i64,
+    fname: String,
+    locs: FileLocs
+}
+
+pub fn write_tempfilesplit_locs(tempfn: &str, parts: &Vec<(i64,String,FileLocs)>) -> io::Result<()> {
+    let mut rr = Vec::new();
+    for (a,b,c) in parts {
+        rr.push(TempFileSplitLocs{idx: *a, fname: b.clone(), locs: c.clone()});
+    }
+    serde_json::to_writer(std::fs::File::create(&format!("{}-locs.json", tempfn))?,&rr)?;
+    Ok(())
+}
+
+pub fn read_tempfilesplit_locs(tempfn: &str) -> io::Result<TempData> {
+    let xx: Vec<TempFileSplitLocs> = serde_json::from_reader(BufReader::new(File::open(&format!("{}-locs.json", tempfn))?))?;
+    let mut parts=Vec::new();
+    for t in xx {
+        parts.push((t.idx, t.fname, t.locs));
+    }
+    Ok(TempData::TempFileSplit(parts))
+}
+
+    
 
 pub fn sort_blocks(
     infn: &str,
@@ -1050,6 +999,7 @@ pub fn sort_blocks(
     tempinmem: bool,
     limit: usize,
     timestamp: i64,
+    keep_temps: bool
 ) -> io::Result<()> {
     println!(
         "sort_blocks({},{},{},{},{},{},{},{})",
@@ -1084,9 +1034,12 @@ pub fn sort_blocks(
                 nl,
                 nb
             );
+            if keep_temps {
+                write_tempfile_locs(&tempfn, locs)?;
+            }
         }
         TempData::TempBlocks(data) => {
-            let nl: usize = data.iter().map(|(_, y)| y.len()).sum();
+            let nl: usize = data.iter().map(|(_, y)| {y.len()}).sum();
             let nb: usize = data.iter().map(|(_, y)| y).flatten().map(|x| x.len()).sum();
             println!(
                 "temp blocks {} tiles, {} blobs {} bytes",
@@ -1094,21 +1047,27 @@ pub fn sort_blocks(
                 nl,
                 nb
             );
+            
+                
         },
-        TempData::TempFileSplit((fnames, locs)) => {
-            let nl: usize = locs.iter().map(|(_, _,y)| y.len()).sum();
-            let nb: u64 = locs.iter().map(|(_, _,y)| y).flatten().map(|(_, b)| b).sum();
+        TempData::TempFileSplit(parts) => {
+            let nk: usize = parts.iter().map(|(_, _,y)| {y.len()}).sum();
+            let nl: usize = parts.iter().map(|(_, _,y)| y).flatten().map(|(_,y)| { y.len() }).sum();
+            let nb: u64 = parts.iter().map(|(_, _,y)| y).flatten().map(|(_,y)| y).flatten().map(|(_, b)| b).sum();
             println!(
-                "temp files {:?}, {} tiles {} locs {} bytes",
-                fnames,
-                locs.len(),
+                "temp files {} files, {} tiles {} locs {} bytes",
+                parts.len(),
+                nk,
                 nl,
                 nb
             );
+            if keep_temps {
+                write_tempfilesplit_locs(&tempfn, parts)?;
+            }
         },
     }
 
-    write_blocks_from_temp(xx, outfn, groups, numchan, timestamp)?;
+    write_blocks_from_temp(xx, outfn, groups, numchan, timestamp, keep_temps)?;
 
     Ok(())
     //Err(io::Error::new(io::ErrorKind::Other,"not impl"))

@@ -7,10 +7,11 @@ pub mod writepbf;
 use crate::elements::PrimitiveBlock;
 
 type FileLocs = Vec<(i64, Vec<(u64, u64)>)>;
+
 pub enum TempData {
     TempBlocks(Vec<(i64, Vec<Vec<u8>>)>),
-    TempFile((String, Vec<(i64, Vec<(u64, u64)>)>)),
-    TempFileSplit((Vec<String>, Vec<(i64, usize, Vec<(u64,u64)>)>))
+    TempFile((String, FileLocs)),
+    TempFileSplit(Vec<(i64, String, FileLocs)>)
 }
 
 pub enum OtherData {

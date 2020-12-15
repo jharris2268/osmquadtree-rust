@@ -12,7 +12,7 @@ use std::io::{Result, Seek, SeekFrom, Write};
 pub type FileLocs = Vec<(i64, Vec<(u64, u64)>)>;
 
 pub struct WriteFile {
-    outf: File,
+    outf: Option<File>,
     write_external_locs: bool,
     locs: HashMap<i64, Vec<(u64, u64)>>,
     tm: f64,
@@ -25,18 +25,18 @@ impl WriteFile {
     }
     
     pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
-        let mut outf = File::create(outfn).expect("failed to create");
+        let mut outf = Some(File::create(outfn).expect("failed to create"));
         let mut write_external_locs = false;
         match header_type {
             HeaderType::None => {}
             HeaderType::NoLocs => {
-                outf.write_all(
+                outf.as_mut().unwrap().write_all(
                     &pack_file_block("OSMHeader", &make_header_block(false, bbox), true).expect("?"),
                 )
                 .expect("?");
             }
             HeaderType::ExternalLocs => {
-                outf.write_all(
+                outf.as_mut().unwrap().write_all(
                     &pack_file_block("OSMHeader", &make_header_block(true, bbox), true).expect("?"),
                 )
                 .expect("?");
@@ -57,11 +57,10 @@ impl WriteFile {
     }
 
     fn add_loc(&mut self, i: i64, l: u64) {
-        let p = self.outf.seek(SeekFrom::Current(0)).expect("??");
-        if self.locs.contains_key(&i) {
-            self.locs.get_mut(&i).unwrap().push((p, l));
-        } else {
-            self.locs.insert(i, vec![(p, l)]);
+        let p = self.outf.as_mut().unwrap().seek(SeekFrom::Current(0)).expect("??");
+        match self.locs.get_mut(&i) {
+            Some(x) => { x.push((p, l)); },
+            None => { self.locs.insert(i, vec![(p, l)]); },
         }
     }
 }
@@ -72,15 +71,18 @@ impl CallFinish for WriteFile {
 
     fn call(&mut self, bls: Vec<(i64, Vec<u8>)>) {
         let c = ThreadTimer::new();
-        for (i, d) in &bls {
-            self.add_loc(*i, d.len() as u64);
-            self.outf.write_all(d).expect("failed to write block");
+        for (i, d) in bls {
+            self.add_loc(i, d.len() as u64);
+            self.outf.as_mut().unwrap().write_all(&d).expect("failed to write block");
         }
 
         self.tm += c.since();
     }
 
     fn finish(&mut self) -> Result<Self::ReturnType> {
+        drop(self.outf.take());
+        
+        
         let mut ls = Vec::new();
         let mut lf = Vec::new();
         for (a, b) in std::mem::take(&mut self.locs) {
