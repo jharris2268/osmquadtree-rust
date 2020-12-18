@@ -163,6 +163,7 @@ impl fmt::Display for WayNodeTile {
 pub struct CollectTilesStore {
     //filename: String,
     vals: Vec<(i64, Vec<Vec<u8>>)>,
+    
     tm: f64,
 }
 
@@ -399,7 +400,7 @@ pub struct PackWayNodes<T> {
     split: i64,
     limit: usize,
     outcall: Box<T>,
-
+    first_waytile_pos: Option<u64>,
     relmems: Option<RelMems>,
     pack_rels: bool,
     tm: f64,
@@ -424,6 +425,7 @@ where
             split: split,
             limit: limit,
             outcall: outcall,
+            first_waytile_pos: None,
             relmems: Some(RelMems::new()),
             pack_rels: pack_rels,
             tm: 0.0,
@@ -464,7 +466,7 @@ where
         } else {
             let mb = MinimalBlock::read_parts(
                 idx as i64,
-                fb.pos + fb.len,
+                fb.pos,
                 &fbd,
                 false,
                 false,
@@ -472,7 +474,12 @@ where
                 true,
             )
             .expect("failed to read block");
-
+            
+            if !mb.ways.is_empty() && self.first_waytile_pos.is_none() {
+                //println!("\nfound {} ways @ {}", mb.ways.len(), fb.pos);
+                self.first_waytile_pos = Some(fb.pos)
+            }
+            
             for w in mb.ways {
                 for n in read_pbf::DeltaPackedInt::new(&w.refs_data) {
                     match self.add(n, w.id) {
@@ -559,14 +566,18 @@ where
 
         let r = self.relmems.take().unwrap();
         timings.add_other("relmems", OtherData::RelMems(r));
+        match self.first_waytile_pos {
+            None => {},
+            Some(p) => { timings.add_other("first_waytile_pos", OtherData::FirstWayTile(p)); }
+        }
         Ok(timings)
     }
 }
 
-fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals) {
+fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals,u64) {
     let mut r = RelMems::new();
     let mut w = Vec::new();
-
+    let mut first_waytile_pos = u64::MAX;
     for (_, b) in std::mem::take(&mut tt.others) {
         match b {
             OtherData::RelMems(rx) => r.extend(rx),
@@ -578,14 +589,19 @@ fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals) {
                         panic!("!!");
                     }
                 }
-            }
+            },
+            OtherData::FirstWayTile(p) => {
+                if p < first_waytile_pos {
+                    first_waytile_pos = p;
+                }
+            },
             _ => {}
         }
     }
-    return (r, Arc::new(w));
+    return (r, Arc::new(w),first_waytile_pos);
 }
 
-pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals)> {
+pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals,u64)> {
     println!("prep_way_nodes({},{})", infn, numchan);
 
     let (split, limit) = (1 << 22, 1 << 14);

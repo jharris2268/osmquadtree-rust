@@ -20,8 +20,8 @@ pub type WayNodeVals = Arc<Vec<(i64, Vec<Vec<u8>>)>>;
 #[derive(Clone)]
 pub enum NodeWayNodes {
     Combined(String),
-    InMem(String, WayNodeVals),
-    Seperate(String, String, FileLocs),
+    InMem(String, WayNodeVals, u64),
+    Seperate(String, String, FileLocs, u64),
 }
 
 pub enum OtherData {
@@ -35,6 +35,7 @@ pub enum OtherData {
     WriteQuadTree(Box<write_quadtrees::WriteQuadTree>),
     FileLen(u64),
     CollectedData(calcinmem::CollectedData),
+    FirstWayTile(u64)
 }
 
 pub type Timings = crate::utils::Timings<OtherData>;

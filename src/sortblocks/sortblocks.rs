@@ -2,13 +2,14 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, Seek, SeekFrom, Write,Read,/*Result*/};
+use std::sync::Arc;
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{Node, PrimitiveBlock, Quadtree, Relation, Way};
 
 use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{
-    file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
+    file_length, pack_file_block, read_all_blocks_with_progbar,
     unpack_file_block, FileBlock, ProgBarWrap, read_file_block_with_pos
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
@@ -22,7 +23,7 @@ use serde::{Serialize,Deserialize};
 
 fn get_block<'a>(
     blocks: &'a mut HashMap<i64, PrimitiveBlock>,
-    groups: &'a Box<QuadtreeTree>,
+    groups: &'a QuadtreeTree,
     q: Quadtree,
 ) -> &'a mut PrimitiveBlock {
     let (_, b) = groups.find(q);
@@ -36,12 +37,12 @@ fn get_block<'a>(
 }
 
 struct SortBlocks {
-    groups: Option<Box<QuadtreeTree>>,
+    groups: Arc<QuadtreeTree>,
     blocks: HashMap<i64, PrimitiveBlock>,
 }
 
 impl<'a> SortBlocks {
-    pub fn new(groups: Option<Box<QuadtreeTree>>) -> SortBlocks {
+    pub fn new(groups: Arc<QuadtreeTree>) -> SortBlocks {
         SortBlocks {
             groups: groups,
             blocks: HashMap::new(),
@@ -49,7 +50,7 @@ impl<'a> SortBlocks {
     }
 
     fn get_block(&'a mut self, q: Quadtree) -> &'a mut PrimitiveBlock {
-        get_block(&mut self.blocks, self.groups.as_ref().unwrap(), q)
+        get_block(&mut self.blocks, &self.groups, q)
     }
 
     fn add_node(&mut self, n: Node) {
@@ -79,13 +80,14 @@ impl<'a> SortBlocks {
         }
     }
 
-    fn finish(&mut self) -> (Vec<PrimitiveBlock>, Option<Box<QuadtreeTree>>) {
+    fn finish(&mut self) -> Vec<PrimitiveBlock> {
         let mut bv = Vec::new();
-        for (_, b) in std::mem::take(&mut self.blocks) {
+        for (_, mut b) in std::mem::take(&mut self.blocks) {
+            b.sort();
             bv.push(b);
         }
         bv.sort_by_key(|b| b.quadtree.as_int());
-        (bv, self.groups.take())
+        bv
     }
 }
 
@@ -94,9 +96,9 @@ struct CollectBlocks {
     tm: f64,
 }
 impl CollectBlocks {
-    pub fn new(groups: Box<QuadtreeTree>) -> CollectBlocks {
+    pub fn new(groups: Arc<QuadtreeTree>) -> CollectBlocks {
         CollectBlocks {
-            sb: SortBlocks::new(Some(groups)),
+            sb: SortBlocks::new(groups),
             tm: 0.0,
         }
     }
@@ -114,9 +116,9 @@ impl CallFinish for CollectBlocks {
     fn finish(&mut self) -> io::Result<Timings> {
         let mut t = Timings::new();
         t.add("find blocks", self.tm);
-        let (bv, groups) = self.sb.finish();
+        let bv = self.sb.finish();
 
-        t.add_other("groups", OtherData::QuadtreeTree(groups.unwrap()));
+        //t.add_other("groups", OtherData::QuadtreeTree(groups.unwrap()));
         t.add_other("blocks", OtherData::AllBlocks(bv));
 
         Ok(t)
@@ -126,14 +128,14 @@ impl CallFinish for CollectBlocks {
 fn get_blocks(
     infn: &str,
     qtsfn: &str,
-    groups: Box<QuadtreeTree>,
+    groups: Arc<QuadtreeTree>,
     numchan: usize,
 ) -> io::Result<Vec<PrimitiveBlock>> {
-    let (mut res, d) = if numchan == 0 {
+    let pp: Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>> = if numchan == 0 {
         let cc = Box::new(CollectBlocks::new(groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
-        let pp = make_unpackprimblock(aq);
-        read_all_blocks(infn, pp)
+        make_unpackprimblock(aq)
+        
     } else {
         let cc = Box::new(Callback::new(Box::new(CollectBlocks::new(groups))));
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, cc)), numchan);
@@ -144,10 +146,10 @@ fn get_blocks(
             pps.push(Box::new(Callback::new(make_unpackprimblock(aq2))));
         }
 
-        let pp = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        read_all_blocks(infn, pp)
+        Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
+        
     };
-
+    let (mut res, d) = read_all_blocks_with_progbar(infn, pp, "get_blocks");
     let mut blocks: Option<Vec<PrimitiveBlock>> = None;
 
     for o in std::mem::take(&mut res.others) {
@@ -363,100 +365,26 @@ impl CallFinish for WriteTempWhich {
         
         
     
-
-/*
-pub struct WriteTemp {
-    tempf: Option<WriteFile>,
-    tempd: BTreeMap<i64, Vec<Vec<u8>>>,
-    tm: f64,
-}
-
-impl WriteTemp {
-    pub fn new(tempfn: &str) -> WriteTemp {
-        if tempfn == "NONE" {
-            WriteTemp {
-                tempf: None,
-                tempd: BTreeMap::new(),
-                tm: 0.0,
-            }
-        } else {
-            WriteTemp {
-                tempf: Some(WriteFile::new(tempfn, HeaderType::NoLocs)),
-                tempd: BTreeMap::new(),
-                tm: 0.0,
-            }
-        }
-    }
-
-    fn add_temps(&mut self, temps: Vec<(i64, Vec<u8>)>) {
-        for (a, b) in temps {
-            match self.tempd.get_mut(&a) {
-                Some(t) => {
-                    t.push(b);
-                }
-                None => {
-                    self.tempd.insert(a, vec![b]);
-                }
-            }
-        }
-    }
-}
-impl CallFinish for WriteTemp {
-    type CallType = Vec<(i64, Vec<u8>)>;
-    type ReturnType = Timings;
-
-    fn call(&mut self, bl: Self::CallType) {
-        match self.tempf.as_mut() {
-            Some(wf) => {
-                wf.call(bl);
-            }
-            None => {
-                let tx = Timer::new();
-                self.add_temps(bl);
-                self.tm += tx.since();
-            }
-        }
-    }
-
-    fn finish(&mut self) -> io::Result<Timings> {
-        match self.tempf.as_mut() {
-            Some(wf) => {
-                return wf.finish();
-            }
-            None => {
-                let mut t = Timings::new();
-                t.add("store temp", self.tm);
-                let mut td = Vec::new();
-                for (a, b) in std::mem::take(&mut self.tempd) {
-                    td.push((a, b));
-                }
-
-                t.add_other("tempdata", OtherData::TempData(td));
-                return Ok(t);
-            }
-        }
-    }
-}
-*/
 struct CollectTemp<T> {
     out: Box<T>,
     limit: usize,
     splitat: i64,
-    groups: Option<Box<QuadtreeTree>>,
+    groups: Arc<QuadtreeTree>,
     pending: BTreeMap<i64, PrimitiveBlock>,
     qttoidx: BTreeMap<Quadtree, i64>,
     tm: f64,
+    //count: usize
 }
 
 impl<'a, T> CollectTemp<T>
 where
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<PrimitiveBlock>, ReturnType = Timings>,
 {
     pub fn new(
         out: Box<T>,
         limit: usize,
         splitat: i64,
-        groups: Box<QuadtreeTree>,
+        groups: Arc<QuadtreeTree>,
     ) -> CollectTemp<T> {
         let mut qttoidx = BTreeMap::new();
         let mut i = 0;
@@ -467,11 +395,13 @@ where
         CollectTemp {
             out: out,
             limit: limit,
+            //write_at: write_at,
             splitat: splitat,
-            groups: Some(groups),
+            groups: groups,
             qttoidx: qttoidx,
             pending: BTreeMap::new(),
             tm: 0.0,
+            //count: 0
         }
     }
 
@@ -496,10 +426,35 @@ where
             }
         }
         mm
+        /*
+        for n in bl.nodes {
+            self.get_block(n.quadtree).nodes.push(n);
+            self.count+=1;
+        }
+        for w in bl.ways {
+            self.get_block(w.quadtree).ways.push(w);
+            self.count+=5;
+        }
+        
+        for r in bl.relations {
+            self.get_block(r.quadtree).relations.push(r);
+            self.count+=10;
+        }
+        
+        if self.count > self.write_at {
+            for (_,v) in std::mem::take(&mut self.pending) {
+                mm.push(v);
+            }
+            self.count=0;
+        }
+        mm
+          */      
+            
+        
     }
 
     fn get_block(&'a mut self, q: Quadtree) -> &'a mut PrimitiveBlock {
-        let q = self.groups.as_ref().unwrap().find(q).1.qt;
+        let q = self.groups.find(q).1.qt;
         let i = self.qttoidx.get(&q).unwrap();
         let k = i / self.splitat;
         if !self.pending.contains_key(&k) {
@@ -508,7 +463,7 @@ where
         }
         self.pending.get_mut(&k).unwrap()
     }
-
+    
     fn add_node(&mut self, n: Node) -> Option<PrimitiveBlock> {
         let l = self.limit;
         let t = self.get_block(n.quadtree);
@@ -533,24 +488,17 @@ where
         let l = self.limit;
         let t = self.get_block(r.quadtree);
         t.relations.push(r);
-        //self.check_tile(t)
         if t.nodes.len() + 8 * t.ways.len() + 20 * t.relations.len() >= l {
             return Some(std::mem::replace(t, PrimitiveBlock::new(t.index, 0)));
         }
         None
     }
-    /*
-    fn check_tile(&mut self, t: &mut PrimitiveBlock) -> Option<PrimitiveBlock> {
-        if t.len() == self.limit {
-            return Some(std::mem::replace(t, PrimitiveBlock::new(0,0)));
-        }
-        None
-    }*/
+    
 }
 
 impl<T> CallFinish for CollectTemp<T>
 where
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<PrimitiveBlock>, ReturnType = Timings>,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
@@ -559,24 +507,25 @@ where
         let tx = Timer::new();
         let mm = self.add_all(bl);
         self.tm += tx.since();
-        for m in mm {
+        /*for m in mm {
             self.out.call(m);
-        }
+        }*/
+        self.out.call(mm);
     }
 
     fn finish(&mut self) -> io::Result<Timings> {
-        //let mut mm = Vec::new();
+        let mut mm = Vec::new();
         for (_, b) in std::mem::take(&mut self.pending) {
-            self.out.call(b);
-            //mm.push(b);
+            //self.out.call(b);
+            mm.push(b);
         }
-        //self.out.call(mm);
-
+        self.out.call(mm);
+        
         let mut r = self.out.finish()?;
-        r.add_other(
+        /*r.add_other(
             "quadtreetree",
             OtherData::QuadtreeTree(self.groups.take().unwrap()),
-        );
+        );*/
         r.add("collect temp", self.tm);
         Ok(r)
     }
@@ -586,12 +535,12 @@ fn write_temp_blocks(
     infn: &str,
     qtsfn: &str,
     tempfn: &str,
-    groups: Box<QuadtreeTree>,
+    groups: Arc<QuadtreeTree>,
     numchan: usize,
     splitat: i64,
     limit: usize,
-) -> io::Result<(TempData, Box<QuadtreeTree>)> {
-    //let wt = Box::new(WriteTemp::new(&tempfn));
+    //write_at: usize
+) -> io::Result<TempData> {
     let flen = file_length(&infn);
     
     let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
@@ -600,42 +549,49 @@ fn write_temp_blocks(
         if flen < 2*1024*1024*1024 {
             Box::new(WriteTempWhich::File(WriteTempFile::new(tempfn)))
         } else {
-            let nsp = (flen / (5*1024*1024*1024)) as i64;
+            let nsp = (flen / (1*1024*1024*1024)) as i64;
             let sp = groups.len() as i64/splitat/nsp;
             Box::new(WriteTempWhich::Split(WriteTempFileSplit::new(tempfn, sp)))
         }
     };
 
-    let mut prog = ProgBarWrap::new(100);
-    prog.set_range(100);
-    prog.set_message(&format!(
-        "write_temp_blocks {} to {}, numchan={}",
-        infn, tempfn, numchan
-    ));
     
-    let inf = File::open(&infn)?;
-    let mut infb = BufReader::new(inf);
 
-    let (mut res, d) = if numchan == 0 {
-        let pc = make_packprimblock(wt, true);
+    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan == 0 {
+        let pc = make_packprimblock_many(wt, true);
         let cc = Box::new(CollectTemp::new(pc, limit, splitat, groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
-        let pp = make_unpackprimblock(aq);
-
-        read_all_blocks_prog(&mut infb, flen, pp, &prog, 100.0)
+        make_unpackprimblock(aq)
     } else {
         let wts = CallbackSync::new(wt, numchan);
+        
         let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
+            Vec::new();
+        //let mut i=50-numchan;
+        //let ww = write_at / numchan;
+        //let mut wwi = ww * 17 / 20;
+        
+        for wt in wts { 
+            let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
+            let pp = make_packprimblock_many(wt2, true);
+            pcs.push(Box::new(Callback::new(Box::new(CollectTemp::new(pp, limit/numchan, splitat, groups.clone())))));
+            //wwi +=ww / 10;
+        }
+        let ccw = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
+        
+        
+        /*let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
             Vec::new();
         for wt in wts {
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
             pcs.push(Box::new(Callback::new(make_packprimblock(wt2, true))));
         }
         let pc = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
-
+        
         let ccw = Box::new(Callback::new(Box::new(CollectTemp::new(
             pc, limit, splitat, groups,
-        ))));
+        ))));*/
+        
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, ccw)), numchan);
         let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
             Vec::new();
@@ -643,33 +599,37 @@ fn write_temp_blocks(
             let aq2 = Box::new(ReplaceNoneWithTimings::new(aq));
             pps.push(Box::new(Callback::new(make_unpackprimblock(aq2))));
         }
-
-        let pp = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        read_all_blocks_prog(&mut infb, flen, pp, &prog, 100.0)
+        
+        
+        Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
+        
     };
+    let (mut res, d) = read_all_blocks_with_progbar(infn, pp, &format!("write_temp_blocks to {}, numchan={}", tempfn, numchan));
+    
     println!("write_temp_blocks {} {}", res, d);
-    let mut groups: Option<Box<QuadtreeTree>> = None;
+    //let mut groups: Option<Box<QuadtreeTree>> = None;
     let mut td: Option<TempData> = None;
     for (_, b) in std::mem::take(&mut res.others) {
         match b {
             OtherData::TempData(t) => {
                 td = Some(t);
             }
-            OtherData::QuadtreeTree(g) => {
+            /*OtherData::QuadtreeTree(g) => {
                 groups = Some(g);
-            }
+            }*/
             _ => {}
         }
     }
     
-    Ok((td.unwrap(), groups.unwrap()))
+    //Ok((td.unwrap(), groups.unwrap()))
+    Ok(td.unwrap())
 }
 
 pub fn sort_blocks_inmem(
     infn: &str,
     qtsfn: &str,
     outfn: &str,
-    groups: Box<QuadtreeTree>,
+    groups: Arc<QuadtreeTree>,
     numchan: usize,
     timestamp: i64,
 ) -> io::Result<()> {
@@ -698,7 +658,7 @@ pub fn sort_blocks_inmem(
 
 struct CollectBlocksTemp<T> {
     out: Box<T>,
-    groups: Option<Box<QuadtreeTree>>,
+    groups: Arc<QuadtreeTree>,
     tm: f64,
     tm2: f64,
     timestamp: i64,
@@ -708,10 +668,10 @@ impl<T> CollectBlocksTemp<T>
 where
     T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>,
 {
-    pub fn new(out: Box<T>, groups: Box<QuadtreeTree>, timestamp: i64) -> CollectBlocksTemp<T> {
+    pub fn new(out: Box<T>, groups: Arc<QuadtreeTree>, timestamp: i64) -> CollectBlocksTemp<T> {
         CollectBlocksTemp {
             out: out,
-            groups: Some(groups),
+            groups: groups,
             tm: 0.0,
             tm2: 0.0,
             timestamp: timestamp,
@@ -719,18 +679,18 @@ where
     }
 
     fn sort_all(&mut self, blocks: Vec<FileBlock>) -> Vec<PrimitiveBlock> {
-        let mut sb = SortBlocks::new(self.groups.take());
+        let mut sb = SortBlocks::new(self.groups.clone());
         for bl in blocks {
             if bl.block_type == "OSMData" {
                 let pb = PrimitiveBlock::read(0, 0, &bl.data(), false, false).expect("?");
                 sb.add_all(pb);
             }
         }
-        let (mut bv, gg) = sb.finish();
+        let mut bv = sb.finish();
         for b in &mut bv {
             b.end_date = self.timestamp;
         }
-        self.groups = gg;
+        
         bv
     }
 }
@@ -768,10 +728,10 @@ where
         let mut r = self.out.finish()?;
         r.add("resortblocks", self.tm);
         r.add("packblocks", self.tm2);
-        r.add_other(
+        /*r.add_other(
             "quadtreetree",
             OtherData::QuadtreeTree(self.groups.take().unwrap()),
-        );
+        );*/
         Ok(r)
     }
 }
@@ -910,7 +870,7 @@ fn read_blocks_parts<R: Read+Seek>(fbuf: &mut R, curr: &Vec<(i64,Vec<(u64,u64)>)
 fn write_blocks_from_temp(
     xx: TempData,
     outfn: &str,
-    groups: Box<QuadtreeTree>,
+    groups: Arc<QuadtreeTree>,
     numchan: usize,
     timestamp: i64,
     keep_temps: bool
@@ -931,7 +891,7 @@ fn write_blocks_from_temp(
 
             cqs.push(Box::new(Callback::new(Box::new(CollectBlocksTemp::new(
                 w2,
-                Box::new(groups.clone()),
+                groups.clone(),
                 timestamp,
             )))));
         }
@@ -993,16 +953,16 @@ pub fn sort_blocks(
     infn: &str,
     qtsfn: &str,
     outfn: &str,
-    groups: Box<QuadtreeTree>,
+    groups: Arc<QuadtreeTree>,
     numchan: usize,
     splitat: i64,
     tempinmem: bool,
-    limit: usize,
+    limit/*write_at*/: usize,
     timestamp: i64,
     keep_temps: bool
 ) -> io::Result<()> {
     println!(
-        "sort_blocks({},{},{},{},{},{},{},{})",
+        "sort_blocks({},{},{},{},{},{},{},{},{},{})",
         infn,
         qtsfn,
         outfn,
@@ -1010,7 +970,9 @@ pub fn sort_blocks(
         numchan,
         splitat,
         tempinmem,
-        limit
+        limit/*write_at*/,
+        timestamp,
+        keep_temps
     );
 
     let mut tempfn = String::from("NONE");
@@ -1021,7 +983,7 @@ pub fn sort_blocks(
         );
     }
 
-    let (xx, groups) = write_temp_blocks(infn, qtsfn, &tempfn, groups, numchan, splitat, limit)?;
+    let xx = write_temp_blocks(infn, qtsfn, &tempfn, groups.clone(), numchan, splitat, limit/*write_at*/)?;
 
     match &xx {
         TempData::TempFile((fname, locs)) => {

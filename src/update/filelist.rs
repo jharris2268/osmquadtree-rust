@@ -7,7 +7,7 @@ use crate::pbfformat::read_file_block;
 use crate::utils::{parse_timestamp};
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, Result};
+use std::io::{BufReader, Result,Error,ErrorKind};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -43,12 +43,50 @@ pub fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
 
 pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(Quadtree, Vec<(usize, u64)>)>);
 
+
+pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<ParallelFileLocs> {
+    
+    let cap = match filter {
+        Some(_) => 8 * 1024,
+        None => 5 * 1024 * 1024,
+    };
+    
+    let mut locs = BTreeMap::new();
+    let f = File::open(infn)?;
+    let mut fbuf = BufReader::with_capacity(cap, f);
+    
+    let fb = read_file_block::read_file_block(&mut fbuf)?;
+    let filepos = read_file_block::file_position(&mut fbuf)?;
+    let head = header_block::HeaderBlock::read(filepos, &fb.data(), infn)?;
+    if head.index.is_empty() {
+        return Err(Error::new(ErrorKind::Other,"no locations in header"));
+    }
+    
+    for entry in head.index {
+        if filter.as_ref().is_none() || filter.as_ref().unwrap().overlaps(&entry.quadtree.as_bbox(0.05)) {
+            locs.insert(entry.quadtree.clone(), (locs.len(), vec![(0,entry.location)]));
+        }
+    }
+    let mut locsv = Vec::new();
+    for (a,(_b,c)) in locs {
+        locsv.push((a,c));
+    }
+    Ok((vec![fbuf], locsv))
+}
+    
+
 pub fn get_file_locs(
     prfx: &str,
     filter: Option<Bbox>,
     timestamp: Option<i64>
 ) -> Result<ParallelFileLocs> {
     
+    if prfx.len()>4 && &prfx[prfx.len()-4..] == ".pbf" {
+        if !timestamp.is_none() {
+            return Err(Error::new(ErrorKind::Other, "can't specify timestamp with single file"));
+        }
+        return get_file_locs_single(prfx, filter);
+    }
     
     
     let filelist = read_filelist(&prfx);
@@ -68,13 +106,17 @@ pub fn get_file_locs(
         }
         
         let fle_fn = format!("{}{}", prfx, fle.filename);
-        let f = File::open(&fle_fn).expect("fail");
+        let f = File::open(&fle_fn)?;
         let mut fbuf = BufReader::with_capacity(cap, f);
         
-        let fb = read_file_block::read_file_block(&mut fbuf).expect("?");
-        let filepos = read_file_block::file_position(&mut fbuf).expect("?");
-        let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn).expect("?");
-                
+        let fb = read_file_block::read_file_block(&mut fbuf)?;
+        let filepos = read_file_block::file_position(&mut fbuf)?;
+        let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn)?;
+        
+        if head.index.is_empty() {
+            return Err(Error::new(ErrorKind::Other,format!("no locations in header for {}", &fle_fn)));
+        }
+        
         all_locs += head.index.len();
         for entry in head.index {
             if i==0 {

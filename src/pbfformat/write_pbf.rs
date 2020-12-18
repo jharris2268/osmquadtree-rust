@@ -139,3 +139,47 @@ pub fn write_packed_delta_data(res: &mut Vec<u8>, key: u64, vals: &Vec<i64>) {
         curr = *v;
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use crate::pbfformat::write_pbf;
+    
+    #[test]
+    fn test_write_tags() {
+        
+        let mut res = Vec::new();
+        write_pbf::pack_value(&mut res, 1, 27);
+        write_pbf::pack_value(&mut res, 2, 99233120053);
+        write_pbf::pack_data(&mut res, 3, b"frog");
+        
+        let should_equal: Vec<u8> = vec![
+            8, 27, 16, 181, 254, 132, 214, 241, 2, 26, 4, 102, 114, 111, 103,
+        ];
+        
+        assert_eq!(res, should_equal);
+        
+    }
+
+    #[test]
+    fn test_pack_uint32() {
+        let mut res=Vec::new();
+        write_pbf::write_uint32(&mut res, 188532351);
+        
+        assert_eq!(res, vec![11, 60, 198, 127]);
+    }
+    
+    
+    #[test]
+    fn test_read_packed_int() {
+        let vals = vec![25, 33*128+27, 3*128*128 + 26*128+104, 0];
+        let packed = write_pbf::pack_int_ref(vals.iter());
+        
+        assert_eq!(packed, vec![25, 155,33, 232,154,3, 0]);
+    }
+    
+    
+    
+}
+

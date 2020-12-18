@@ -5,13 +5,14 @@ use clap::{value_t, App, AppSettings, Arg, SubCommand};
 use osmquadtree::count::run_count;
 
 use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem};
-use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem};
+use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem,QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::{parse_timestamp};
 use osmquadtree::pbfformat::read_file_block::file_length;
 
-use osmquadtree::mergechanges::{run_mergechanges_inmem,run_mergechanges,run_mergechanges_from_existing};
+use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
 
+use std::sync::Arc;
 use std::io::{Error, ErrorKind, Result};
 
 fn run_sortblocks(
@@ -30,10 +31,13 @@ fn run_sortblocks(
     let mut splitat = 0i64;
     let tempinmem = file_length(infn) < 512*1024*1024;
     let mut limit = 0usize;
-
+    
+    
     if splitat == 0 {
-        splitat = 3000000i64 / target;
+        splitat = 1500000i64 / target;
     }
+    //let write_at = 2000000;
+    
     let qtsfn_ = match qtsfn {
         Some(q) => String::from(q),
         None => format!("{}-qts.pbf", &infn[0..infn.len() - 4]),
@@ -55,10 +59,10 @@ fn run_sortblocks(
         mintarget = target / 2;
     }
 
-    let groups = find_groups(&qtsfn, numchan, maxdepth, target, mintarget)?;
+    let groups: Arc<QuadtreeTree> = Arc::from(find_groups(&qtsfn, numchan, maxdepth, target, mintarget)?);
     println!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
-        limit = 60000000usize / (groups.len() / (splitat as usize));
+        limit = 40000000usize / (groups.len() / (splitat as usize));
         if tempinmem {
             limit = usize::max(1000, limit / 10);
         }
@@ -67,7 +71,7 @@ fn run_sortblocks(
         sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp)?;
     } else {
         sort_blocks(
-            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit, timestamp, keep_temps
+            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit/*write_at*/, timestamp, keep_temps
         )?;
     }
 
@@ -106,7 +110,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("PRIMITIVE").short("-p").long("--primitive").help("reads full primitiveblock data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                .arg(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"))            
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))            
         )
         .subcommand(
             SubCommand::with_name("calcqts")
@@ -191,32 +195,42 @@ fn main() {
                 
         )
         .subcommand(
-            SubCommand::with_name("mergechanges_inmem")   
+            SubCommand::with_name("mergechanges_sort_inmem")   
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename"))
-                .arg(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))            
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
+        )
+        .subcommand(
+            SubCommand::with_name("mergechanges_sort")   
+                .about("prep_bbox_filter")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("mergechanges_sort_from_existing")   
+                .about("prep_bbox_filter")
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
+                .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))            
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges")   
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
-                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
-                .arg(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-        )
-        .subcommand(
-            SubCommand::with_name("mergechanges_from_existing")   
-                .about("prep_bbox_filter")
-                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
-                .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
-                .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))            
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         );
         
@@ -310,8 +324,8 @@ fn main() {
                 value_t!(write, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
-        ("mergechanges_inmem", Some(filter)) => {
-            run_mergechanges_inmem(
+        ("mergechanges_sort_inmem", Some(filter)) => {
+            run_mergechanges_sort_inmem(
                 filter.value_of("INPUT").unwrap(),
                 filter.value_of("OUTFN").unwrap(),
                 filter.value_of("FILTER"),
@@ -319,8 +333,8 @@ fn main() {
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         }
-        ("mergechanges", Some(filter)) => {
-            run_mergechanges(
+        ("mergechanges_sort", Some(filter)) => {
+            run_mergechanges_sort(
                 filter.value_of("INPUT").unwrap(),
                 filter.value_of("OUTFN").unwrap(),
                 filter.value_of("TEMPFN"),
@@ -330,11 +344,21 @@ fn main() {
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
-        ("mergechanges_from_existing", Some(filter)) => {
-            run_mergechanges_from_existing(
+        ("mergechanges_sort_from_existing", Some(filter)) => {
+            run_mergechanges_sort_from_existing(
                 filter.value_of("OUTFN").unwrap(),
                 filter.value_of("TEMPFN").unwrap(),
                 filter.is_present("ISSPLIT"),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("mergechanges", Some(filter)) => {
+            run_mergechanges(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("FILTER"),
+                filter.is_present("FILTEROBJS"),
+                filter.value_of("TIMESTAMP"),
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },

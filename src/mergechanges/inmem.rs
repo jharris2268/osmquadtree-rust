@@ -191,7 +191,7 @@ pub fn make_write_file(outfn: &str, bbox: Bbox, block_size: usize, numchan: usiz
     Box::new(GroupBlocks::new(pack, block_size))
 }
 
-pub fn run_mergechanges_inmem(inprfx: &str, outfn: &str, filter: Option<&str>, timestamp: Option<&str>, numchan: usize) -> Result<()> {
+pub fn run_mergechanges_sort_inmem(inprfx: &str, outfn: &str, filter: Option<&str>, timestamp: Option<&str>, numchan: usize) -> Result<()> {
     let mut tx=LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
     tx.add("read filter");

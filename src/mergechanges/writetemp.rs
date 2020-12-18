@@ -1,13 +1,13 @@
 use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree,Bbox};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
-
+use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_prog,FileBlock};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,LogTimes,parse_timestamp,CallAll};
 use crate::mergechanges::inmem::{read_filter,make_write_file};
 use crate::mergechanges::filter_elements::prep_bbox_filter;
-use crate::sortblocks::{Timings,OtherData,TempData};
-use crate::sortblocks::writepbf::{make_packprimblock_many};
+use crate::sortblocks::{Timings,OtherData,TempData,WriteFile};
+use crate::sortblocks::writepbf::{make_packprimblock_many,make_packprimblock};
 use crate::update::{ParallelFileLocs,get_file_locs};
 use crate::sortblocks::sortblocks::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
         read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
@@ -299,7 +299,7 @@ fn collect_blocks((k, fbs): (i64, Vec<FileBlock>)) -> PrimitiveBlock {
     
 
 
-pub fn run_mergechanges(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, keep_temps: bool, numchan: usize) -> Result<()> {
+pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, keep_temps: bool, numchan: usize) -> Result<()> {
     let mut tx=LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
     
@@ -380,7 +380,7 @@ pub fn run_mergechanges(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter:
     Ok(())
     
 }
-pub fn run_mergechanges_from_existing(outfn: &str, tempfn: &str, is_split: bool, numchan: usize) -> Result<()> {
+pub fn run_mergechanges_sort_from_existing(outfn: &str, tempfn: &str, is_split: bool, numchan: usize) -> Result<()> {
     let mut tx=LogTimes::new();
     let bbox = Bbox::planet();
     
@@ -414,4 +414,59 @@ pub fn run_mergechanges_from_existing(outfn: &str, tempfn: &str, is_split: bool,
     
     Ok(())
     
+}
+
+pub fn run_mergechanges(inprfx: &str, outfn: &str, filter: Option<&str>, filter_objs: bool, timestamp: Option<&str>, numchan: usize) -> Result<()> {
+    let mut tx=LogTimes::new();
+    let (bbox, poly) = read_filter(filter)?;
+    
+    println!("bbox={}, poly={:?}", bbox, poly);
+    
+    tx.add("read filter");
+    let timestamp = match timestamp {
+        None => None,
+        Some(ts) => Some(parse_timestamp(ts)?)
+    };
+    
+    let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()), timestamp)?;
+    tx.add("get_file_locs");
+    
+    let ids:Arc<dyn IdSet> = match (filter_objs,filter) {
+        (true,Some(_)) => {
+            let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+            tx.add("prep_bbox_filter");
+            println!("have: {}", ids);
+            Arc::from(ids)
+        },
+        _ => { Arc::new(IdSetAll()) }
+    };
+    
+    
+    
+    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
+    
+    let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = if numchan == 0 {
+        let pc = make_packprimblock(wf, true);
+        make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true)
+    } else {
+        let wfs = CallbackSync::new(wf, numchan);
+        let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>>> = Vec::new();
+        for w in wfs {
+            let w2 = Box::new(ReplaceNoneWithTimings::new(w));
+            let pc = make_packprimblock(w2, true);
+            pps.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true))))
+        }
+        Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
+    };
+    
+    let mut prog = ProgBarWrap::new(100);
+    prog.set_range(100);
+    prog.set_message(&format!("write merged blocks, numchan={}", numchan));
+       
+    let (tm,_) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pp, &prog);
+    prog.finish();
+    tx.add("write merged blocks");
+    
+    println!("{}\n{}", tm,tx);
+    Ok(())
 }

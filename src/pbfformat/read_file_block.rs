@@ -141,6 +141,7 @@ pub fn pack_file_block(blockname: &str, data: &[u8], compress: bool) -> io::Resu
 pub struct ReadFileBlocks<'a, R: Read> {
     file: &'a mut R,
     p: u64,
+    stop_at: u64,
 }
 
 impl<R> ReadFileBlocks<'_, R>
@@ -149,15 +150,21 @@ where
 {
     pub fn new(file: &mut R) -> ReadFileBlocks<R> {
         let p = file_position(file).expect("!");
-        ReadFileBlocks { file, p }
+        ReadFileBlocks { file: file, p: p, stop_at: u64::MAX }
     }
+    
 }
 impl<R> ReadFileBlocks<'_, R>
 where
     R: Read,
 {
     pub fn new_at_start(file: &mut R) -> ReadFileBlocks<R> {
-        ReadFileBlocks { file: file, p: 0 }
+        ReadFileBlocks { file: file, p: 0, stop_at: u64::MAX }
+    }
+    
+    pub fn new_at_start_with_stop(file: &mut R, stop_at: u64) -> ReadFileBlocks<R> {
+        
+        ReadFileBlocks { file: file, p: 0, stop_at: stop_at }
     }
 }
 
@@ -168,6 +175,9 @@ where
     type Item = FileBlock;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.p > self.stop_at {
+            return None;
+        }
         match read_file_block_with_pos(self.file, self.p) {
             Ok((p, fb)) => {
                 self.p = p;
@@ -278,6 +288,31 @@ where
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
+pub fn read_all_blocks_prog_fpos_stop<R: Read, T, U>(
+    fobj: &mut R,
+    stop_at: u64,
+    mut pp: Box<T>,
+    pb: &ProgBarWrap,
+) -> (U, f64)
+where
+    T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
+    U: Send + Sync + 'static,
+{
+    let ct = Checktime::new();
+
+    //let pf = 100.0 / (flen as f64);
+
+    for (i, fb) in ReadFileBlocks::new_at_start_with_stop(fobj, stop_at).enumerate() {
+        //i//f (i%131) == 0 {
+        pb.prog(fb.pos as f64);
+        //}
+        pp.call((i, fb));
+    }
+    //pb.prog(100.0);
+    pb.finish();
+    (pp.finish().expect("finish failed"), ct.gettime())
+}
+
 pub fn read_all_blocks_with_progbar<T, U>(fname: &str, pp: Box<T>, msg: &str) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -291,6 +326,21 @@ where
     let mut fbuf = BufReader::new(fobj);
 
     read_all_blocks_prog_fpos(&mut fbuf, pp, &pb)
+}
+
+pub fn read_all_blocks_with_progbar_stop<T, U>(fname: &str, stop_after: u64, pp: Box<T>, msg: &str) -> (U, f64)
+where
+    T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
+    U: Send + Sync + 'static,
+{
+    //let fl = file_length(fname);
+    let pb = ProgBarWrap::new_filebytes(stop_after);
+    pb.set_message(msg);
+
+    let fobj = File::open(fname).expect("failed to open file");
+    let mut fbuf = BufReader::new(fobj);
+
+    read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, &pb)
 }
 
 pub fn read_all_blocks_locs<R, T, U>(

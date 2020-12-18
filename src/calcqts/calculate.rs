@@ -837,6 +837,7 @@ pub fn run_calcqts_load_existing(
             String::from(fname),
             format!("{}-waynodes", outfn),
             Vec::new(),
+            u64::MAX
         )
     } else {
         NodeWayNodes::Combined(format!("{}-nodewaynodes", outfn))
@@ -887,23 +888,23 @@ pub fn run_calcqts(
         ));
     }
 
-    let (relmems, waynodevals) = prep_way_nodes(fname, numchan).expect("prep_way_nodes failed");
-
-    let nodewaynodes = NodeWayNodes::InMem(String::from(fname), waynodevals);
+    let (relmems, waynodevals, first_waytile_pos) = prep_way_nodes(fname, numchan).expect("prep_way_nodes failed");
+    println!("stop reading {} after {}", &fname, first_waytile_pos+1);
+    let nodewaynodes = NodeWayNodes::InMem(String::from(fname), waynodevals, first_waytile_pos+1);
     trim_memory();
     if use_simple {
         calc_quadtrees_simple(nodewaynodes, outfn, relmems, qt_level, qt_buffer, numchan);
     } else {
         let nodewaynodes2 = if seperate {
             match nodewaynodes {
-                NodeWayNodes::InMem(inf, w) => {
+                NodeWayNodes::InMem(inf, w, stop_after) => {
                     //let (a,b) = write_waynode_sorted(w,&outfn);
                     if resort_waynodes {
                         let a = write_waynode_sorted_resort(w, outfn);
-                        NodeWayNodes::Seperate(inf, a, vec![])
+                        NodeWayNodes::Seperate(inf, a, vec![], stop_after)
                     } else {
                         let (a, b) = write_waynode_sorted(w, outfn);
-                        NodeWayNodes::Seperate(inf, a, b)
+                        NodeWayNodes::Seperate(inf, a, b, stop_after)
                     }
                 }
                 p => p,

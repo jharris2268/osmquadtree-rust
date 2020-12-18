@@ -753,7 +753,7 @@ pub fn run_count(
     //println!("{:?}", cn.relation.get(&Changetype::Create));
     } else if std::fs::metadata(fname)
         .expect("failed to open file")
-        .is_file()
+        .is_file() && filter.is_none()
     {
         let mut cc = Count::new();
 
@@ -825,8 +825,9 @@ pub fn run_count(
     } else {
         let (mut fbufs, locsv) = get_file_locs(fname, filter, None).expect("?");
 
-        let pb = ProgBarWrap::new(100);
-
+        let mut pb = ProgBarWrap::new(100);
+        pb.set_range(100);
+        
         let mut pps: Vec<
             Box<
                 dyn CallFinish<

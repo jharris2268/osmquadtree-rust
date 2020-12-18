@@ -1,10 +1,10 @@
 use std::fmt;
 use std::io;
-use std::io::Write;
+
 use std::iter::Iterator;
 
 use crate::elements::Quadtree;
-use crate::utils::Checktime;
+use crate::pbfformat::read_file_block::ProgBarWrap;
 
 #[derive(Copy, Clone)]
 pub struct QuadtreeTreeItem {
@@ -353,38 +353,37 @@ pub fn find_tree_groups(
     target: i64,
     absmintarget: i64,
 ) -> io::Result<Box<QuadtreeTree>> {
+    
+    let mut pb = ProgBarWrap::new(100);
+    pb.set_message("find_tree_groups");
+    pb.set_range(100);
+    let pf = 100.0 / (tree.total_weight() as f64);
+    
     let mut res = Box::new(QuadtreeTree::new());
 
     let mut mintarget = target - 50;
     let mut maxtarget = target + 50;
-    let mut ct = Checktime::new();
+    
     let mut all = Vec::new();
     while tree.total_weight() > 0 {
+        pb.prog(100.0 - pf * (tree.total_weight() as f64));
         let vv = find_within(&tree, mintarget, maxtarget, absmintarget);
 
         if vv.is_empty() {
             mintarget = i64::max(absmintarget, mintarget - 50);
             maxtarget += 50;
         } else {
-            let vvl = vv.len();
+            
             for (a, _) in vv {
                 let b = tree.remove(a.clone());
 
                 all.push((a, b));
                 //res.add(a,b);
             }
-            match ct.checktime() {
-                Some(d) => {
-                    print!(
-                        "\r{:5.1}s: add {} [{}/{}], tree: {}, result: {}",
-                        d, vvl, mintarget, maxtarget, tree, res
-                    );
-                    io::stdout().flush().expect("");
-                }
-                None => {}
-            }
+            
         }
     }
+    pb.finish();
     all.sort();
     for (a, b) in all {
         if b >= (u32::MAX as i64) {
@@ -393,14 +392,5 @@ pub fn find_tree_groups(
         res.add(a, b as u32);
     }
 
-    println!("");
-    println!(
-        "{:5.1}s: [{}/{}], tree: {}, result: {}",
-        ct.gettime(),
-        mintarget,
-        maxtarget,
-        tree,
-        res
-    );
     Ok(res)
 }

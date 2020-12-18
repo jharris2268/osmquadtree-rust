@@ -1,22 +1,20 @@
-use std::fs::File;
+
 
 use std::collections::BTreeMap;
-use std::io;
-use std::io::{BufReader, Write};
+use std::io::Result;
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
-use crate::pbfformat::read_file_block::{FileBlock, ReadFileBlocks};
+use crate::pbfformat::read_file_block::{FileBlock, read_all_blocks_with_progbar};
 use crate::sortblocks::quadtreetree::{find_tree_groups, QuadtreeTree};
-use crate::utils::{CallAll, Checktime, MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
 
 use crate::sortblocks::{OtherData, Timings};
 
 struct AddAll {
     groups: Option<Box<QuadtreeTree>>,
-    tot: i64,
-    ct: Checktime,
+    
     tm: f64,
 }
 
@@ -24,8 +22,6 @@ impl AddAll {
     pub fn new() -> AddAll {
         AddAll {
             groups: Some(Box::new(QuadtreeTree::new())),
-            tot: 0,
-            ct: Checktime::new(),
             tm: 0.0,
         }
     }
@@ -40,33 +36,14 @@ impl CallFinish for AddAll {
         let groups = self.groups.as_mut().unwrap();
         for (q, w) in mb.2 {
             groups.add(q, w);
-            self.tot += w as i64;
+        
         }
 
-        match self.ct.checktime() {
-            Some(d) => {
-                print!(
-                    "\r{:5.1}s: {:7.1}mb {} [tot={}]",
-                    d,
-                    (mb.1 as f64) / 1024. / 1024.0,
-                    groups,
-                    self.tot
-                );
-                io::stdout().flush().expect("");
-            }
-            None => {}
-        }
+        
         self.tm += tx.since();
     }
-    fn finish(&mut self) -> io::Result<Timings> {
-        println!("");
-        println!(
-            "{:5.1}s: {} [tot={}]",
-            self.ct.gettime(),
-            self.groups.as_ref().unwrap(),
-            self.tot
-        );
-
+    fn finish(&mut self) -> Result<Timings> {
+        
         let mut t = Timings::new();
         t.add("addall", self.tm);
         t.add_other(
@@ -135,11 +112,9 @@ pub fn find_groups(
     maxdepth: usize,
     target: i64,
     mintarget: i64,
-) -> io::Result<Box<QuadtreeTree>> {
-    let f = File::open(qtsfn).expect("file not present");
-    let mut fbuf = BufReader::new(f);
-
-    let mut cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> =
+) -> Result<Box<QuadtreeTree>> {
+    
+    let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> =
         if numchan > 0 {
             let aa = CallbackSync::new(Box::new(AddAll::new()), numchan);
             let mut bb: Vec<
@@ -155,12 +130,9 @@ pub fn find_groups(
         } else {
             make_convertquadtreeblock(Box::new(AddAll::new()), maxdepth)
         };
-
-    for (i, fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {
-        cc.call((i, fb));
-    }
-
-    let mut t = cc.finish()?;
+    
+    let (mut t,_) = read_all_blocks_with_progbar(qtsfn, cc, "prepare quadtreetree");
+    
     println!("{}", t);
 
     let mut tree: Option<Box<QuadtreeTree>> = None;
@@ -173,20 +145,9 @@ pub fn find_groups(
         }
     }
 
-    /*let mut ft: Option<Box<QuadtreeTree>> = None;
-    for mut a in bb {
-        match a.finish()? {
-            Some(g) => ft=Some(g),
-            None => {}
-        }
-    }
-    let tree = ft.unwrap();*/
     let tree = tree.unwrap();
     println!("{}", tree);
 
-    let groups = find_tree_groups(tree, target, mintarget).expect("find_tree_groups failed");
+    find_tree_groups(tree, target, mintarget)
 
-    Ok(groups)
-
-    //Err(io::Error::new(ErrorKind::Other,"not impl"))
 }

@@ -2,7 +2,7 @@ use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{MinimalBlock, MinimalNode};
 use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
 use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar, FileBlock};
+use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop, FileBlock};
 use crate::pbfformat::writefile::WriteFile;
 use crate::pbfformat::{read_file_block, read_pbf, write_pbf};
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
@@ -686,6 +686,7 @@ fn read_waynodeways_combined<
 
 fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>>(
     infn: &str,
+    stop_after: u64,
     waynodevals: WayNodeVals,
     eqt: Box<T>,
     minw: i64,
@@ -697,7 +698,7 @@ fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnTy
         let wn_iter = ChannelReadWayNodeFlatIter::filter_vals(waynodevals.clone(), minw, maxw);
         let combine = Box::new(CombineNodeWayNodeCB::new(wn_iter, eqt));
         let convert = make_convert_minimal_block_parts(false, true, false, false, combine);
-        read_all_blocks_with_progbar(infn, convert, msg).0
+        read_all_blocks_with_progbar_stop(infn, stop_after, convert, msg).0
     } else {
         let wbs = Box::new(Callback::new(eqt));
 
@@ -713,7 +714,7 @@ fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnTy
             ))));
         }
         let conv_merge = Box::new(CallbackMerge::new(converts, Box::new(MergeTimings::new())));
-        read_all_blocks_with_progbar(infn, conv_merge, msg).0
+        read_all_blocks_with_progbar_stop(infn, stop_after, conv_merge, msg).0
     }
 }
 
@@ -721,6 +722,7 @@ fn read_waynodeways_seperate<
     T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>,
 >(
     infn: &str,
+    stop_after: u64,
     waynodefn: &str,
     waynodelocs: &FileLocs,
     eqt: Box<T>,
@@ -733,7 +735,7 @@ fn read_waynodeways_seperate<
         let wn_iter = ChannelReadWayNodeFlatIter::filter_file(waynodefn, waynodelocs, minw, maxw);
         let combine = Box::new(CombineNodeWayNodeCB::new(wn_iter, eqt));
         let convert = make_convert_minimal_block_parts(false, true, false, false, combine);
-        read_all_blocks_with_progbar(infn, convert, msg).0
+        read_all_blocks_with_progbar_stop(infn, stop_after,convert, msg).0
     } else {
         let wbs = Box::new(Callback::new(eqt));
 
@@ -751,7 +753,7 @@ fn read_waynodeways_seperate<
         }
 
         let conv_merge = Box::new(CallbackMerge::new(converts, Box::new(MergeTimings::new())));
-        read_all_blocks_with_progbar(infn, conv_merge, msg).0
+        read_all_blocks_with_progbar_stop(infn, stop_after, conv_merge, msg).0
     }
 }
 
@@ -767,11 +769,12 @@ pub fn read_nodewaynodes<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnTyp
         NodeWayNodes::Combined(waynodesfn) => {
             read_waynodeways_combined(&waynodesfn, eqt, minw, maxw, msg, numchan)
         }
-        NodeWayNodes::InMem(infn, waynodevals) => {
-            read_waynodeways_inmem(&infn, waynodevals, eqt, minw, maxw, msg, numchan)
+        NodeWayNodes::InMem(infn, waynodevals, stop_after) => {
+            read_waynodeways_inmem(&infn, stop_after, waynodevals, eqt, minw, maxw, msg, numchan)
         }
-        NodeWayNodes::Seperate(infn, waynodefn, waynodelocs) => read_waynodeways_seperate(
+        NodeWayNodes::Seperate(infn, waynodefn, waynodelocs, stop_after) => read_waynodeways_seperate(
             &infn,
+            stop_after,
             &waynodefn,
             &waynodelocs,
             eqt,

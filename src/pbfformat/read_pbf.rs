@@ -103,17 +103,7 @@ impl<'a> Iterator for IterTags<'a> {
 
 pub fn read_all_tags<'a>(data: &'a [u8], pos: usize) -> Vec<PbfTag<'a>> {
     Vec::from_iter(IterTags::new(data, pos))
-    /*
-
-    let mut res = Vec::new();
-    let mut pos = pos;
-    while pos < data.len() {
-
-        let (t,npos) = read_tag(data, pos);
-        pos = npos;
-        res.push(t);
-    }
-    res*/
+    
 }
 
 fn count_packed_len(data: &[u8]) -> usize {
@@ -205,51 +195,51 @@ impl ExactSizeIterator for PackedInt<'_> {
     }
 }
 
-pub fn read_delta_packed_int(data: &[u8]) -> Vec<i64> {
-    /*let mut res = Vec::new();
-
-    res.reserve(count_packed_len(&data));
-
-
-    DeltaPackedInt::new(data).for_each(|x| { res.push(x) });
-    res
-    */
+pub fn read_delta_packed_int(data: &[u8]) -> Vec<i64> {    
     DeltaPackedInt::new(data).collect()
 
-    /*
-    let mut res = Vec::new();
-    res.reserve(count_packed_len(&data));
-
-    let mut curr = 0i64;
-    let mut pos = 0;
-    while pos < data.len() {
-        let (t,npos) = read_uint(&data, pos);
-        let p = un_zig_zag(t);
-        curr += p;
-        res.push(curr);
-        pos = npos;
-    }
-    return res;*/
 }
 
 pub fn read_packed_int(data: &[u8]) -> Vec<u64> {
-    /*let mut res = Vec::new();
-    res.reserve(count_packed_len(&data));
-
-
-    PackedInt::new(data).for_each(|x| { res.push(x) });
-    res*/
     PackedInt::new(data).collect()
+}
 
-    /*
-    let mut res = Vec::new();
-    res.reserve(count_packed_len(&data));
+#[cfg(test)]
+mod tests {
+    use crate::pbfformat::read_pbf;
+    #[test]
+    fn test_read_all_tags() {
+        let data: Vec<u8> = vec![
+            8, 27, 16, 181, 254, 132, 214, 241, 2, 26, 4, 102, 114, 111, 103,
+        ];
+        let decoded = read_pbf::read_all_tags(&data, 0);
 
-    let mut pos=0;
-    while pos < data.len() {
-        let (t,npos) = read_uint(&data, pos);
-        res.push(t);
-        pos=npos;
+        let should_equal = vec![
+            read_pbf::PbfTag::Value(1, 27),
+            read_pbf::PbfTag::Value(2, 99233120053),
+            read_pbf::PbfTag::Data(3, b"frog"),
+        ];
+
+        assert_eq!(decoded, should_equal);
     }
-    return res;*/
+
+    #[test]
+    fn test_read_uint32() {
+        let data: Vec<u8> = vec![11, 60, 198, 127];
+        let (r, p) = read_pbf::read_uint32(&data, 0).unwrap();
+        assert_eq!(r, 188532351);
+        assert_eq!(p, 4);
+    }
+    
+    
+    #[test]
+    fn test_read_packed_int() {
+        let data: Vec<u8> = vec![25, 155,33, 232,154,3, 0];
+        let unpacked = read_pbf::read_packed_int(&data);
+        
+        assert_eq!(unpacked, vec![25, 33*128+27, 3*128*128 + 26*128+104, 0]);
+    }
+    
+    
+    
 }
