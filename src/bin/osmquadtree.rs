@@ -11,6 +11,7 @@ use osmquadtree::utils::{parse_timestamp};
 use osmquadtree::pbfformat::read_file_block::file_length;
 
 use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
+use osmquadtree::geometry::{process_geometry,GeometryStyle};
 
 use std::sync::Arc;
 use std::io::{Error, ErrorKind, Result};
@@ -94,6 +95,15 @@ fn write_index_file_w(prfx: &str, outfn: Option<&str>, numchan: usize) -> Result
     Ok(())
 }
 
+fn dump_geometry_style(outfn: Option<&str>) -> Result<()> {
+    let outfn = match outfn {
+        Some(o) => String::from(o),
+        None => String::from("default_style.json"),
+    };
+    let mut f = std::fs::File::create(&outfn)?;
+    serde_json::to_writer_pretty(&mut f, &GeometryStyle::default())?;
+    Ok(())
+}
     
 
 const NUMCHAN_DEFAULT: usize = 4;
@@ -232,7 +242,20 @@ fn main() {
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-        );
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("dump_geometry_style")
+                .arg(Arg::with_name("OUTPUT").required(true))
+        )
+        ;
         
 
     let mut help = Vec::new();
@@ -361,6 +384,17 @@ fn main() {
                 filter.value_of("TIMESTAMP"),
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
+        },
+        ("process_geometry", Some(geom)) => {
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("dump_geometry_style", Some(geom)) => {
+            dump_geometry_style(geom.value_of("OUTPUT"))
         },
         _ => Err(Error::new(ErrorKind::Other, "??")),
     };
