@@ -4,29 +4,29 @@ use std::io::{Error, ErrorKind, Result};
 
 use std::f64::consts::PI;
 
-fn coordinate_as_integer(v: f64) -> i32 {
+pub fn coordinate_as_integer(v: f64) -> i32 {
     if v > 0.0 {
         return ((v * 10000000.0) + 0.5) as i32;
     }
     ((v * 10000000.0) - 0.5) as i32
 }
 
-fn coordinate_as_float(v: i32) -> f64 {
+pub fn coordinate_as_float(v: i32) -> f64 {
     (v as f64) * 0.0000001
 }
-fn latitude_mercator(y: f64, scale: f64) -> f64 {
+pub fn latitude_mercator(y: f64, scale: f64) -> f64 {
     (PI * (1.0 + y / 90.0) / 4.0).tan().ln() * scale / PI
 
     //return log(tan(M_PI*(1.0+y/90.0)/4.0)) * scale / PI;
 }
 
-fn latitude_un_mercator(d: f64, scale: f64) -> f64 {
+pub fn latitude_un_mercator(d: f64, scale: f64) -> f64 {
     ((d * PI / scale).exp().atan() * 4.0 / PI - 1.0) * 90.0
 
     //return (atan(exp(d*M_PI/scale))*4/M_PI - 1.0) * 90.0;
 }
 
-//const EARTH_WIDTH: f64 = 20037508.342789244;
+pub const EARTH_WIDTH: f64 = 20037508.342789244;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tuple {

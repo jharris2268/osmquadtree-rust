@@ -6,16 +6,18 @@ mod default_style;
 mod elements;
 mod geometry_block;
 mod multipolygons;
+mod position;
 
 use crate::elements::{Quadtree,Node,Way,Relation};
-pub use crate::geometry::waywithnodes::{LonLat,CollectWayNodes};
+pub use crate::geometry::waywithnodes::{CollectWayNodes};
+pub use crate::geometry::position::{LonLat,XY};
 
 pub use crate::geometry::process_geometry::process_geometry;
 pub use crate::geometry::style::GeometryStyle;
 pub use crate::geometry::geometry_block::{GeometryBlock,Object,};
-pub use crate::geometry::elements::{PointGeometry,ComplicatedPolygonGeometry,RingPart};
+pub use crate::geometry::elements::{PointGeometry,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart};
 
-use std::io::Result;
+
 
 
 

@@ -1,5 +1,5 @@
 use crate::elements::{Node,PrimitiveBlock,Quadtree};
-use crate::geometry::{WorkingBlock,Timings,OtherData,Object,GeometryStyle,PointGeometry};
+use crate::geometry::{WorkingBlock,Timings,OtherData,Object,GeometryStyle,LonLat};
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
 
@@ -14,17 +14,6 @@ fn is_parent(lhs: &Quadtree, rhs: &Quadtree) -> bool {
     }
     
     lhs == &rhs.round(lhs.depth())
-}
-
-#[derive(Clone,Eq,PartialEq,Ord,PartialOrd,Debug)]
-pub struct LonLat {
-    pub lon: i32,
-    pub lat: i32
-}
-impl LonLat {
-    pub fn new(lon: i32, lat: i32) -> LonLat {
-        LonLat{lon,lat}
-    }
 }
 
 

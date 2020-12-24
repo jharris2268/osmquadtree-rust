@@ -1,5 +1,7 @@
 use crate::elements::{Relation,ElementType,Way,Quadtree};
-use crate::geometry::{WorkingBlock,GeometryStyle,Object,LonLat,ComplicatedPolygonGeometry,RingPart,Timings,OtherData};
+use crate::geometry::{WorkingBlock,GeometryStyle,Object,LonLat,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
+use crate::geometry::position::{calc_ring_area,polygon_contains};
+use crate::geometry::elements::collect_rings;
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
 
@@ -11,117 +13,44 @@ type WayEntry = (Way,Vec<LonLat>,Vec<String>);
 type PendingWays = BTreeMap<i64, (BTreeSet<i64>, Option<WayEntry>)>;
 
 
-fn reverse_parts(mut parts: Vec<RingPart>) -> Vec<RingPart> {
-    parts.reverse();
-    for p in parts.iter_mut() {
-        p.is_reversed = !p.is_reversed;
-    }
-    parts
-}
 
-fn get_first_last(part: &Vec<RingPart>) -> (i64,i64) {
-    let p = &part[0];
-    let f = if p.is_reversed {
-        p.refs[p.refs.len()-1]
-    } else {
-        p.refs[0]
-    };
-    
-    let q = &part[part.len()-1];
-    let t = if q.is_reversed {
-        q.refs[0]
-    } else {
-        q.refs[q.refs.len()-1]
-    };
-    (f,t)
-}
-fn is_ring(part: &Vec<RingPart>) -> bool {
-    let (f,t) = get_first_last(part);
-    f==t
-}
-
-fn merge_rings(parts: &mut Vec<Vec<RingPart>>) -> (bool,Option<Vec<RingPart>>) {
-    if parts.len() == 0 { return (false,None); }
-    if parts.len() == 1 {
-        if is_ring(&parts[0]) {
-            let zz = parts.remove(0);
-            return (true, Some(zz));
-        }
-        return (false,None);
-    }
-    
-    
-    for i in 0 .. parts.len()-1 {
-        let (f,t) = get_first_last(&parts[i]);
-        if f==t {
-            let zz = parts.remove(i);
-            return (true, Some(zz));
-        }
-        for j in i+1 .. parts.len() {
-            let (g,u) = get_first_last(&parts[j]);
-            
-            if t == g {
-                let zz = parts.remove(j);
-                parts[i].extend(zz);
-                if is_ring(&parts[i]) {
-                    let zz = parts.remove(i);
-                    return (true, Some(zz));
-                }
-                return (true,None);
-            } else if t == u {
-                let zz = parts.remove(j);
-                parts[i].extend(reverse_parts(zz));
-                if is_ring(&parts[i]) {
-                    let zz = parts.remove(i);
-                    return (true, Some(zz));
-                }
-                return (true,None);
-            } else if f==u {
-                let zz = parts.remove(i);
-                parts[j-1].extend(zz);
-                return (true,None);
-            } else if f == g {
-                let zz = parts.remove(i);
-                parts[j-1].extend(reverse_parts(zz));
-                return (true,None);
-            }
+fn add_ring<'a>(res: &mut Vec<PolygonPart>, q: Ring) {
+    for a in res.iter_mut() {
+        let x = a.exterior.lonlats().unwrap();
+        let y = q.lonlats().unwrap();
+        if polygon_contains(&x, &y) {
+            a.add_interior(q);
+            return;
         }
     }
-    return (false,None);
+    
+    res.push(PolygonPart::new(q));
 }
-                
+        
+    
 
 
-fn collect_rings(ww: Vec<RingPart>) -> Result<(Vec<Vec<RingPart>>,Vec<Vec<RingPart>>)> {
-    //let nw=ww.len();
-    let mut parts = Vec::new();
-    for w in ww {
-        parts.push(vec![w]);
+fn order_rings(rings: Vec<Ring>) -> Vec<PolygonPart> {
+    let mut pp = Vec::new();
+    for mut r in rings {
+        r.area = calc_ring_area(&r.lonlats().expect("!"));
+        //let ll = r.lonlats().expect("!");
+        
+        pp.push(r);
     }
+    
+    pp.sort_by(|p,q| { (-1.0 * f64::abs(p.area)).partial_cmp(&(-1.0*f64::abs(q.area))).unwrap() });
     
     let mut res = Vec::new();
-    loop {
-        let (f,r) = merge_rings(&mut parts);
-        match r {
-            None => {},
-            Some(r) => { res.push(r); }
-        }
-        if !f {
-            break;
-        }
-    }
-    /*
-    let mut rem=Vec::new();
-    for p in parts {
-        for q in p {
-            rem.push(q);
-        }
-    }*/
     
-    //println!("found {} rings from {} ways, {} left", res.len(), nw, rem.len());
-    //Err(Error::new(ErrorKind::Other,"not implemented"))
-    Ok((res,parts))
+    for p in pp {
+        add_ring(&mut res, p);
+    }
+    
+    
+    res
 }
+       
 
 fn make_complicated_polygon(_style: &GeometryStyle, ringparts: Vec<RingPart>, rel: &Relation) -> Result<Option<ComplicatedPolygonGeometry>> {
     
@@ -137,7 +66,15 @@ fn make_complicated_polygon(_style: &GeometryStyle, ringparts: Vec<RingPart>, re
             }
             println!("remaining: {:?}", left);
         //}
+    } else {
+        let polys = order_rings(rings);
+        println!("relation {}, {:?}, {} ways, {} polys", rel.id, rel.tags, rp, polys.len());
+        for (i,r) in polys.iter().enumerate() {
+            println!("poly {}: {:?}", i,r);
+        }
     }
+    
+    
     Err(Error::new(ErrorKind::Other,"not implemented"))
     
 }
