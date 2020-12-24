@@ -1,8 +1,9 @@
 use crate::pbfformat::read_pbf;
 
 use crate::elements::common::{
-    common_cmp, common_eq, read_common, Changetype, PackStringTable, SetCommon,
+    common_cmp, common_eq, read_common, PackStringTable, 
 };
+use crate::elements::traits::*;
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
@@ -43,17 +44,13 @@ impl Node {
     ) -> Result<Node> {
         let mut nd = Node::new(0, changetype);
 
-        let tgs = read_pbf::read_all_tags(&data, 0);
-        //let mut rem=Vec::new();
-        //(nd.id, nd.info, nd.tags, nd.quadtree, rem) = read_common(&strings, &tt, minimal)?;
-
-        //for t in rem {
-        let rem = read_common(&mut nd, &strings, &tgs, minimal)?;
+        
+        let rem = read_common(&mut nd, &strings, data, minimal)?;
 
         for t in rem {
             match t {
-                read_pbf::PbfTag::Value(8, lat) => nd.lat = read_pbf::un_zig_zag(*lat) as i32,
-                read_pbf::PbfTag::Value(9, lon) => nd.lon = read_pbf::un_zig_zag(*lon) as i32,
+                read_pbf::PbfTag::Value(8, lat) => nd.lat = read_pbf::un_zig_zag(lat) as i32,
+                read_pbf::PbfTag::Value(9, lon) => nd.lon = read_pbf::un_zig_zag(lon) as i32,
                 _ => {}
             }
         }
@@ -68,9 +65,33 @@ impl Node {
     }
 }
 
-impl crate::elements::WithId for Node {
+impl WithType for Node {
+    fn get_type(&self) -> ElementType {
+        ElementType::Node
+    }
+}
+
+impl WithId for Node {
     fn get_id(&self) -> i64 {
         self.id
+    }
+}
+
+impl WithInfo for Node {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+impl WithTags for Node {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+
+impl WithQuadtree for Node {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
     }
 }
 
@@ -127,3 +148,4 @@ impl PartialEq for Node {
         )
     }
 }
+

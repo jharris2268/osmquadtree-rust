@@ -1,87 +1,29 @@
-use crate::pbfformat::read_pbf::{read_packed_int, un_zig_zag, PbfTag};
+use crate::pbfformat::read_pbf::{read_packed_int, un_zig_zag, PbfTag, IterTags};
 use crate::pbfformat::write_pbf;
 
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
+use crate::elements::traits::*;
 
 use core::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::io::{Error, ErrorKind, Result};
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
-pub enum Changetype {
-    Normal,
-    Delete,
-    Remove,
-    Unchanged,
-    Modify,
-    Create,
-}
-
-impl std::fmt::Display for Changetype {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Normal => "Normal",
-                Self::Delete => "Delete",
-                Self::Remove => "Remove",
-                Self::Unchanged => "Unchanged",
-                Self::Modify => "Modify",
-                Self::Create => "Create",
-            }
-        )
-    }
-}
-
-pub fn get_changetype(ct: u64) -> Changetype {
-    match ct {
-        0 => Changetype::Normal,
-        1 => Changetype::Delete,
-        2 => Changetype::Remove,
-        3 => Changetype::Unchanged,
-        4 => Changetype::Modify,
-        5 => Changetype::Create,
-        _ => {
-            panic!("wronge changetype");
-        }
-    }
-}
-pub fn changetype_int(ct: Changetype) -> u64 {
-    match ct {
-        Changetype::Normal => 0,
-        Changetype::Delete => 1,
-        Changetype::Remove => 2,
-        Changetype::Unchanged => 3,
-        Changetype::Modify => 4,
-        Changetype::Create => 5,
-    }
-}
-
-pub trait SetCommon {
-    fn set_id(&mut self, id: i64);
-    fn set_tags(&mut self, tags: Vec<Tag>);
-    fn set_info(&mut self, info: Info);
-    fn set_quadtree(&mut self, quadtree: Quadtree);
-}
-
-pub fn read_common<'a, 'b, T: SetCommon>(
+pub fn read_common<'a, T: SetCommon+WithId>(
     obj: &mut T,
     strings: &Vec<String>,
-    pbftags: &'a Vec<PbfTag<'b>>,
+    data: &'a [u8],
     minimal: bool,
-) -> Result<Vec<&'a PbfTag<'b>>> {
+) -> Result<Vec<PbfTag<'a>>> {
     let mut kk = Vec::new();
     let mut vv = Vec::new();
     let mut rem = Vec::new();
-    let mut id = 0;
-    for t in pbftags {
+    
+    for t in IterTags::new(data) {
         match t {
             PbfTag::Value(1, i) => {
-                id = *i;
-                obj.set_id(*i as i64);
+                obj.set_id(i as i64);
             }
             PbfTag::Data(4, d) => {
                 if !minimal {
@@ -106,7 +48,7 @@ pub fn read_common<'a, 'b, T: SetCommon>(
                 }
             }
             PbfTag::Value(20, q) => {
-                obj.set_quadtree(Quadtree::new(un_zig_zag(*q)));
+                obj.set_quadtree(Quadtree::new(un_zig_zag(q)));
             }
             x => {
                 rem.push(x);
@@ -116,7 +58,7 @@ pub fn read_common<'a, 'b, T: SetCommon>(
     if kk.len() != vv.len() {
         return Err(Error::new(
             ErrorKind::Other,
-            format!("tags don't match: [id={}] {} // {}", id, kk.len(), vv.len()),
+            format!("tags don't match: [id: {}] {} // {}", obj.get_id(), kk.len(), vv.len()),
         ));
     }
     if kk.len() > 0 {

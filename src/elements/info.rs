@@ -25,7 +25,7 @@ impl Info {
 
     pub fn read(strings: &Vec<String>, data: &[u8]) -> Result<Info> {
         let mut res = Info::new();
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, v) => res.version = v as i64,
                 read_pbf::PbfTag::Value(2, v) => res.timestamp = v as i64,

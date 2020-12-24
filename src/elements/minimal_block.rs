@@ -1,4 +1,4 @@
-use crate::elements::common::{get_changetype, Changetype};
+use crate::elements::traits::*;
 use crate::elements::quadtree;
 use crate::elements::quadtree::Quadtree;
 use crate::pbfformat::read_pbf;
@@ -33,6 +33,37 @@ impl MinimalNode {
         }
     }
 }
+
+impl WithType for MinimalNode {
+    fn get_type(&self) -> ElementType {
+        ElementType::Node
+    }
+}
+
+impl WithId for MinimalNode {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+impl WithTimestamp for MinimalNode {
+    fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+}
+impl WithVersion for MinimalNode {
+    fn get_version(&self) -> i64 {
+        self.version as i64
+    }
+}
+
+impl WithQuadtree for MinimalNode {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+
+
+
 impl Ord for MinimalNode {
     fn cmp(&self, other: &Self) -> Ordering {
         let a = self.id.cmp(&other.id);
@@ -82,6 +113,37 @@ impl MinimalWay {
         }
     }
 }
+
+
+impl WithType for MinimalWay {
+    fn get_type(&self) -> ElementType {
+        ElementType::Way
+    }
+}
+
+impl WithId for MinimalWay {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+impl WithTimestamp for MinimalWay {
+    fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+}
+impl WithVersion for MinimalWay {
+    fn get_version(&self) -> i64 {
+        self.version as i64
+    }
+}
+
+impl WithQuadtree for MinimalWay {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+
+
 impl Ord for MinimalWay {
     fn cmp(&self, other: &Self) -> Ordering {
         let a = self.id.cmp(&other.id);
@@ -134,6 +196,36 @@ impl MinimalRelation {
         }
     }
 }
+
+
+impl WithType for MinimalRelation {
+    fn get_type(&self) -> ElementType {
+        ElementType::Relation
+    }
+}
+
+impl WithId for MinimalRelation {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+impl WithTimestamp for MinimalRelation {
+    fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+}
+impl WithVersion for MinimalRelation {
+    fn get_version(&self) -> i64 {
+        self.version as i64
+    }
+}
+
+impl WithQuadtree for MinimalRelation {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+
 impl Ord for MinimalRelation {
     fn cmp(&self, other: &Self) -> Ordering {
         let a = self.id.cmp(&other.id);
@@ -213,7 +305,7 @@ impl MinimalBlock {
         res.location = location;
 
         let mut groups = Vec::new();
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, _) => {}
                 read_pbf::PbfTag::Data(2, d) => groups.push(d),
@@ -241,9 +333,9 @@ impl MinimalBlock {
         if !ischange {
             return Changetype::Normal;
         }
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(10, ct) => return get_changetype(ct),
+                read_pbf::PbfTag::Value(10, ct) => return Changetype::from_int(ct),
                 _ => {}
             }
         }
@@ -259,7 +351,7 @@ impl MinimalBlock {
         readrelations: bool,
     ) -> Result<u64, Error> {
         let mut count = 0;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => {
                     if readnodes {
@@ -291,11 +383,11 @@ impl MinimalBlock {
     fn read_node(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut nd = MinimalNode::new();
         nd.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, i) => nd.id = i as i64,
                 read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data, 0) {
+                    for y in read_pbf::IterTags::new(&info_data) {
                         match y {
                             read_pbf::PbfTag::Value(1, v) => nd.version = v as u32,
                             read_pbf::PbfTag::Value(2, v) => nd.timestamp = v as i64,
@@ -318,11 +410,11 @@ impl MinimalBlock {
     fn read_way(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut wy = MinimalWay::new();
         wy.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, i) => wy.id = i as i64,
                 read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data, 0) {
+                    for y in read_pbf::IterTags::new(&info_data) {
                         match y {
                             read_pbf::PbfTag::Value(1, v) => wy.version = v as u32,
                             read_pbf::PbfTag::Value(2, v) => wy.timestamp = v as i64,
@@ -344,11 +436,11 @@ impl MinimalBlock {
     fn read_relation(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut rl = MinimalRelation::new();
         rl.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, i) => rl.id = i as i64,
                 read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data, 0) {
+                    for y in read_pbf::IterTags::new(&info_data) {
                         match y {
                             read_pbf::PbfTag::Value(1, v) => rl.version = v as u32,
                             read_pbf::PbfTag::Value(2, v) => rl.timestamp = v as i64,
@@ -377,11 +469,11 @@ impl MinimalBlock {
         let mut vs = Vec::new();
         let mut ts = Vec::new();
 
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => ids = read_pbf::read_delta_packed_int(&d),
                 read_pbf::PbfTag::Data(5, d) => {
-                    for y in read_pbf::IterTags::new(&d, 0) {
+                    for y in read_pbf::IterTags::new(&d) {
                         match y {
                             read_pbf::PbfTag::Data(1, d) => vs = read_pbf::read_packed_int(&d), //version NOT delta packed
                             read_pbf::PbfTag::Data(2, d) => {
@@ -477,7 +569,7 @@ pub struct QuadtreeBlock {
 fn unpack_id_qt(data: &[u8]) -> io::Result<(i64, Quadtree)> {
     let mut i = 0;
     let mut qt = -1;
-    for t in IterTags::new(data, 0) {
+    for t in IterTags::new(data) {
         match t {
             PbfTag::Value(1, x) => {
                 i = x as i64;
@@ -501,7 +593,7 @@ fn unpack_dense(nodes: &mut Vec<(i64, Quadtree)>, data: &[u8]) -> io::Result<()>
     let mut nn = Vec::new();
     let mut qq = Vec::new();
 
-    for t in IterTags::new(data, 0) {
+    for t in IterTags::new(data) {
         match t {
             PbfTag::Data(1, x) => {
                 nn = read_delta_packed_int(x);
@@ -659,10 +751,10 @@ impl QuadtreeBlock {
             relations: Vec::new(),
         };
 
-        for t in IterTags::new(data, 0) {
+        for t in IterTags::new(data) {
             match t {
                 PbfTag::Data(2, d2) => {
-                    for t2 in IterTags::new(d2, 0) {
+                    for t2 in IterTags::new(d2) {
                         match t2 {
                             PbfTag::Data(1, d3) => {
                                 r.nodes.push(unpack_id_qt(d3)?);

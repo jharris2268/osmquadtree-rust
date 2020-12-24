@@ -1,5 +1,5 @@
-use crate::elements::minimal_block::{MinimalBlock, MinimalNode, MinimalRelation, MinimalWay};
-use crate::elements::primitive_block::{Changetype, Node, PrimitiveBlock, Relation, Way};
+use crate::elements::{MinimalBlock, MinimalNode, MinimalRelation, MinimalWay};
+use crate::elements::{Changetype, Node, PrimitiveBlock, Relation, Way};
 
 use std::cmp::Ordering;
 

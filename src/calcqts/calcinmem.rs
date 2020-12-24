@@ -1,5 +1,5 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge};
-use crate::elements::{make_elementtype, Bbox, ElementType, MinimalBlock, Quadtree};
+use crate::elements::{Bbox, ElementType, MinimalBlock, Quadtree};
 use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
 use crate::pbfformat::read_file_block::{file_length, read_all_blocks_with_progbar};
 use crate::pbfformat::read_pbf;
@@ -61,7 +61,7 @@ impl CallFinish for CollectTiles {
             for (t, r) in read_pbf::PackedInt::new(&r.types_data)
                 .zip(read_pbf::DeltaPackedInt::new(&r.refs_data))
             {
-                let c = make_elementtype(t);
+                let c = ElementType::from_int(t);
                 p.push((c, r));
             }
             dx.relations.insert(r.id, p);

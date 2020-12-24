@@ -3,16 +3,17 @@ use crate::pbfformat::write_pbf;
 
 use crate::elements::quadtree;
 
-pub use crate::elements::common::Changetype;
+
 pub use crate::elements::idset::IdSet;
 pub use crate::elements::info::Info;
 pub use crate::elements::node::Node;
-pub use crate::elements::relation::{ElementType, Member, Relation};
+pub use crate::elements::relation::{Member, Relation};
 pub use crate::elements::tags::Tag;
 pub use crate::elements::way::Way;
 
-use crate::elements::common::{changetype_int, get_changetype, PackStringTable};
+use crate::elements::common::{PackStringTable};
 use crate::elements::dense::Dense;
+use crate::elements::traits::{WithChangetype,Changetype,ElementType};
 
 use std::io::{Error, ErrorKind, Result};
 
@@ -30,7 +31,7 @@ pub struct PrimitiveBlock {
 
 fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     let mut res = Vec::new();
-    for x in read_pbf::IterTags::new(&data, 0) {
+    for x in read_pbf::IterTags::new(&data) {
         match x {
             read_pbf::PbfTag::Data(1, d) => {
                 let s = std::str::from_utf8(d).unwrap().to_string();
@@ -43,22 +44,20 @@ fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     Ok(res)
 }
 
-trait WithChangetype {
-    fn changetype(&self) -> Changetype;
-}
+
 
 impl WithChangetype for Node {
-    fn changetype(&self) -> Changetype {
+    fn get_changetype(&self) -> Changetype {
         return self.changetype;
     }
 }
 impl WithChangetype for Way {
-    fn changetype(&self) -> Changetype {
+    fn get_changetype(&self) -> Changetype {
         return self.changetype;
     }
 }
 impl WithChangetype for Relation {
-    fn changetype(&self) -> Changetype {
+    fn get_changetype(&self) -> Changetype {
         return self.changetype;
     }
 }
@@ -68,11 +67,11 @@ fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype, usize, usiz
     if objs.is_empty() {
         return res;
     }
-    let mut c = objs[0].changetype();
+    let mut c = objs[0].get_changetype();
     let mut li = 0;
     for (i, o) in objs.iter().enumerate() {
         if i != 0 {
-            let nc = o.changetype();
+            let nc = o.get_changetype();
             if c != nc {
                 res.push((c, li, i));
                 c = nc;
@@ -136,7 +135,7 @@ impl PrimitiveBlock {
 
         let mut strings = Vec::new();
         let mut groups = Vec::new();
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => {
                     if !minimal {
@@ -169,10 +168,10 @@ impl PrimitiveBlock {
         if !ischange {
             return Changetype::Normal;
         }
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(10, ct) => {
-                    return get_changetype(ct);
+                    return Changetype::from_int(ct);
                 }
                 _ => {}
             }
@@ -189,7 +188,7 @@ impl PrimitiveBlock {
         idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         let mut count = 0;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => {
                     count += self.read_node(strings, changetype, &d, minimal, idset)?
@@ -345,7 +344,7 @@ impl PrimitiveBlock {
                     2,
                     &Dense::pack(&self.nodes[b..c], prep_strings, include_qts)?,
                 );
-                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                write_pbf::pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);
@@ -373,7 +372,7 @@ impl PrimitiveBlock {
                 for w in &self.ways[b..c] {
                     write_pbf::pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
                 }
-                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                write_pbf::pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);
@@ -399,7 +398,7 @@ impl PrimitiveBlock {
                 for r in &self.relations[b..c] {
                     write_pbf::pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
                 }
-                write_pbf::pack_value(&mut res, 10, changetype_int(a));
+                write_pbf::pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);

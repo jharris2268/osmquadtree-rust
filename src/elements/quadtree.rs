@@ -41,7 +41,7 @@ impl Tuple {
     }
     pub fn read(data: &[u8]) -> Result<Tuple> {
         let mut res = Tuple::new(0, 0, 0);
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, x) => res.x = x as u32,
                 read_pbf::PbfTag::Value(2, y) => res.y = y as u32,
@@ -260,7 +260,7 @@ impl Quadtree {
     }
     pub fn read(data: &[u8]) -> Result<Quadtree> {
         let mut res = (0, 0, 0);
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Value(1, x) => res.0 = x as u32,
                 read_pbf::PbfTag::Value(2, y) => res.1 = y as u32,

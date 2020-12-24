@@ -77,7 +77,7 @@ pub fn read_file_block_with_pos<F: Read>(
     let b = read_file_data(file, l).unwrap();
     pos += l;
 
-    let bb = read_pbf::IterTags::new(&b, 0);
+    let bb = read_pbf::IterTags::new(&b);
     //println!("{:?}", bb);
     let mut ln = 0;
     for tg in bb {
@@ -94,7 +94,7 @@ pub fn read_file_block_with_pos<F: Read>(
     let c = read_file_data(file, ln).unwrap();
     pos += ln;
 
-    for tg in read_pbf::IterTags::new(&c, 0) {
+    for tg in read_pbf::IterTags::new(&c) {
         match tg {
             read_pbf::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
             read_pbf::PbfTag::Value(2, _) => fb.is_comp = true,

@@ -1,4 +1,5 @@
-use crate::elements::common::{Changetype, PackStringTable};
+use crate::elements::common::{PackStringTable};
+use crate::elements::traits::{Changetype,ElementType};
 use crate::elements::info::Info;
 use crate::elements::node;
 use crate::elements::quadtree;
@@ -8,7 +9,7 @@ use crate::pbfformat::write_pbf;
 use std::io::{Error, ErrorKind, Result};
 
 use crate::elements::idset::IdSet;
-use crate::elements::relation::ElementType;
+
 
 fn check_id(id: i64, idset: Option<&dyn IdSet>) -> bool {
     match idset {
@@ -40,12 +41,12 @@ impl Dense {
         let mut ui = Vec::new();
         let mut us = Vec::new();
 
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => ids = read_pbf::read_delta_packed_int(&d),
                 read_pbf::PbfTag::Data(5, d) => {
                     if !minimal {
-                        for y in read_pbf::IterTags::new(&d, 0) {
+                        for y in read_pbf::IterTags::new(&d) {
                             match y {
                                 read_pbf::PbfTag::Data(1, d) => vs = read_pbf::read_packed_int(&d), //version NOT delta packed
                                 read_pbf::PbfTag::Data(2, d) => {

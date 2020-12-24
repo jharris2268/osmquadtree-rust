@@ -92,7 +92,7 @@ impl WayNodeTile {
         let ti = self.vals.len();
         let mut nv = Vec::new();
         let mut wv = Vec::new();
-        for tg in read_pbf::IterTags::new(&data[..], 0) {
+        for tg in read_pbf::IterTags::new(&data[..]) {
             match tg {
                 read_pbf::PbfTag::Value(1, k) => {
                     if self.key != 0 && read_pbf::un_zig_zag(k) != self.key {
@@ -310,7 +310,7 @@ impl RelMems {
         let mut e = Vec::new();
         let mut f = Vec::new();
 
-        for t in read_pbf::IterTags::new(data, 0) {
+        for t in read_pbf::IterTags::new(data) {
             match t {
                 read_pbf::PbfTag::Data(1, x) => {
                     if load_nodes {
@@ -357,7 +357,7 @@ impl RelMems {
 }
 
 fn unpack_relation_node_vals(nqts: &mut QuadtreeSimple, data: &[u8]) {
-    for t in read_pbf::IterTags::new(data, 0) {
+    for t in read_pbf::IterTags::new(data) {
         match t {
             read_pbf::PbfTag::Data(2, x) => {
                 for n in read_pbf::DeltaPackedInt::new(x) {

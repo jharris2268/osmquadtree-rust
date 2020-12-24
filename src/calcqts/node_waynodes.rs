@@ -104,7 +104,7 @@ impl NodeWayNodeCombTile {
 
         let mut numw = Vec::new();
         let mut ww = Vec::new();
-        for t in read_pbf::IterTags::new(&data, 0) {
+        for t in read_pbf::IterTags::new(&data) {
             match t {
                 read_pbf::PbfTag::Value(1, c) => {
                     res.vals.reserve(c as usize);

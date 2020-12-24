@@ -2,12 +2,12 @@ use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 
 use crate::elements::common::{
-    common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, Changetype,
-    PackStringTable, SetCommon,
+    common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
 };
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
+use crate::elements::traits::*;
 use crate::elements::IdSet;
 use core::cmp::Ordering;
 use std::io::{Error, ErrorKind, Result};
@@ -20,34 +20,6 @@ pub struct Relation {
     pub tags: Vec<Tag>,
     pub members: Vec<Member>,
     pub quadtree: Quadtree,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
-pub enum ElementType {
-    Node,
-    Way,
-    Relation,
-}
-
-pub fn make_elementtype(t: u64) -> ElementType {
-    if t == 0 {
-        return ElementType::Node;
-    }
-    if t == 1 {
-        return ElementType::Way;
-    }
-    if t == 2 {
-        return ElementType::Relation;
-    }
-    panic!("wrong type");
-}
-
-fn elementtype_int(t: &ElementType) -> u64 {
-    match t {
-        ElementType::Node => 0,
-        ElementType::Way => 1,
-        ElementType::Relation => 2,
-    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -85,10 +57,8 @@ impl Relation {
     ) -> Result<Relation> {
         let mut rel = Relation::new(0, changetype);
 
-        let tgs = read_pbf::read_all_tags(&data, 0);
-        //let mut rem=Vec::new();
-        //(rel.id, rel.info, rel.tags, rel.quadtree, rem) = read_common(&strings,&tgs, minimal)?;
-        let rem = read_common(&mut rel, &strings, &tgs, minimal)?;
+        
+        let rem = read_common(&mut rel, &strings, data, minimal)?;
 
         let mut roles = Vec::new();
         let mut refs = Vec::new();
@@ -115,13 +85,13 @@ impl Relation {
                 if minimal {
                     rel.members.push(Member {
                         role: String::from(""),
-                        mem_type: make_elementtype(types[i]),
+                        mem_type: ElementType::from_int(types[i]),
                         mem_ref: refs[i],
                     });
                 } else {
                     let m = Member {
                         role: strings[roles[i] as usize].clone(),
-                        mem_type: make_elementtype(types[i]),
+                        mem_type: ElementType::from_int(types[i]),
                         mem_ref: refs[i],
                     };
                     rel.members.push(m);
@@ -146,7 +116,7 @@ impl Relation {
                 write_pbf::pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
             let refs = write_pbf::pack_delta_int(self.members.iter().map(|m| m.mem_ref));
             let types =
-                write_pbf::pack_int(self.members.iter().map(|m| elementtype_int(&m.mem_type)));
+                write_pbf::pack_int(self.members.iter().map(|m| m.mem_type.as_int()));
 
             write_pbf::pack_data(&mut res, 8, &roles);
             write_pbf::pack_data(&mut res, 9, &refs);
@@ -169,11 +139,36 @@ impl Relation {
     }
     
 }
-impl crate::elements::WithId for Relation {
+impl WithType for Relation {
+    fn get_type(&self) -> ElementType {
+        ElementType::Relation
+    }
+}
+
+impl WithId for Relation {
     fn get_id(&self) -> i64 {
         self.id
     }
 }
+
+impl WithInfo for Relation {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+impl WithTags for Relation {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+
+impl WithQuadtree for Relation {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+
 
 impl SetCommon for Relation {
     fn set_id(&mut self, id: i64) {

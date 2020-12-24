@@ -46,7 +46,7 @@ fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
 
 fn check_index_block(bl: Vec<u8>, idset: &dyn IdSet) -> Option<Quadtree> {
     let mut qt = Quadtree::new(-2);
-    for tg in IterTags::new(&bl, 0) {
+    for tg in IterTags::new(&bl) {
         match tg {
             PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {

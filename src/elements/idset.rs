@@ -1,4 +1,4 @@
-use crate::elements::primitive_block::ElementType;
+use crate::elements::traits::ElementType;
 
 use std::collections::{BTreeSet,BTreeMap};
 use std::fmt;

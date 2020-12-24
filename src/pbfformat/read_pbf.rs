@@ -1,7 +1,7 @@
-//use std::error::Error;
+
 use std::io;
 use std::io::ErrorKind;
-use std::iter::FromIterator;
+
 #[derive(PartialEq, Debug)]
 pub enum PbfTag<'a> {
     Value(u64, u64),
@@ -23,6 +23,23 @@ pub fn read_uint32(data: &[u8], pos: usize) -> io::Result<(u64, usize)> {
 
     Ok((res, pos + 4))
 }
+pub fn read_uint64(data: &[u8], pos: usize) -> io::Result<(u64, usize)> {
+    if (pos + 8) > data.len() {
+        return Err(io::Error::new(ErrorKind::Other, "too short"));
+    }
+    let mut res: u64 = 0;
+    //assert!(pos+3 < data.len());
+
+    res |= data[pos + 7] as u64;
+    res |= (data[pos + 6] as u64) << 8;
+    res |= (data[pos + 5] as u64) << 16;
+    res |= (data[pos + 4] as u64) << 24;
+    res |= (data[pos + 3] as u64) << 32;
+    res |= (data[pos + 2] as u64) << 40;
+    res |= (data[pos + 1] as u64) << 48;
+    res |= (data[pos + 0] as u64) << 56;
+    Ok((res, pos + 8))
+}
 
 pub fn un_zig_zag(uv: u64) -> i64 {
     let x = (uv >> 1) as i64;
@@ -32,14 +49,13 @@ pub fn un_zig_zag(uv: u64) -> i64 {
     x
 }
 
-pub fn read_uint(data: &[u8], pos: usize) -> (u64, usize) {
+pub fn read_varint(data: &[u8], pos: usize) -> (u64, usize) {
     let mut res: u64 = 0;
     let mut i = 0;
     loop {
         if i >= 10 {
             break;
         }
-        //for i in 0..9 {
         let x = data[pos + i];
         let y = (x & 127) as u64;
         res |= y << (7 * i);
@@ -53,28 +69,36 @@ pub fn read_uint(data: &[u8], pos: usize) -> (u64, usize) {
 }
 
 pub fn read_data<'a>(data: &'a [u8], pos: usize) -> (&'a [u8], usize) {
-    let (ln, pos) = read_uint(data, pos);
+    let (ln, pos) = read_varint(data, pos);
 
     let l = ln as usize;
     (&data[pos..pos + l], pos + l)
 }
 
 pub fn read_tag<'a>(data: &'a [u8], pos: usize) -> (PbfTag<'a>, usize) {
-    let (t, pos) = read_uint(data, pos);
+    let (t, pos) = read_varint(data, pos);
 
     if t == 0 {
         return (PbfTag::Null, pos);
     }
-
     if (t & 7) == 0 {
-        let (v, pos) = read_uint(data, pos);
+        let (v, pos) = read_varint(data, pos);
         return (PbfTag::Value(t >> 3, v), pos);
-    }
-    if (t & 7) == 2 {
+    } else if (t & 7) == 1 {
+        let (v, pos) = read_uint64(data, pos).expect("!!");
+        return (PbfTag::Value(t >> 3, v), pos);
+    } else if (t & 7) == 2 {
         let (s, pos) = read_data(data, pos);
         return (PbfTag::Data(t >> 3, s), pos);
-    }
+    } else if (t & 7) == 5 {
+        let (v, pos) = read_uint32(data, pos).expect("!!");
+        return (PbfTag::Value(t >> 3, v), pos);
+    } 
     (PbfTag::Null, pos)
+}
+
+pub fn extract_f64_from_u64(v: u64) -> f64 {
+    unsafe { *(&v as *const u64 as *const f64) }
 }
 
 pub struct IterTags<'a> {
@@ -83,8 +107,8 @@ pub struct IterTags<'a> {
 }
 
 impl<'a> IterTags<'a> {
-    pub fn new(data: &'a [u8], pos: usize) -> IterTags<'a> {
-        IterTags { data, pos }
+    pub fn new(data: &'a [u8]) -> IterTags<'a> {
+        IterTags { data: data, pos: 0 }
     }
 }
 
@@ -101,17 +125,13 @@ impl<'a> Iterator for IterTags<'a> {
     }
 }
 
-pub fn read_all_tags<'a>(data: &'a [u8], pos: usize) -> Vec<PbfTag<'a>> {
-    Vec::from_iter(IterTags::new(data, pos))
-    
-}
 
 fn count_packed_len(data: &[u8]) -> usize {
     let mut pos = 0;
     let mut count = 0;
 
     while pos < data.len() {
-        pos = read_uint(data, pos).1;
+        pos = read_varint(data, pos).1;
         count += 1;
     }
     count
@@ -138,7 +158,7 @@ impl Iterator for DeltaPackedInt<'_> {
 
     fn next(&mut self) -> Option<i64> {
         if self.pos < self.data.len() {
-            let (t, npos) = read_uint(&self.data, self.pos);
+            let (t, npos) = read_varint(&self.data, self.pos);
             let p = un_zig_zag(t);
             self.curr += p;
 
@@ -175,7 +195,7 @@ impl Iterator for PackedInt<'_> {
 
     fn next(&mut self) -> Option<u64> {
         if self.pos < self.data.len() {
-            let (t, npos) = read_uint(&self.data, self.pos);
+            let (t, npos) = read_varint(&self.data, self.pos);
             self.pos = npos;
 
             Some(t)
@@ -207,12 +227,14 @@ pub fn read_packed_int(data: &[u8]) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use crate::pbfformat::read_pbf;
+    use std::iter::FromIterator;
+    
     #[test]
     fn test_read_all_tags() {
         let data: Vec<u8> = vec![
             8, 27, 16, 181, 254, 132, 214, 241, 2, 26, 4, 102, 114, 111, 103,
         ];
-        let decoded = read_pbf::read_all_tags(&data, 0);
+        let decoded = Vec::from_iter(read_pbf::IterTags::new(&data));
 
         let should_equal = vec![
             read_pbf::PbfTag::Value(1, 27),
@@ -240,6 +262,11 @@ mod tests {
         assert_eq!(unpacked, vec![25, 33*128+27, 3*128*128 + 26*128+104, 0]);
     }
     
+    #[test]
+    fn test_extract_f64_from_u64() {
+        assert_eq!(read_pbf::extract_f64_from_u64(4634994327930099728), 75.231);
+        assert_eq!(read_pbf::extract_f64_from_u64(13886166140936086744), -5522.53312);
+    }
     
     
 }

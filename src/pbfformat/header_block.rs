@@ -27,7 +27,7 @@ impl IndexItem {
         let mut quadtree = Quadtree::empty();
         let mut is_change = false;
         let mut length = 0;
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => quadtree = Quadtree::read(&d)?,
                 read_pbf::PbfTag::Value(2, isc) => is_change = isc != 0,
@@ -59,7 +59,7 @@ fn read_header_bbox(data: &[u8]) -> Result<Vec<i64>> {
     let mut bbox = Vec::new();
     bbox.resize(4, 0);
 
-    for x in read_pbf::IterTags::new(&data, 0) {
+    for x in read_pbf::IterTags::new(&data) {
         match x {
             read_pbf::PbfTag::Value(1, minlon) => bbox[0] = read_pbf::un_zig_zag(minlon) / 1000, //left
             read_pbf::PbfTag::Value(2, minlat) => bbox[2] = read_pbf::un_zig_zag(minlat) / 1000, //right
@@ -86,7 +86,7 @@ impl HeaderBlock {
         let mut npos = filepos;
         let mut res = HeaderBlock::new();
 
-        for x in read_pbf::IterTags::new(&data, 0) {
+        for x in read_pbf::IterTags::new(&data) {
             match x {
                 read_pbf::PbfTag::Data(1, d) => res.bbox = read_header_bbox(&d)?,
                 read_pbf::PbfTag::Data(4, d) => {

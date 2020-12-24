@@ -2,9 +2,9 @@ use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 
 use crate::elements::common::{
-    common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, Changetype,
-    PackStringTable, SetCommon,
+    common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
 };
+use crate::elements::traits::*;
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
@@ -42,10 +42,8 @@ impl Way {
     ) -> Result<Way> {
         let mut w = Way::new(0, changetype);
 
-        let tgs = read_pbf::read_all_tags(&data, 0);
-        //let mut rem=Vec::new();
-        //(w.id, w.info, w.tags, w.quadtree, rem) = read_common(&strings, &tgs, minimal)?;
-        let rem = read_common(&mut w, &strings, &tgs, minimal)?;
+        
+        let rem = read_common(&mut w, &strings, data, minimal)?;
 
         for t in rem {
             match t {
@@ -78,6 +76,38 @@ impl Way {
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
+
+
+impl WithType for Way {
+    fn get_type(&self) -> ElementType {
+        ElementType::Way
+    }
+}
+
+impl WithId for Way {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+
+impl WithInfo for Way {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+impl WithTags for Way {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+
+impl WithQuadtree for Way {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+
 
 impl SetCommon for Way {
     fn set_id(&mut self, id: i64) {
@@ -131,8 +161,4 @@ impl PartialEq for Way {
         )
     }
 }
-impl crate::elements::WithId for Way {
-    fn get_id(&self) -> i64 {
-        self.id
-    }
-}
+

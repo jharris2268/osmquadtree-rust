@@ -1,4 +1,4 @@
-use crate::elements::{Bbox, MinimalBlock, IdSet, IdSetBool, ElementType, MinimalNode, MinimalRelation, MinimalWay,make_elementtype};
+use crate::elements::{Bbox, MinimalBlock, IdSet, IdSetBool, ElementType, MinimalNode, MinimalRelation, MinimalWay};
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,as_int};
 use crate::pbfformat::read_file_block::{read_all_blocks_parallel_prog, FileBlock,ProgBarWrap};
@@ -219,7 +219,7 @@ impl FilterObjs {
         let mut hasm=false;
         let mut hasr=false;
         for (tyi, rf) in PackedInt::new(&r.types_data).zip(DeltaPackedInt::new(&r.refs_data)) {
-            let ty = make_elementtype(tyi);
+            let ty = ElementType::from_int(tyi);
             hasm=true;
             if ty==ElementType::Relation { hasr=true; }
             if !justr || ty==ElementType::Relation {

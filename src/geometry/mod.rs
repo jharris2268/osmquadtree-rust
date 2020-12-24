@@ -3,7 +3,7 @@ mod pack_geometry;
 mod process_geometry;
 mod style;
 mod default_style;
-mod pointgeometry;
+mod elements;
 mod geometry_block;
 mod multipolygons;
 
@@ -12,8 +12,8 @@ pub use crate::geometry::waywithnodes::{LonLat,CollectWayNodes};
 
 pub use crate::geometry::process_geometry::process_geometry;
 pub use crate::geometry::style::GeometryStyle;
-pub use crate::geometry::geometry_block::{GeometryBlock,Object,ComplicatedPolygonGeometry};
-pub use crate::geometry::pointgeometry::PointGeometry;
+pub use crate::geometry::geometry_block::{GeometryBlock,Object,};
+pub use crate::geometry::elements::{PointGeometry,ComplicatedPolygonGeometry,RingPart};
 
 use std::io::Result;
 

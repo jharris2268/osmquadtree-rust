@@ -1,4 +1,4 @@
-use crate::geometry::PointGeometry;
+use crate::geometry::{PointGeometry,ComplicatedPolygonGeometry};
 use crate::elements::{Quadtree,Node,Way,Relation};
 use crate::geometry::pack_geometry::{pack_geometry_block, unpack_geometry_block};
 
@@ -7,7 +7,7 @@ use std::fmt;
 
 type LinestringGeometry = ();
 type SimplePolygonGeometry = ();
-pub type ComplicatedPolygonGeometry = ();
+//pub type ComplicatedPolygonGeometry = ();
 
 
 pub enum Object {

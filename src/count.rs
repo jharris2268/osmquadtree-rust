@@ -14,7 +14,7 @@ use crate::pbfformat::convertblocks::{
 use crate::utils::{MergeTimings, ThreadTimer};
 
 use crate::elements::{
-    get_changetype, Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node,
+    Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node,
     PrimitiveBlock, Relation, Way,
 };
 use std::io::BufReader;
@@ -564,7 +564,7 @@ impl CountBlocks for CountChange {
 
     fn add_minimal(&mut self, bl: &MinimalBlock) {
         for nd in &bl.nodes {
-            let ct = get_changetype(nd.changetype as u64);
+            let ct = nd.changetype;
 
             if !self.node.contains_key(&ct) {
                 self.node.insert(ct, NodeCount::new());
@@ -572,14 +572,14 @@ impl CountBlocks for CountChange {
             self.node.get_mut(&ct).unwrap().add_minimal(&nd);
         }
         for wy in &bl.ways {
-            let ct = get_changetype(wy.changetype as u64);
+            let ct = wy.changetype;
             if !self.way.contains_key(&ct) {
                 self.way.insert(ct, WayCount::new());
             }
             self.way.get_mut(&ct).unwrap().add_minimal(&wy);
         }
         for rl in &bl.relations {
-            let ct = get_changetype(rl.changetype as u64);
+            let ct = rl.changetype;
             if !self.relation.contains_key(&ct) {
                 self.relation.insert(ct, RelationCount::new());
             }

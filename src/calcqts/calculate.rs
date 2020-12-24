@@ -310,15 +310,15 @@ fn calc_way_quadtrees_split_inmem(
 }
 
 fn read_quadtree_block_ways(data: Vec<u8>, res: &mut Box<QuadtreeSplit>) {
-    for x in read_pbf::IterTags::new(&data, 0) {
+    for x in read_pbf::IterTags::new(&data) {
         match x {
             read_pbf::PbfTag::Data(2, d) => {
-                for y in read_pbf::IterTags::new(&d, 0) {
+                for y in read_pbf::IterTags::new(&d) {
                     match y {
                         read_pbf::PbfTag::Data(3, d) => {
                             let mut i = 0;
                             let mut q = Quadtree::new(-1);
-                            for z in read_pbf::IterTags::new(&d, 0) {
+                            for z in read_pbf::IterTags::new(&d) {
                                 match z {
                                     read_pbf::PbfTag::Value(1, v) => {
                                         i = v as i64;
