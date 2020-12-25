@@ -247,6 +247,7 @@ fn main() {
             SubCommand::with_name("process_geometry")   
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("out filename, "))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
@@ -388,6 +389,7 @@ fn main() {
         ("process_geometry", Some(geom)) => {
             process_geometry(
                 geom.value_of("INPUT").unwrap(),
+                geom.value_of("OUTFN"),
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)

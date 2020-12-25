@@ -338,7 +338,16 @@ impl Quadtree {
         qt <<= 63 - 2 * level;
         Quadtree(qt + level as i64)
     }
-
+    
+    pub fn is_parent(&self, other: &Quadtree) -> bool {
+        if self==other { return true; }
+        if self.depth() > other.depth() {
+            return other.is_parent(&self);
+        }
+    
+        self == &other.round(self.depth())
+    }
+    
     pub fn common(&self, other: &Quadtree) -> Quadtree {
         if self.0 < 0 {
             return Quadtree(other.0);
@@ -416,6 +425,16 @@ impl fmt::Display for Quadtree {
         write!(f, "{}", self.as_string())
     }
 }
+
+impl serde::Serialize for Quadtree {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.serialize_str(&self.as_string())
+    }
+}
+
 
 fn find_quad(min_x: f64, min_y: f64, max_x: f64, max_y: f64, buffer: f64) -> i64 {
     if (min_x < (-1.0 - buffer))

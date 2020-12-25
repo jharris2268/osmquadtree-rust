@@ -14,23 +14,26 @@ type PendingWays = BTreeMap<i64, (BTreeSet<i64>, Option<WayEntry>)>;
 
 
 
-fn add_ring<'a>(res: &mut Vec<PolygonPart>, q: Ring) {
+fn add_ring<'a>(res: &mut Vec<PolygonPart>, q: Ring, must_be_inner: bool) -> Option<Ring> {
     for a in res.iter_mut() {
         let x = a.exterior.lonlats().unwrap();
         let y = q.lonlats().unwrap();
         if polygon_contains(&x, &y) {
             a.add_interior(q);
-            return;
+            return None;
         }
     }
-    
+    if must_be_inner {
+        return Some(q);
+    }
     res.push(PolygonPart::new(q));
+    None
 }
         
     
 
 
-fn order_rings(rings: Vec<Ring>) -> Vec<PolygonPart> {
+fn order_rings(rings: Vec<Ring>, inner_rings: Vec<Ring>) -> (Vec<PolygonPart>,Vec<Ring>) {
     let mut pp = Vec::new();
     for mut r in rings {
         r.area = calc_ring_area(&r.lonlats().expect("!"));
@@ -44,54 +47,85 @@ fn order_rings(rings: Vec<Ring>) -> Vec<PolygonPart> {
     let mut res = Vec::new();
     
     for p in pp {
-        add_ring(&mut res, p);
+        add_ring(&mut res, p, false);
     }
     
+    let mut pp2 = Vec::new();
+    for mut r in inner_rings {
+        r.area = calc_ring_area(&r.lonlats().expect("!"));
+        //let ll = r.lonlats().expect("!");
+        
+        pp2.push(r);
+    }
     
-    res
+    pp2.sort_by(|p,q| { (-1.0 * f64::abs(p.area)).partial_cmp(&(-1.0*f64::abs(q.area))).unwrap() });
+    let mut rem = Vec::new();
+    for p in pp2 {
+        match add_ring(&mut res, p, true) {
+            None => {},
+            Some(r) => { rem.push(r); }
+        }
+    }
+    
+    (res,rem)
 }
        
 
-fn make_complicated_polygon(_style: &GeometryStyle, ringparts: Vec<RingPart>, rel: &Relation) -> Result<Option<ComplicatedPolygonGeometry>> {
+fn make_complicated_polygon(style: &GeometryStyle, outer_ringparts: Vec<RingPart>, inner_ringparts: Vec<RingPart>, rel: &Relation) -> Result<ComplicatedPolygonGeometry> {
+    
+    let (tags, z_order, layer) = style.process_multipolygon_relation(&rel.tags)?;
+    
+    //let rp = ringparts.len();
+    let (rings, _left) = collect_rings(outer_ringparts)?;
+    let (rings2, _left2) = collect_rings(inner_ringparts)?;
     
     
-    let rp = ringparts.len();
-    let (rings,left) = collect_rings(ringparts)?;
+    if rings.is_empty() {
+        return Err(Error::new(ErrorKind::Other, "no rings"))
+    }
+    
+    let (polys,_left3) = order_rings(rings, rings2);
+    if polys.is_empty() {
+        return Err(Error::new(ErrorKind::Other, "no polys"))
+    }
+    Ok(ComplicatedPolygonGeometry::new(rel, tags, z_order, layer, polys))
+    
+    /*
+    
     if !left.is_empty()  {
         println!("relation {}, {:?}, {} ways, {} rings {} left", rel.id, rel.tags, rp, rings.len(), left.len());
-        //if rel.id==8087080 {
-            
             for (i,r) in rings.iter().enumerate() {
                 println!("ring {}: {:?}", i,r);
             }
             println!("remaining: {:?}", left);
-        //}
+        
     } else {
         let polys = order_rings(rings);
         println!("relation {}, {:?}, {} ways, {} polys", rel.id, rel.tags, rp, polys.len());
         for (i,r) in polys.iter().enumerate() {
             println!("poly {}: {:?}", i,r);
         }
-    }
+    }*/
     
     
-    Err(Error::new(ErrorKind::Other,"not implemented"))
+    //Err(Error::new(ErrorKind::Other,"not implemented"))
     
 }
 
 fn is_multipolygon_rel(rel: &Relation) -> bool {
-    let mut is_bound = false;
-    let mut is_admin = false;
+    //let mut is_bound = false;
+    //let mut is_admin = true;
     for t in &rel.tags {
         if t.key == "type" {
             if t.val == "multipolygon" { return true; }
-            else if t.val == "boundary" { is_bound=true; }
+            else if t.val == "boundary" { return true; }//is_bound=true; }
             else { return false; }
-        } else if t.key == "boundary" {
+        } /*else if t.key == "boundary" {
             is_admin = t.val == "administrative";
-        }
+        }*/
     }
-    is_bound && is_admin
+    //is_bound && is_admin
+    false
 }
 struct MultiPolygons {
     style: Arc<GeometryStyle>,
@@ -131,6 +165,7 @@ impl MultiPolygons {
     
     fn finish_relation(&mut self, finished_ways: &mut BTreeSet<i64>, rel: Relation) -> Option<ComplicatedPolygonGeometry> {
         
+        let mut inner_ringparts=Vec::new();
         let mut ringparts = Vec::new();
         
         for m in &rel.members {
@@ -143,7 +178,11 @@ impl MultiPolygons {
                             p.0.remove(&rel.id);
                             let qq = p.1.as_mut().unwrap();
                             if p.0.is_empty() { finished_ways.insert(qq.0.id.clone()); }
-                            ringparts.push(RingPart::new(qq.0.id.clone(), false, qq.0.refs.clone(), qq.1.clone()));
+                            if m.role == "inner" {
+                                inner_ringparts.push(RingPart::new(qq.0.id.clone(), false, qq.0.refs.clone(), qq.1.clone()));
+                            } else {
+                                ringparts.push(RingPart::new(qq.0.id.clone(), false, qq.0.refs.clone(), qq.1.clone()));
+                            }
                         }
                     }
                 },
@@ -151,13 +190,13 @@ impl MultiPolygons {
             }
         }
         
-        match make_complicated_polygon(&self.style, ringparts, &rel) {
+        match make_complicated_polygon(&self.style, ringparts, inner_ringparts, &rel) {
             Err(e) => {
                 self.errs.push((Object::Relation(rel), e.to_string()));
                 None
             },
             Ok(p) => {
-                p
+                Some(p)
                 
             }
         }
@@ -216,7 +255,9 @@ impl MultiPolygons {
         wb.pending_ways = ww;
         
         let mut finished_ways = BTreeSet::new();
- 
+        
+        
+        
         for r in finished_rels {
             let (_,(rel,_)) = self.pending_relations.remove_entry(&r).expect("!");
             match self.finish_relation(&mut finished_ways, rel) {

@@ -1,4 +1,4 @@
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize)]
 pub struct Tag {
     pub key: String,
     pub val: String,

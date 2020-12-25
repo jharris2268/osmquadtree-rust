@@ -1,9 +1,12 @@
-use crate::elements::{Info,Tag,Quadtree};
+use crate::elements::{Info,Tag,Quadtree,Relation,Bbox};
+use crate::elements::traits::*;
 use crate::geometry::LonLat;
 
 use std::io::{Error,ErrorKind,Result};
 use std::fmt;
+use serde::Serialize;
 
+#[derive(Serialize)]
 pub struct RingPart {
     pub orig_id: i64,
     pub is_reversed: bool,
@@ -28,7 +31,7 @@ impl RingPart {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Serialize)]
 pub struct Ring {
     pub parts: Vec<RingPart>,
     pub area: f64
@@ -234,7 +237,7 @@ pub fn collect_rings(ww: Vec<RingPart>) -> Result<(Vec<Ring>,Vec<RingPart>)> {
 
 
 
-#[derive(Debug)]
+#[derive(Debug,Serialize)]
 pub struct PolygonPart {
     pub exterior: Ring,
     pub interiors: Vec<Ring>,
@@ -266,14 +269,65 @@ impl PolygonPart {
 
 
 
-
+#[derive(Debug,Serialize)]
 pub struct ComplicatedPolygonGeometry {
     pub id: i64,
     pub info: Option<Info>,
     pub tags: Vec<Tag>,
     pub parts: Vec<PolygonPart>,
     pub z_order: i64,
+    pub layer: i64,
     pub area: f64,
     pub minzoom: i64,
     pub quadtree: Quadtree
 }
+
+impl ComplicatedPolygonGeometry {
+    pub fn new(relation: &Relation, tags: Vec<Tag>, z_order: i64, layer: i64, parts: Vec<PolygonPart>) -> ComplicatedPolygonGeometry {
+        let mut area=0.0;
+        for p in &parts {
+            area+=p.area;
+        }
+        
+        ComplicatedPolygonGeometry{id: relation.id, info: relation.info.clone(), tags: tags, parts: parts,
+                z_order: z_order, layer: layer, area: area, minzoom: -1, quadtree: relation.quadtree}
+    }
+    
+    
+    pub fn bounds(&self) -> Bbox {
+        let mut res=Bbox::empty();
+        for p in &self.parts {
+            for l in &p.exterior.lonlats().unwrap() {
+                res.expand(l.lon,l.lat);
+            }
+        }
+        res
+    }
+    
+}
+
+impl WithId for ComplicatedPolygonGeometry {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+    
+impl WithTags for ComplicatedPolygonGeometry {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+    
+impl WithInfo for ComplicatedPolygonGeometry {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+
+impl WithQuadtree for ComplicatedPolygonGeometry {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+}
+   

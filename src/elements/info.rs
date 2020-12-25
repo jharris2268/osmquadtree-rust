@@ -3,7 +3,7 @@ use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 use std::io::{Error, ErrorKind, Result};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize)]
 pub struct Info {
     pub version: i64,
     pub changeset: i64,

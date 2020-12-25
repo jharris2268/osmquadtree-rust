@@ -1,13 +1,12 @@
-use crate::geometry::{PointGeometry,ComplicatedPolygonGeometry};
+use crate::geometry::{PointGeometry,ComplicatedPolygonGeometry,LinestringGeometry,SimplePolygonGeometry};
 use crate::elements::{Quadtree,Node,Way,Relation};
 use crate::geometry::pack_geometry::{pack_geometry_block, unpack_geometry_block};
 
 use std::io::Result;
 use std::fmt;
+use serde::Serialize;
 
-type LinestringGeometry = ();
-type SimplePolygonGeometry = ();
-//pub type ComplicatedPolygonGeometry = ();
+
 
 
 pub enum Object {
@@ -21,6 +20,7 @@ pub enum Object {
     ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),
 }
 
+#[derive(Serialize)]
 pub struct GeometryBlock {
     pub index: i64,
     pub quadtree: Quadtree,

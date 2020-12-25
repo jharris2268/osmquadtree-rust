@@ -7,14 +7,7 @@ use std::io::{Result,Error,ErrorKind};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-fn is_parent(lhs: &Quadtree, rhs: &Quadtree) -> bool {
-    if lhs==rhs { return true; }
-    if lhs.depth() > rhs.depth() {
-        return is_parent(rhs, lhs);
-    }
-    
-    lhs == &rhs.round(lhs.depth())
-}
+
 
 
 type LocTile = BTreeMap<i64,LonLat>;
@@ -58,7 +51,7 @@ impl Locations {
     pub fn remove_finished_tiles(&mut self, tl: &Quadtree) {
         let mut removes = Vec::with_capacity(self.tiles.len());
         for (t,p) in self.tiles.iter() {
-            if !is_parent(t, tl) {
+            if !t.is_parent(tl) {
                 removes.push(t.clone());
                 self.num_locs -= p.len() as i64;
             }

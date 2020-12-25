@@ -21,6 +21,20 @@ impl LonLat {
     }
 }
 
+use serde::ser::{Serialize, Serializer, SerializeSeq};
+impl Serialize for LonLat {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        seq.serialize_element(&self.lon)?;
+        seq.serialize_element(&self.lat)?;
+        seq.end()
+    }
+}
+
+
 #[derive(Clone,PartialEq,PartialOrd,Debug)]
 pub struct XY {
     pub x: f64,
@@ -49,7 +63,7 @@ pub fn epsg_code(transform: bool) -> u32 {
 }
 #[allow(dead_code)]
 pub fn pythag(p: &XY, q: &XY) -> f64 {
-    f64::sqrt(f64::powi(p.x-p.y, 2) + f64::powi(p.y-q.y, 2))
+    f64::sqrt(f64::powi(p.x-q.x, 2) + f64::powi(p.y-q.y, 2))
 }
 
 #[allow(dead_code)]
@@ -216,7 +230,7 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
         let vyj = coordinate_as_float(line[j].lat);
         
         if (vyi > testy) != (vyj > testy) {
-            if testx < (vxi-vxj) * (testy - vyi) / (vyj - vyi) + vxi {
+            if testx < (vxj-vxi) * (testy - vyi) / (vyj - vyi) + vxi {
             
                 c = !c;
             }
