@@ -83,6 +83,11 @@ impl Tuple {
     pub fn xyz(&self) -> (u32, u32, u32) {
         (self.x, self.y, self.z)
     }
+    
+    pub fn as_vec(&self) -> Vec<u32> {
+        vec![self.x,self.y,self.z]
+    }
+    
     pub fn as_int(&self) -> Quadtree {
         Quadtree::from_xyz(self.x, self.y, self.z)
     }
@@ -217,6 +222,10 @@ impl Quadtree {
 
     pub fn empty() -> Quadtree {
         Quadtree(-2)
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.0 < 0
     }
 
     pub fn calculate(bbox: &Bbox, maxlevel: usize, buffer: f64) -> Quadtree {

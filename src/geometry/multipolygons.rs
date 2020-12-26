@@ -73,7 +73,7 @@ fn order_rings(rings: Vec<Ring>, inner_rings: Vec<Ring>) -> (Vec<PolygonPart>,Ve
 
 fn make_complicated_polygon(style: &GeometryStyle, outer_ringparts: Vec<RingPart>, inner_ringparts: Vec<RingPart>, rel: &Relation) -> Result<ComplicatedPolygonGeometry> {
     
-    let (tags, z_order, layer) = style.process_multipolygon_relation(&rel.tags)?;
+    let (tags, _, layer) = style.process_multipolygon_relation(&rel.tags)?; //no zorder for polys
     
     //let rp = ringparts.len();
     let (rings, _left) = collect_rings(outer_ringparts)?;
@@ -88,7 +88,7 @@ fn make_complicated_polygon(style: &GeometryStyle, outer_ringparts: Vec<RingPart
     if polys.is_empty() {
         return Err(Error::new(ErrorKind::Other, "no polys"))
     }
-    Ok(ComplicatedPolygonGeometry::new(rel, tags, z_order, layer, polys))
+    Ok(ComplicatedPolygonGeometry::new(rel, tags, None, layer, polys))
     
     /*
     

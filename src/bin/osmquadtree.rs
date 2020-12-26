@@ -250,6 +250,7 @@ fn main() {
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("out filename, "))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -392,6 +393,7 @@ fn main() {
                 geom.value_of("OUTFN"),
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },

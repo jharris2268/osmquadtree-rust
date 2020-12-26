@@ -24,71 +24,78 @@ pub struct ParentTagSpec {
     pub way_priority: BTreeMap<String, i64>
 }
 
+#[derive(Serialize,Deserialize, Debug, Clone)]
+#[serde(rename_all="lowercase")]
+pub enum OpType {
+    Min,
+    Max,
+    List
+}
 
 #[derive(Serialize,Deserialize, Debug, Clone)]
 pub struct RelationTagSpec {
-    source_filter: BTreeMap<String,String>,
-    source_key: String,
-    target_key: String,
+    pub source_filter: BTreeMap<String,String>,
+    pub source_key: String,
+    pub target_key: String,
     
     #[serde(rename(serialize="type", deserialize="type"))]
-    op_type: String
+    pub op_type: OpType
     
 }
 
-fn get_zorder_value(t: &Tag) -> i64 {
+fn get_zorder_value(t: &Tag) -> Option<i64> {
     if t.key == "highway" {
-        if t.val == "motorway" { return 380; }
-        if t.val == "trunk" {return 370;}
-        if t.val == "primary" {return 360;}
-        if t.val == "secondary" { return 350;}
-        if t.val == "tertiary" { return 340;}
-        if t.val == "residential" { return 330;}
-        if t.val == "unclassified" { return 330;}
-        if t.val == "road" { return 330;}
-        if t.val == "living_street" { return 320;}
-        if t.val == "pedestrian" { return 310;}
-        if t.val == "raceway" { return 300;}
-        if t.val == "motorway_link" { return 240;}
-        if t.val == "trunk_link" { return 230;}
-        if t.val == "primary_link" { return 220;}
-        if t.val == "secondary_link" { return 210;}
-        if t.val == "tertiary_link" { return 200;}
-        if t.val == "service" { return 150;}
-        if t.val == "track" { return 110;}
-        if t.val == "path" { return 100;}
-        if t.val == "footway" { return 100;}
-        if t.val == "bridleway" { return 100;}
-        if t.val == "cycleway" { return 100;}
-        if t.val == "steps" { return 90;}
-        if t.val == "platform" { return 90;}
-        if t.val == "construction" { return 10;}
-        return 0;
+        if t.val == "motorway" { return Some(380); }
+        if t.val == "trunk" {return Some(370);}
+        if t.val == "primary" {return Some(360);}
+        if t.val == "secondary" { return Some(350);}
+        if t.val == "tertiary" { return Some(340);}
+        if t.val == "residential" { return Some(330);}
+        if t.val == "unclassified" { return Some(330);}
+        if t.val == "road" { return Some(330);}
+        if t.val == "living_street" { return Some(320);}
+        if t.val == "pedestrian" { return Some(310);}
+        if t.val == "raceway" { return Some(300);}
+        if t.val == "motorway_link" { return Some(240);}
+        if t.val == "trunk_link" { return Some(230);}
+        if t.val == "primary_link" { return Some(220);}
+        if t.val == "secondary_link" { return Some(210);}
+        if t.val == "tertiary_link" { return Some(200);}
+        if t.val == "service" { return Some(150);}
+        if t.val == "track" { return Some(110);}
+        if t.val == "path" { return Some(100);}
+        if t.val == "footway" { return Some(100);}
+        if t.val == "bridleway" { return Some(100);}
+        if t.val == "cycleway" { return Some(100);}
+        if t.val == "steps" { return Some(90);}
+        if t.val == "platform" { return Some(90);}
+        if t.val == "construction" { return Some(10);}
+        return None;
     }
     
     if t.key=="railway" {
-        if t.val == "rail" { return 440; }
-        if t.val == "subway" { return 420; }
-        if t.val == "narrow_gauge" { return 420; }
-        if t.val == "light_rail" { return 420; }
-        if t.val == "funicular" { return 420; }
-        if t.val == "preserved" { return 420; }
-        if t.val == "monorail" { return 420; }
-        if t.val == "miniature" { return 420; }
-        if t.val == "turntable" { return 420; }
-        if t.val == "tram" { return 410; }
-        if t.val == "disused" { return 400; }
-        if t.val == "construction" { return 400; }
-        if t.val == "platform" { return 90; }
-        return 0;
+        if t.val == "rail" { return Some(440); }
+        if t.val == "subway" { return Some(420); }
+        if t.val == "narrow_gauge" { return Some(420); }
+        if t.val == "light_rail" { return Some(420); }
+        if t.val == "funicular" { return Some(420); }
+        if t.val == "preserved" { return Some(420); }
+        if t.val == "monorail" { return Some(420); }
+        if t.val == "miniature" { return Some(420); }
+        if t.val == "turntable" { return Some(420); }
+        if t.val == "tram" { return Some(410); }
+        if t.val == "disused" { return Some(400); }
+        if t.val == "construction" { return Some(400); }
+        if t.val == "platform" { return Some(90); }
+        return None;
     }
     
     if t.key=="aeroway" {
-        if t.val == "runway" { return 60; }
-        if t.val == "taxiway" { return 50; }
-        return 0;
+        if t.val == "runway" { return Some(60); }
+        if t.val == "taxiway" { return Some(50); }
+        return None;
     }
-    return 0;
+    return None;
 }
 
     
@@ -143,11 +150,11 @@ impl GeometryStyle {
         
         
     
-    fn filter_tags(&self, tags: &[Tag]) -> (Vec<Tag>, i64, i64) {
+    fn filter_tags(&self, tags: &[Tag]) -> (Vec<Tag>, Option<i64>, Option<i64>) {
         
         let mut res=Vec::new();
-        let mut z_order=0;
-        let mut layer =0;
+        let mut z_order:Option<i64>=None;
+        let mut layer:Option<i64>=None;
         for t in tags {
             if self.has_key(&t.key) {
                 res.push(t.clone());
@@ -155,12 +162,20 @@ impl GeometryStyle {
             
             if t.key == "layer" {
                 match t.val.parse::<i64>() {
-                    Ok(l) => { layer=l; },
+                    Ok(l) => { layer=Some(l); },
                     Err(_) => {},
                 }
             }
-            
-            z_order = i64::max(z_order, get_zorder_value(&t));
+            match get_zorder_value(&t) {
+                None => {},
+                Some(nv) => {
+                    z_order = match z_order {
+                        Some(cv) => Some(i64::max(nv,cv)),
+                        None => Some(nv)
+                    };
+                }
+            }
+            //z_order = i64::max(z_order, get_zorder_value(&t));
             
         }
         (res, z_order, layer)
@@ -195,7 +210,7 @@ impl GeometryStyle {
     }
     
     
-    pub fn process_multipolygon_relation(&self, tags: &[Tag]) -> Result<(Vec<Tag>, i64, i64)> {
+    pub fn process_multipolygon_relation(&self, tags: &[Tag]) -> Result<(Vec<Tag>, Option<i64>, Option<i64>)> {
         
         if !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
@@ -208,25 +223,25 @@ impl GeometryStyle {
         Ok(self.filter_tags(tags))
     }
         
-    pub fn process_way(&self, tags: &[Tag], is_ring: bool) -> Result<(bool, Vec<Tag>, i64, i64)> {
+    pub fn process_way(&self, tags: &[Tag], is_ring: bool) -> Result<(bool, Vec<Tag>, Option<i64>, Option<i64>)> {
         
         if !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
         }
         let is_poly = is_ring && self.check_polygon_tags(&tags);
         
-        let (t,l,z) = self.filter_tags(tags);
-        Ok((is_poly,t,l,z))
+        let (t,z,l) = self.filter_tags(tags);
+        Ok((is_poly,t,z,l))
     }
     
-    pub fn process_node(&self, tags: &[Tag]) -> Result<(Vec<Tag>, i64)> {
+    pub fn process_node(&self, tags: &[Tag]) -> Result<(Vec<Tag>, Option<i64>)> {
         if !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
         }
      
         
-        let (t,l,_) = self.filter_tags(tags);
-        Ok((t,l))
+        let (t,_,lyr) = self.filter_tags(tags);
+        Ok((t,lyr))
     }
     
 }

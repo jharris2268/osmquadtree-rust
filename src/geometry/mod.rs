@@ -8,6 +8,9 @@ mod geometry_block;
 mod multipolygons;
 mod position;
 mod addparenttag;
+mod relationtags;
+mod default_minzoom_values;
+mod minzoom;
 
 use crate::elements::{Quadtree,Node,Way,Relation};
 pub use crate::geometry::waywithnodes::{CollectWayNodes};

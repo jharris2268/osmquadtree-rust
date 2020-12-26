@@ -2,7 +2,7 @@ use crate::elements::quadtree::{
         EARTH_WIDTH, coordinate_as_float, coordinate_as_integer,
         latitude_mercator, latitude_un_mercator, Bbox};
 
-
+use std::borrow::Borrow;
 
 #[derive(Clone,Eq,PartialEq,Ord,PartialOrd,Debug)]
 pub struct LonLat {
@@ -67,15 +67,15 @@ pub fn pythag(p: &XY, q: &XY) -> f64 {
 }
 
 #[allow(dead_code)]
-pub fn calc_line_length(lonlats: &[&LonLat]) -> f64 {
+pub fn calc_line_length<T: Borrow<LonLat>>(lonlats: &[T]) -> f64 {
     if lonlats.len() < 2 {
         return 0.0;
     }
     
     let mut ans = 0.0;
-    let mut prev = lonlats[0].forward();
+    let mut prev = lonlats[0].borrow().forward();
     for i in 1..lonlats.len() {
-        let curr = lonlats[i].forward();
+        let curr = lonlats[i].borrow().forward();
         ans += pythag(&prev, &curr);
         prev=curr;
     }
@@ -83,18 +83,18 @@ pub fn calc_line_length(lonlats: &[&LonLat]) -> f64 {
     ans
 }
 
-pub fn calc_ring_area(lonlats: &[&LonLat]) -> f64 {
+pub fn calc_ring_area<T: Borrow<LonLat>>(lonlats: &[T]) -> f64 {
     
     if lonlats.len() < 3 {
         return 0.0;
     }
     let mut area = 0.0;
     
-    let mut prev = lonlats[0].forward();
+    let mut prev = lonlats[0].borrow().forward();
     
     for i in 1..lonlats.len() {
         
-        let curr = lonlats[i].forward();
+        let curr = lonlats[i].borrow().forward();
         area += prev.x * curr.y - prev.y * curr.x;
         prev = curr
     }
@@ -102,26 +102,26 @@ pub fn calc_ring_area(lonlats: &[&LonLat]) -> f64 {
     return -1.0 * area / 2.0; //want polygon exteriors to be anti-clockwise
 }
 #[allow(dead_code)]
-pub fn calc_ring_centroid(lonlats: &[&LonLat]) -> XY {
+pub fn calc_ring_centroid<T: Borrow<LonLat>>(lonlats: &[T]) -> XY {
     
     if lonlats.len() == 0 {
         return XY::new(0.0,0.0);
     }
     
-    let mut prev = lonlats[0].forward();
+    let mut prev = lonlats[0].borrow().forward();
     if lonlats.len() == 1 {
         return prev;
     }
     
     if lonlats.len() == 2 {
-        let curr = lonlats[1].forward();
+        let curr = lonlats[1].borrow().forward();
         return XY::new( (prev.x+curr.x) / 2.0, (prev.y+curr.y)/2.0);
     }
     
     let mut area = 0.0;
     let mut res = XY::new(0.0, 0.0);
     for i in 1..lonlats.len() {
-        let curr = lonlats[i].forward();
+        let curr = lonlats[i].borrow().forward();
         
         let cross = prev.x * curr.y - prev.y * curr.x;
         res.x += (prev.x+curr.x)*cross;
@@ -164,7 +164,7 @@ pub fn segment_intersects(p1: &LonLat, p2: &LonLat, q1: &LonLat, q2: &LonLat) ->
     return true;
 }
     
-pub fn line_intersects(left: &[&LonLat], right: &[&LonLat]) -> bool {
+pub fn line_intersects<T0: Borrow<LonLat>, T1: Borrow<LonLat>>(left: &[T0], right: &[T1]) -> bool {
     
     if left.len() < 2 || right.len() < 2 {
         return false;
@@ -172,7 +172,7 @@ pub fn line_intersects(left: &[&LonLat], right: &[&LonLat]) -> bool {
     
     for i in 0..(left.len()-1) {
         for j in 0..(right.len()-1) {
-            if segment_intersects(&left[i], &left[i+1], &right[j], &right[j+1]) {
+            if segment_intersects(&left[i].borrow(), &left[i+1].borrow(), &right[j].borrow(), &right[j+1].borrow()) {
                 return true;
             }
         }
@@ -180,7 +180,7 @@ pub fn line_intersects(left: &[&LonLat], right: &[&LonLat]) -> bool {
     false
 }   
 #[allow(dead_code)]
-pub fn line_box_intersects(line: &[&LonLat], bbox: &Bbox) -> bool {
+pub fn line_box_intersects<T: Borrow<LonLat>>(line: &[T], bbox: &Bbox) -> bool {
     
     if line.len()<2 { return false; }
     
@@ -188,12 +188,12 @@ pub fn line_box_intersects(line: &[&LonLat], bbox: &Bbox) -> bool {
     let b = LonLat::new(bbox.maxlon, bbox.minlat);
     let c = LonLat::new(bbox.maxlon, bbox.maxlat);
     let d = LonLat::new(bbox.minlon, bbox.minlat);
-    
-    line_intersects(line, &vec![&a,&b,&c,&d])
+    let boxl = vec![a,b,c,d];
+    line_intersects(line, &boxl)
 }
 
 
-pub fn point_in_poly(line: &[&LonLat], pt: &LonLat) -> bool {
+pub fn point_in_poly<T: Borrow<LonLat>>(line: &[T], pt: &LonLat) -> bool {
     
     /*from  https://wrf.ecse.rpi.edu//Research/Short_Notes/pnpoly.html
 Copyright (c) 1970-2003, Wm. Randolph Franklin
@@ -224,10 +224,10 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
     let mut c = false;
     for i in 0..line.len() {
         let j = if i==0 { line.len()-1 } else { i-1 };
-        let vxi = coordinate_as_float(line[i].lon);
-        let vyi = coordinate_as_float(line[i].lat);
-        let vxj = coordinate_as_float(line[j].lon);
-        let vyj = coordinate_as_float(line[j].lat);
+        let vxi = coordinate_as_float(line[i].borrow().lon);
+        let vyi = coordinate_as_float(line[i].borrow().lat);
+        let vxj = coordinate_as_float(line[j].borrow().lon);
+        let vyj = coordinate_as_float(line[j].borrow().lat);
         
         if (vyi > testy) != (vyj > testy) {
             if testx < (vxj-vxi) * (testy - vyi) / (vyj - vyi) + vxi {
@@ -239,13 +239,13 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
     c
 }
 #[allow(dead_code)]
-pub fn polygon_box_intersects(poly: &[&LonLat], bbox: &Bbox) -> bool {
+pub fn polygon_box_intersects<T: Borrow<LonLat>>(poly: &[T], bbox: &Bbox) -> bool {
 
     if poly.len() < 3 { return false; }
     
-    if line_box_intersects(poly,bbox) { return true; }
+    //if line_box_intersects(poly,bbox) { return true; }
     
-    if bbox.contains_point(poly[0].lon,poly[0].lat) {
+    if bbox.contains_point(poly[0].borrow().lon,poly[0].borrow().lat) {
         return true;
     }
     
@@ -257,10 +257,10 @@ pub fn polygon_box_intersects(poly: &[&LonLat], bbox: &Bbox) -> bool {
 }
 
 
-pub fn polygon_contains(bigger: &[&LonLat], smaller: &[&LonLat]) -> bool {
+pub fn polygon_contains<T0: Borrow<LonLat>,T1: Borrow<LonLat>>(bigger: &[T0], smaller: &[T1]) -> bool {
     if line_intersects(bigger, smaller) {
         return false;
     }
     
-    point_in_poly(bigger, smaller[0])
+    point_in_poly(bigger, smaller[0].borrow())
 }

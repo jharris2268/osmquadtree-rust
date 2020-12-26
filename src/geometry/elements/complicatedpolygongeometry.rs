@@ -1,10 +1,12 @@
 use crate::elements::{Info,Tag,Quadtree,Relation,Bbox};
 use crate::elements::traits::*;
 use crate::geometry::LonLat;
-
+use crate::geometry::elements::pointgeometry::pack_tags;
+use crate::geometry::elements::simplepolygongeometry::{transform_lonlats,pack_bounds};
 use std::io::{Error,ErrorKind,Result};
 use std::fmt;
 use serde::Serialize;
+use serde_json::{json,Value,Map};
 
 #[derive(Serialize)]
 pub struct RingPart {
@@ -264,6 +266,17 @@ impl PolygonPart {
         self.interiors.push(p);
     }
     
+    pub fn prep_coordinates(&self) -> Result<Vec<Vec<(f64,f64)>>> {
+        let mut rings = Vec::new();
+        
+        rings.push(transform_lonlats(&self.exterior.lonlats()?,false));
+        for ii in &self.interiors {
+            rings.push(transform_lonlats(&ii.lonlats()?,false));
+        }
+        
+        Ok(rings)
+    }
+    
 }
 
 
@@ -275,22 +288,22 @@ pub struct ComplicatedPolygonGeometry {
     pub info: Option<Info>,
     pub tags: Vec<Tag>,
     pub parts: Vec<PolygonPart>,
-    pub z_order: i64,
-    pub layer: i64,
+    pub z_order: Option<i64>,
+    pub layer: Option<i64>,
     pub area: f64,
-    pub minzoom: i64,
+    pub minzoom: Option<i64>,
     pub quadtree: Quadtree
 }
 
 impl ComplicatedPolygonGeometry {
-    pub fn new(relation: &Relation, tags: Vec<Tag>, z_order: i64, layer: i64, parts: Vec<PolygonPart>) -> ComplicatedPolygonGeometry {
+    pub fn new(relation: &Relation, tags: Vec<Tag>, z_order: Option<i64>, layer: Option<i64>, parts: Vec<PolygonPart>) -> ComplicatedPolygonGeometry {
         let mut area=0.0;
         for p in &parts {
             area+=p.area;
         }
         
         ComplicatedPolygonGeometry{id: relation.id, info: relation.info.clone(), tags: tags, parts: parts,
-                z_order: z_order, layer: layer, area: area, minzoom: -1, quadtree: relation.quadtree}
+                z_order: z_order, layer: layer, area: area, minzoom: None, quadtree: relation.quadtree}
     }
     
     
@@ -302,6 +315,51 @@ impl ComplicatedPolygonGeometry {
             }
         }
         res
+    }
+    
+    fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+        
+        let mut res = Map::new();
+        if self.parts.len()==1 {
+            res.insert(String::from("type"), json!("Polygon"));
+            res.insert(String::from("coordinates"), json!(self.parts[0].prep_coordinates()?));
+            
+        } else {
+            res.insert(String::from("type"), json!("MultiPolygon"));
+            let mut cc = Vec::new();
+            for p in &self.parts {
+                cc.push(p.prep_coordinates()?);
+            }
+            res.insert(String::from("coordinates"), json!(cc));
+        }
+        Ok(json!(res))
+    }
+        
+    pub fn to_geojson(&self) -> std::io::Result<Value> {
+        
+        let mut res = Map::new();
+        res.insert(String::from("type"), json!("Feature"));
+        res.insert(String::from("id"), json!(self.id));
+        res.insert(String::from("quadtree"), json!(self.quadtree.as_tuple().xyz()));
+        res.insert(String::from("properties"), pack_tags(&self.tags)?);
+        res.insert(String::from("geometry"), self.to_geometry_geojson()?);
+        res.insert(String::from("way_area"), json!(f64::round(self.area*10.0)/10.0));
+        
+        match self.layer {
+            None => {},
+            Some(l) => { res.insert(String::from("layer"), json!(l)); }
+        }
+        match self.z_order {
+            None => {},
+            Some(l) => { res.insert(String::from("z_order"), json!(l)); }
+        }
+        match self.minzoom {
+            None => {},
+            Some(l) => { res.insert(String::from("minzoom"), json!(l)); }
+        }
+        res.insert(String::from("bounds"), pack_bounds(&self.bounds()));
+                
+        Ok(json!(res))
     }
     
 }

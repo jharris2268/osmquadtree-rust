@@ -1,7 +1,10 @@
-use crate::geometry::{WorkingBlock,Timings,CollectWayNodes,OtherData,GeometryStyle,GeometryBlock,LinestringGeometry,PointGeometry,SimplePolygonGeometry,LonLat};
+use crate::geometry::{WorkingBlock,Timings,CollectWayNodes,OtherData,GeometryStyle,GeometryBlock,LinestringGeometry,PointGeometry,SimplePolygonGeometry};
 use crate::geometry::multipolygons::ProcessMultiPolygons;
 use crate::geometry::position::{calc_ring_area, calc_line_length};
 use crate::geometry::addparenttag::AddParentTag;
+use crate::geometry::relationtags::AddRelationTags;
+use crate::geometry::minzoom::{MinZoomSpec,FindMinZoom};
+
 use crate::utils::{LogTimes,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,ThreadTimer};
 use crate::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
 use crate::update::get_file_locs;
@@ -102,13 +105,14 @@ impl<T> MakeGeometries<T>
             
             match self.style.process_way(&w.tags, is_ring) {
                 Err(_) => {},
-                Ok((is_poly,tgs,layer,zorder)) => {
+                Ok((is_poly,tgs,zorder,layer)) => {
                     if is_poly {
-                        let area = calc_ring_area(&ll.iter().collect::<Vec<&LonLat>>());
-                        bl.geometry_block.simple_polygons.push(SimplePolygonGeometry::from_way(w, ll, tgs, area, layer, zorder));
+                        let area = calc_ring_area(&ll);//.iter().collect::<Vec<&LonLat>>());
+                        let reversed = area < 0.0;
+                        bl.geometry_block.simple_polygons.push(SimplePolygonGeometry::from_way(w, ll, tgs, f64::abs(area), layer, None, reversed)); //no zorder for polys
                         self.nsp+=1;
                     } else {
-                        let length = calc_line_length(&ll.iter().collect::<Vec<&LonLat>>());
+                        let length = calc_line_length(&ll);//.iter().collect::<Vec<&LonLat>>());
                         bl.geometry_block.linestrings.push(LinestringGeometry::from_way(w, ll, tgs, length, layer, zorder));
                         self.nls+=1;
                     }
@@ -119,22 +123,22 @@ impl<T> MakeGeometries<T>
         
         if self.recalcquadtree {
             for n in bl.geometry_block.points.iter_mut() {
-                n.quadtree = Quadtree::calculate_point(n.lonlat.lon, n.lonlat.lat, 18, 0.05);
+                n.quadtree = Quadtree::calculate_point(n.lonlat.lon, n.lonlat.lat, 18, 0.0);
             }
             
             for l in bl.geometry_block.linestrings.iter_mut() {
                 
-                l.quadtree = Quadtree::calculate(&l.bounds(), 18, 0.05);
+                l.quadtree = Quadtree::calculate(&l.bounds(), 18, 0.0);
             }
             
             for sp in bl.geometry_block.simple_polygons.iter_mut() {
                 
-                sp.quadtree = Quadtree::calculate(&sp.bounds(), 18, 0.05);
+                sp.quadtree = Quadtree::calculate(&sp.bounds(), 18, 0.0);
             }
             
             for sp in bl.geometry_block.complicated_polygons.iter_mut() {
                 let bnd=sp.bounds();
-                sp.quadtree = Quadtree::calculate(&bnd, 18, 0.05);
+                sp.quadtree = Quadtree::calculate(&bnd, 18, 0.0);
                 
             }
         }
@@ -163,12 +167,26 @@ impl<T> CallFinish for MakeGeometries<T>
     }
 }
         
+fn write_geojson(tiles: Vec<GeometryBlock>, outfn: &str) -> Result<()> {
+    
+    let mut tt = GeometryBlock::new(0,Quadtree::empty(),0);
+    
+    for t in tiles {
+        tt.extend(t);
+        
+    }
+    tt.sort();
+    
+    serde_json::to_writer(std::fs::File::create(outfn)?, &tt.to_geojson()?)?;
+    Ok(())
+}
+    
     
         
         
 
 
-pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, numchan: usize) -> Result<()> {
+pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, numchan: usize) -> Result<()> {
 
 
     let mut tx=LogTimes::new();
@@ -186,21 +204,28 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
     tx.add("get_file_locs");
 
     let style = Arc::new(GeometryStyle::default());
-
+    tx.add("load_style");
+    
+    let minzoom: Option<MinZoomSpec> = if find_minzoom { Some(MinZoomSpec::default()) } else { None };
+    tx.add("load_minzoom");
+    
     let cf = Box::new(CollectWorkingTiles::new(!outfn.is_none()));
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>> = if numchan == 0 {
-        let mg = Box::new(MakeGeometries::new(cf, style.clone(),true));
+        let fm = Box::new(FindMinZoom::new(cf, minzoom));
+        let mg = Box::new(MakeGeometries::new(fm, style.clone(),true));
         let mm = Box::new(ProcessMultiPolygons::new(style.clone(), mg));
-        let ap = Box::new(AddParentTag::new(mm, style.clone()));
+        let rt = Box::new(AddRelationTags::new(mm, style.clone()));
+        let ap = Box::new(AddParentTag::new(rt, style.clone()));
         let ww = Box::new(CollectWayNodes::new(ap, style.clone()));
         make_read_primitive_blocks_combine_call_all(ww)
     } else {
         let cfb = Box::new(Callback::new(cf));
-        let mg = Box::new(Callback::new(Box::new(MakeGeometries::new(cfb, style.clone(),true))));
+        let fm = Box::new(Callback::new(Box::new(FindMinZoom::new(cfb, minzoom))));
+        let mg = Box::new(Callback::new(Box::new(MakeGeometries::new(fm, style.clone(),true))));
         let mm = Box::new(Callback::new(Box::new(ProcessMultiPolygons::new(style.clone(), mg))));
-        
-        let ap = Box::new(Callback::new(Box::new(AddParentTag::new(mm, style.clone()))));
+        let rt = Box::new(Callback::new(Box::new(AddRelationTags::new(mm, style.clone()))));
+        let ap = Box::new(Callback::new(Box::new(AddParentTag::new(rt, style.clone()))));
         
         let ww = CallbackSync::new(Box::new(CollectWayNodes::new(ap,style.clone())), numchan);
         
@@ -220,8 +245,8 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
     prog.finish();
     tx.add("process_geometry");
     
-    println!("{}\n{}", tm,tx);
-    
+    println!("{}", tm);
+    let mut all_tiles = Vec::new();
     for (w,x) in tm.others {
         match x {
             OtherData::Messages(mm) => {
@@ -233,17 +258,23 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
                 println!("{}: {} errors", w, ee.len());
             },
             OtherData::GeometryBlocks(tiles) => {
-                println!("{}: {} tiles", w, tiles.len());
-                match outfn {
-                    None => {println!("no outfn?"); },
-                    Some(ofn) => {
-                        serde_json::to_writer(std::fs::File::create(ofn)?, &tiles)?;
-                    }
-                }
+                all_tiles.extend(tiles);
+                
             },
         }
     }
+    tx.add("finish process_geometry");
+    if !all_tiles.is_empty() {
+        match outfn {
+            None => {},
+            Some(ofn) => {
+                write_geojson(all_tiles, ofn)?;
+                tx.add("write json");
+            } 
+        }
+    }
     
+    println!("{}", tx);
     Ok(())
 
 }
