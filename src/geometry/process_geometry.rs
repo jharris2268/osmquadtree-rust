@@ -4,62 +4,140 @@ use crate::geometry::position::{calc_ring_area, calc_line_length};
 use crate::geometry::addparenttag::AddParentTag;
 use crate::geometry::relationtags::AddRelationTags;
 use crate::geometry::minzoom::{MinZoomSpec,FindMinZoom};
+use crate::geometry::elements::GeoJsonable;
+use crate::geometry::pack_geometry::pack_geometry_block;
 
-use crate::utils::{LogTimes,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,ThreadTimer};
+use crate::utils::{LogTimes,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,ThreadTimer,CallAll};
 use crate::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
+use crate::pbfformat::writefile::WriteFile;
+use crate::pbfformat::header_block::HeaderType;
 use crate::update::get_file_locs;
-use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_prog,FileBlock};
+use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock,pack_file_block};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all;
 use crate::mergechanges::inmem::read_filter;
 use crate::elements::Quadtree;
-use std::io::Result;
+use std::io::{Result,/*Error,ErrorKind*/};
 use std::sync::Arc;
+use std::collections::BTreeMap;
+use serde_json::{Map,Value,json};
 
 
-
-struct CollectWorkingTiles {
+fn pack_geom(bl: GeometryBlock) -> (i64, Vec<u8>) {
+    let p = pack_geometry_block(&bl).expect("!");
+    let q = pack_file_block("OSMData", &p, true).expect("?");
     
-    nn: usize,
-    nw: usize,
-    nl: usize,
-    nr: usize,
-    store: bool,
-    tiles: Vec<GeometryBlock>
+    (bl.quadtree.as_int(), q)
 }
 
-impl CollectWorkingTiles {
-    pub fn new(store: bool) -> CollectWorkingTiles {
-        CollectWorkingTiles{nn:0,nw:0,nl:0,nr:0,store:store,tiles:Vec::new()}
-    }
-}
+struct WrapWriteFile(WriteFile);
 
-impl CallFinish for CollectWorkingTiles {
-    type CallType = WorkingBlock;
+impl CallFinish for WrapWriteFile {
+    type CallType = (i64, Vec<u8>);
     type ReturnType = Timings;
     
-    fn call(&mut self, wb: WorkingBlock) {
-        self.nn += wb.pending_nodes.len();
-        self.nw += wb.pending_ways.len();
-        self.nl += wb.pending_ways.iter().map(|(_,r,_)| { r.len() }).sum::<usize>(); 
-        self.nr += wb.pending_relations.len();
-        if self.store {
-            self.tiles.push(wb.geometry_block);
-        }
+    fn call(&mut self, p: Self::CallType) {
+        self.0.call(vec![p]);
     }
     
     fn finish(&mut self) -> Result<Timings> {
+        let (t,_) = self.0.finish()?;
         let mut tms = Timings::new();
-        let m = format!("have {}, and {} ways (with {} locations), {} relations", self.nn,self.nw, self.nl,self.nr);
-        tms.add_other("CollectWorkingTiles", OtherData::Messages(vec![m]));
-        if self.store {
-            tms.add_other("CollectWorkingTiles", OtherData::GeometryBlocks(std::mem::take(&mut self.tiles)));
-        }
+        tms.add("WriteFile", t);
         Ok(tms)
     }
 }
 
 
-struct MakeGeometries<T> {
+
+struct StoreBlocks {
+    tiles: BTreeMap<Quadtree,GeometryBlock>,
+    nt: usize
+}
+
+impl StoreBlocks {
+    pub fn new() -> StoreBlocks {
+        StoreBlocks{tiles: BTreeMap::new(), nt: 0}
+    }
+}
+
+impl CallFinish for StoreBlocks {
+    type CallType = GeometryBlock;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, gb: GeometryBlock) {
+        self.nt+=1;
+        if gb.len() == 0 {
+            return;
+        }
+        
+        match self.tiles.get_mut(&gb.quadtree) {
+            Some(tl) => { tl.extend(gb); },
+            None => { self.tiles.insert(gb.quadtree.clone(), gb); }
+        }
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        let mut tms = Timings::new();
+        for (_,t) in self.tiles.iter_mut() {
+            t.sort();
+        }
+        tms.add_other("StoreBlocks", OtherData::Messages(vec![format!("recieved {} blocks, returning {} blocks", self.nt,self.tiles.len())]));
+        tms.add_other("StoreBlocks", OtherData::GeometryBlocks(std::mem::take(&mut self.tiles)));
+        Ok(tms)
+    }
+}
+
+struct CollectWorkingTiles<T: ?Sized> {
+    
+    npt: usize,
+    nls: usize,
+    nsp: usize,
+    ncp: usize,
+    out: Option<Box<T>>
+}
+
+impl<T> CollectWorkingTiles<T>
+    where T: CallFinish<CallType=GeometryBlock, ReturnType=Timings> + ?Sized
+{
+    pub fn new(out: Option<Box<T>>) -> CollectWorkingTiles<T> {
+        CollectWorkingTiles{npt:0,nls:0,nsp:0,ncp:0,out:out}
+    }
+}
+
+impl<T> CallFinish for CollectWorkingTiles<T>
+    where T: CallFinish<CallType=GeometryBlock, ReturnType=Timings> + ?Sized
+{
+    type CallType = WorkingBlock;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, wb: WorkingBlock) {
+        self.npt += wb.geometry_block.points.len();
+        self.nls += wb.geometry_block.linestrings.len();
+        self.nsp += wb.geometry_block.simple_polygons.len();
+        self.ncp += wb.geometry_block.complicated_polygons.len();
+        
+        match self.out.as_mut() {
+            None => {},
+            Some(out) => {out.call(wb.geometry_block);},
+        }
+        
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        let mut tms = match self.out.as_mut() {
+            None => Timings::new(),
+            Some(out) => out.finish()?
+        };
+        
+        let m = format!("have {} points, {} linestrings, {} simple_polygons and {} complicated_polygons", self.npt,self.nls, self.nsp,self.ncp);
+        tms.add_other("CollectWorkingTiles", OtherData::Messages(vec![m]));
+        
+        Ok(tms)
+    }
+}
+
+
+struct MakeGeometries<T: ?Sized> {
     out: Box<T>,
     style: Arc<GeometryStyle>,
     recalcquadtree: bool,
@@ -70,7 +148,7 @@ struct MakeGeometries<T> {
 }
 
 impl<T> MakeGeometries<T>
-    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings> + ?Sized
 {
     pub fn new(out: Box<T>, style: Arc<GeometryStyle>, recalcquadtree: bool) -> MakeGeometries<T> {
         MakeGeometries{out:out,style:style,recalcquadtree:recalcquadtree,tm:0.0,npt:0,nls:0,nsp:0}
@@ -147,7 +225,7 @@ impl<T> MakeGeometries<T>
 }
 
 impl<T> CallFinish for MakeGeometries<T>
-    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings> + ?Sized
 {
     type CallType=WorkingBlock;
     type ReturnType=Timings;
@@ -167,26 +245,58 @@ impl<T> CallFinish for MakeGeometries<T>
     }
 }
         
-fn write_geojson(tiles: Vec<GeometryBlock>, outfn: &str) -> Result<()> {
-    
+fn write_geojson_tiles(tiles: BTreeMap<Quadtree,GeometryBlock>, outfn: &str) -> Result<()> {
+    let mut v = Vec::new();
+    for (_,t) in tiles {
+        v.push(t.to_geojson()?);
+    }
+    serde_json::to_writer(std::fs::File::create(outfn)?, &v)?;
+    Ok(())
+}
+
+
+
+fn pack_feature_collection<F: GeoJsonable>(feats: &[F]) -> Result<Value> {
+    let mut vv = Vec::with_capacity(feats.len());
+    for f in feats {
+        vv.push(f.to_geojson()?);
+    }
+    let mut m = Map::new();
+    m.insert(String::from("type"),json!("FeatureCollection"));
+    m.insert(String::from("features"), json!(vv));
+    Ok(json!(m))
+}
+
+fn write_geojson_flat(tiles: BTreeMap<Quadtree,GeometryBlock>, outfn: &str) -> Result<()> {
     let mut tt = GeometryBlock::new(0,Quadtree::empty(),0);
-    
-    for t in tiles {
+    for (_,t) in tiles {
         tt.extend(t);
-        
     }
     tt.sort();
     
-    serde_json::to_writer(std::fs::File::create(outfn)?, &tt.to_geojson()?)?;
+    let mut m = Map::new();
+    m.insert(String::from("points"), pack_feature_collection(&tt.points)?);
+    m.insert(String::from("linestrings"), pack_feature_collection(&tt.linestrings)?);
+    m.insert(String::from("simple_polygons"), pack_feature_collection(&tt.simple_polygons)?);
+    m.insert(String::from("complicated_polygons"), pack_feature_collection(&tt.complicated_polygons)?);
+    
+    
+    serde_json::to_writer(std::fs::File::create(outfn)?, &m)?;
+
     Ok(())
 }
     
     
         
-        
+pub enum OutputType {
+    None,
+    Json(String),
+    TiledJson(String),
+    PbfFile(String),
+}
 
 
-pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, numchan: usize) -> Result<()> {
+pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, numchan: usize) -> Result<()> {
 
 
     let mut tx=LogTimes::new();
@@ -209,7 +319,27 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
     let minzoom: Option<MinZoomSpec> = if find_minzoom { Some(MinZoomSpec::default()) } else { None };
     tx.add("load_minzoom");
     
-    let cf = Box::new(CollectWorkingTiles::new(!outfn.is_none()));
+    let out: Option<Box<dyn CallFinish<CallType=GeometryBlock,ReturnType=Timings>>> = match &outfn {
+        OutputType::None => None,
+        OutputType::Json(_) | OutputType::TiledJson(_) => Some(Box::new(StoreBlocks::new())),
+        OutputType::PbfFile(ofn) => {
+            if numchan == 0 {
+                let wt = Box::new(WrapWriteFile(WriteFile::with_bbox(&ofn, HeaderType::NoLocs, Some(&bbox))));
+                let pt = Box::new(CallAll::new(wt, "pack_geometry", Box::new(pack_geom)));
+                Some(pt)
+            } else {
+                let wts = CallbackSync::new(Box::new(WrapWriteFile(WriteFile::with_bbox(&ofn, HeaderType::NoLocs, Some(&bbox)))),numchan);
+                let mut pps: Vec<Box<dyn CallFinish<CallType=GeometryBlock,ReturnType=Timings>>> = Vec::new();
+                for wt in wts {
+                    let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
+                    pps.push(Box::new(Callback::new(Box::new(CallAll::new(wt2, "pack_geometry", Box::new(pack_geom))))));
+                }
+                Some(Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new()))))
+            }
+        }
+    };
+    
+    let cf = Box::new(CollectWorkingTiles::new(out));
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>> = if numchan == 0 {
         let fm = Box::new(FindMinZoom::new(cf, minzoom));
@@ -237,16 +367,13 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
         Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
     };
         
-    let mut prog = ProgBarWrap::new(100);
-    prog.set_range(100);
-    prog.set_message(&format!("process_geometry, numchan={}", numchan));
-       
-    let (tm,_) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pp, &prog);
-    prog.finish();
+    let msg = format!("process_geometry, numchan={}", numchan);
+    let tm = read_all_blocks_parallel_with_progbar(&mut pfilelocs.0, &pfilelocs.1, pp, &msg, pfilelocs.2);
+    
     tx.add("process_geometry");
     
     println!("{}", tm);
-    let mut all_tiles = Vec::new();
+    let mut all_tiles = BTreeMap::new();
     for (w,x) in tm.others {
         match x {
             OtherData::Messages(mm) => {
@@ -266,9 +393,13 @@ pub fn process_geometry(prfx: &str, outfn: Option<&str>, filter: Option<&str>, t
     tx.add("finish process_geometry");
     if !all_tiles.is_empty() {
         match outfn {
-            None => {},
-            Some(ofn) => {
-                write_geojson(all_tiles, ofn)?;
+            OutputType::None | OutputType::PbfFile(_) => {},
+            OutputType::Json(ofn) => {
+                write_geojson_flat(all_tiles, &ofn)?;
+                tx.add("write json");
+            },
+            OutputType::TiledJson(ofn) => {
+                write_geojson_tiles(all_tiles, &ofn)?;
                 tx.add("write json");
             } 
         }

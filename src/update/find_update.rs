@@ -241,7 +241,7 @@ fn read_change_tiles(
     tiles: &BTreeSet<Quadtree>,
     idset: Arc<IdSetSet>,
     numchan: usize,
-    pb: Option<&read_file_block::ProgBarWrap>,
+    pb: &read_file_block::ProgBarWrap,
 ) -> std::io::Result<(OrigData, f64)> {
     let ischange = fname.ends_with(".pbfc");
     let mut file = File::open(fname)?;
@@ -262,12 +262,8 @@ fn read_change_tiles(
     }
     let (mut tm, b) = if numchan == 0 {
         let convert = Box::new(ReadPB::new(ischange, idset));
-        match pb {
-            None => read_file_block::read_all_blocks_locs(&mut file, fname, locs, false, convert),
-            Some(pb) => {
-                read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
-            }
-        }
+        read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
+        
     } else {
         let mut convs: Vec<
             Box<
@@ -284,12 +280,8 @@ fn read_change_tiles(
             )))));
         }
         let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
-        match pb {
-            None => read_file_block::read_all_blocks_locs(&mut file, fname, locs, true, convsm),
-            Some(pb) => {
-                read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
-            }
-        }
+        read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
+        
     };
 
     let mut tls = tm.others.pop().unwrap().1;
@@ -337,7 +329,7 @@ fn collect_existing(
         }
         pb.set_message(&format!("{}: {} tiles", &fname, ctiles.len()));
 
-        let (bb, t) = read_change_tiles(&fname, &ctiles, idset.clone(), nc, Some(&pb))?;
+        let (bb, t) = read_change_tiles(&fname, &ctiles, idset.clone(), nc, &pb)?;
         total_read += t;
         origdata.extend(bb);
     }

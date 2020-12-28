@@ -212,6 +212,27 @@ impl fmt::Display for Bbox {
     }
 }
 
+impl fmt::Debug for Bbox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Bbox{}", self)
+    }
+}
+use serde::ser::SerializeSeq;
+impl serde::Serialize for Bbox {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(4))?;
+        seq.serialize_element(&self.minlon)?;
+        seq.serialize_element(&self.minlat)?;
+        seq.serialize_element(&self.maxlon)?;
+        seq.serialize_element(&self.maxlat)?;
+        seq.end()
+
+    }
+}
+
 #[derive(Debug, Clone, Eq, Ord, PartialOrd, PartialEq, Copy)]
 pub struct Quadtree(i64);
 

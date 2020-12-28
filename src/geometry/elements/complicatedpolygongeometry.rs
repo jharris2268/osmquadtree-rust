@@ -1,8 +1,10 @@
 use crate::elements::{Info,Tag,Quadtree,Relation,Bbox};
 use crate::elements::traits::*;
 use crate::geometry::LonLat;
+use crate::geometry::position::calc_ring_area_and_bbox;
 use crate::geometry::elements::pointgeometry::pack_tags;
-use crate::geometry::elements::simplepolygongeometry::{transform_lonlats,pack_bounds};
+use crate::geometry::elements::simplepolygongeometry::{read_lonlats,pack_bounds};
+use crate::geometry::elements::GeoJsonable;
 use std::io::{Error,ErrorKind,Result};
 use std::fmt;
 use serde::Serialize;
@@ -36,12 +38,20 @@ impl RingPart {
 #[derive(Debug,Serialize)]
 pub struct Ring {
     pub parts: Vec<RingPart>,
-    pub area: f64
+    pub area: f64,
+    pub bbox: Bbox,
 }
 
 impl Ring {
     pub fn new() -> Ring {
-        Ring{parts: Vec::new(), area: 0.0}
+        Ring{parts: Vec::new(), area: 0.0, bbox: Bbox::empty()}
+    }
+    
+    pub fn calc_area_bbox(&mut self) -> Result<()> {
+        let x = calc_ring_area_and_bbox(&self.lonlats()?);
+        self.area=x.0;
+        self.bbox=x.1;
+        Ok(())
     }
     
     pub fn reverse(&mut self) {
@@ -269,9 +279,9 @@ impl PolygonPart {
     pub fn prep_coordinates(&self) -> Result<Vec<Vec<(f64,f64)>>> {
         let mut rings = Vec::new();
         
-        rings.push(transform_lonlats(&self.exterior.lonlats()?,false));
+        rings.push(read_lonlats(&self.exterior.lonlats()?,false));
         for ii in &self.interiors {
-            rings.push(transform_lonlats(&ii.lonlats()?,false));
+            rings.push(read_lonlats(&ii.lonlats()?,false));
         }
         
         Ok(rings)
@@ -334,8 +344,11 @@ impl ComplicatedPolygonGeometry {
         }
         Ok(json!(res))
     }
-        
-    pub fn to_geojson(&self) -> std::io::Result<Value> {
+}
+
+impl GeoJsonable for ComplicatedPolygonGeometry {
+    
+    fn to_geojson(&self) -> std::io::Result<Value> {
         
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
@@ -357,7 +370,7 @@ impl ComplicatedPolygonGeometry {
             None => {},
             Some(l) => { res.insert(String::from("minzoom"), json!(l)); }
         }
-        res.insert(String::from("bounds"), pack_bounds(&self.bounds()));
+        res.insert(String::from("bbox"), pack_bounds(&self.bounds()));
                 
         Ok(json!(res))
     }

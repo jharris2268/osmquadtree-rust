@@ -1,7 +1,8 @@
 use crate::elements::{Info,Tag,Quadtree,Way,Bbox};
 use crate::geometry::LonLat;
 use crate::geometry::elements::pointgeometry::pack_tags;
-use crate::geometry::elements::simplepolygongeometry::{transform_lonlats,pack_bounds};
+use crate::geometry::elements::simplepolygongeometry::{read_lonlats,pack_bounds};
+use crate::geometry::elements::GeoJsonable;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 
@@ -37,11 +38,13 @@ impl LinestringGeometry {
         let mut res = Map::new();
         
         res.insert(String::from("type"), json!("LineString"));
-        res.insert(String::from("coordinates"), json!(transform_lonlats(&self.lonlats, false)));
+        res.insert(String::from("coordinates"), json!(read_lonlats(&self.lonlats, false)));
         Ok(json!(res))
     }
-        
-    pub fn to_geojson(&self) -> std::io::Result<Value> {
+}
+
+impl GeoJsonable for LinestringGeometry {        
+    fn to_geojson(&self) -> std::io::Result<Value> {
         
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
@@ -63,7 +66,7 @@ impl LinestringGeometry {
             None => {},
             Some(l) => { res.insert(String::from("minzoom"), json!(l)); }
         }
-        res.insert(String::from("bounds"), pack_bounds(&self.bounds()));
+        res.insert(String::from("bbox"), pack_bounds(&self.bounds()));
                 
         Ok(json!(res))
     }

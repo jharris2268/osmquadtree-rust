@@ -7,7 +7,7 @@ use crate::callback::CallFinish;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub struct AddRelationTags<T>    
+pub struct AddRelationTags<T: ?Sized>    
 {
     out: Box<T>,
     pending: BTreeMap<i64, Vec<(usize,String)>>,
@@ -120,7 +120,7 @@ fn collect_vals(op_type: &OpType, i: usize, vals: &Vec<(usize,String)>) -> Optio
 }
 
 impl<T> AddRelationTags<T>
-    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings> + ?Sized
 {
     pub fn new(out: Box<T>, style: Arc<GeometryStyle>) -> AddRelationTags<T> {
         AddRelationTags{out: out, style: style, pending: BTreeMap::new(), tm: 0.0, num_rels: 0, num_tags: 0, num_ways: 0}
@@ -176,7 +176,7 @@ impl<T> AddRelationTags<T>
 }
 
 impl<T> CallFinish for AddRelationTags<T>
-    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings> + ?Sized
 {
     type CallType = WorkingBlock;
     type ReturnType = Timings;

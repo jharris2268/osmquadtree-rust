@@ -252,9 +252,9 @@ where
     let pf = pfs / (flen as f64);
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        //if (i%131) == 0 {
+        
         pb.prog((fb.pos as f64) * pf);
-        //}
+        
         pp.call((i, fb));
     }
     pb.prog(pfs);
@@ -275,15 +275,10 @@ where
 {
     let ct = Checktime::new();
 
-    //let pf = 100.0 / (flen as f64);
-
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        //i//f (i%131) == 0 {
         pb.prog(fb.pos as f64);
-        //}
         pp.call((i, fb));
     }
-    //pb.prog(100.0);
     pb.finish();
     (pp.finish().expect("finish failed"), ct.gettime())
 }
@@ -299,16 +294,10 @@ where
     U: Send + Sync + 'static,
 {
     let ct = Checktime::new();
-
-    //let pf = 100.0 / (flen as f64);
-
     for (i, fb) in ReadFileBlocks::new_at_start_with_stop(fobj, stop_at).enumerate() {
-        //i//f (i%131) == 0 {
         pb.prog(fb.pos as f64);
-        //}
         pp.call((i, fb));
     }
-    //pb.prog(100.0);
     pb.finish();
     (pp.finish().expect("finish failed"), ct.gettime())
 }
@@ -333,7 +322,6 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    //let fl = file_length(fname);
     let pb = ProgBarWrap::new_filebytes(stop_after);
     pb.set_message(msg);
 
@@ -343,7 +331,7 @@ where
     read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, &pb)
 }
 
-pub fn read_all_blocks_locs<R, T, U>(
+pub fn zread_all_blocks_locs<R, T, U>(
     fobj: &mut R,
     fname: &str,
     locs: Vec<u64>,
@@ -460,9 +448,9 @@ where
         let (_, fb) = read_file_block_with_pos(fobj, *l)
             .expect(&format!("failed to read {} @ {}", fname, *l));
 
-        //if (i%131) == 0 {
+        
         pb.prog(((i + 1) as f64) * pf);
-        //}
+        
 
         pp.call((i, fb));
     }
@@ -470,7 +458,7 @@ where
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
-pub fn read_all_blocks_parallel<T, U, F>(
+pub fn zread_all_blocks_parallel<T, U, F>(
     mut fbufs: Vec<F>,
     locs: Vec<(usize, Vec<(usize, u64)>)>,
     mut pp: Box<T>,
@@ -548,12 +536,63 @@ where
             fbs.push(y);
             fposes[*a] = x;
         }
-        //if (j%131) == 0 {
+        
         pb.prog(((j + 1) as f64) * pf);
-        //}
+        
 
         pp.call((j, fbs));
     }
     pb.prog(100.0);
     (pp.finish().expect("finish failed"), ct.gettime())
+}
+
+
+
+pub fn read_all_blocks_parallel_with_progbar<T, U, F, Q>(
+    fbufs: &mut Vec<F>,
+    locs: &Vec<(Q, Vec<(usize, u64)>)>,
+    mut pp: Box<T>,
+    msg: &str,
+    total_len: u64
+) -> U
+where
+    T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = U> + ?Sized,
+    U: Send + Sync + 'static,
+    F: Seek + Read,
+{
+    
+    let mut fposes = Vec::new();
+    for f in fbufs.iter_mut() {
+        fposes.push(file_position(f).expect("!"));
+    }
+    
+    let pb = ProgBarWrap::new_filebytes(total_len);
+    pb.set_message(msg);
+    
+    let mut pos = 0;
+    for (j, (_, ll)) in locs.iter().enumerate() {
+        let mut fbs = Vec::new();
+        
+        for (a, b) in ll {
+            if fposes[*a] != *b {
+                fbufs[*a]
+                    .seek(SeekFrom::Start(*b))
+                    .expect(&format!("failed to read {} @ {}", *a, *b));
+            }
+
+            let (x, y) = read_file_block_with_pos(&mut fbufs[*a], *b)
+                .expect(&format!("failed to read {} @ {}", *a, *b));
+
+            fbs.push(y);
+            fposes[*a] = x;
+            pos += x-*b;
+        }
+        
+        pb.prog(pos as f64);
+        
+
+        pp.call((j, fbs));
+    }
+    pb.finish();
+    pp.finish().expect("finish failed")
 }

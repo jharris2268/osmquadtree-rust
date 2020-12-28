@@ -1,6 +1,8 @@
 use crate::geometry::{PointGeometry,ComplicatedPolygonGeometry,LinestringGeometry,SimplePolygonGeometry};
 use crate::elements::{Quadtree,Node,Way,Relation};
 use crate::geometry::pack_geometry::{pack_geometry_block, unpack_geometry_block};
+use crate::geometry::elements::GeoJsonable;
+
 use crate::utils::timestamp_string;
 use std::io::Result;
 use std::fmt;

@@ -177,7 +177,7 @@ impl MinZoomSpec {
 }
 
 
-pub struct FindMinZoom<T> {
+pub struct FindMinZoom<T: ?Sized> {
     out: Box<T>,
     spec: Option<MinZoomSpec>,
     

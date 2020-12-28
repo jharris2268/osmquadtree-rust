@@ -1,15 +1,16 @@
 use crate::elements::{Info,Tag,Quadtree,Way,Bbox};
+use crate::elements::quadtree::coordinate_as_float;
 use crate::geometry::LonLat;
 use crate::geometry::elements::pointgeometry::pack_tags;
-
+use crate::geometry::elements::GeoJsonable;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 use std::borrow::Borrow;
-pub fn transform_lonlats<T: Borrow<LonLat>>(lonlats: &Vec<T>, is_reversed: bool) -> Vec<(f64,f64)> {
+pub fn read_lonlats<T: Borrow<LonLat>>(lonlats: &Vec<T>, is_reversed: bool) -> Vec<(f64,f64)> {
     let mut res = Vec::with_capacity(lonlats.len());
     for l in lonlats {
-        let p = l.borrow().forward();
-        res.push((p.x,p.y));
+        let p = l.borrow();//.forward();
+        res.push((coordinate_as_float(p.lon),coordinate_as_float(p.lat)));
     }
     if is_reversed {
         res.reverse();
@@ -17,9 +18,15 @@ pub fn transform_lonlats<T: Borrow<LonLat>>(lonlats: &Vec<T>, is_reversed: bool)
     res
 }
 pub fn pack_bounds(bounds: &Bbox) -> Value {
-    let a = LonLat::new(bounds.minlon, bounds.minlat).forward();
-    let b = LonLat::new(bounds.maxlon, bounds.maxlat).forward();
-    json!((a.x,a.y,b.x,b.y))
+    //let a = LonLat::new(bounds.minlon, bounds.minlat).forward();
+    //let b = LonLat::new(bounds.maxlon, bounds.maxlat).forward();
+    //json!((a.x,a.y,b.x,b.y))
+    
+    json!((
+        coordinate_as_float(bounds.minlon),
+        coordinate_as_float(bounds.minlat),
+        coordinate_as_float(bounds.maxlon),
+        coordinate_as_float(bounds.maxlat)))
 }
 
 
@@ -59,11 +66,13 @@ impl SimplePolygonGeometry {
         let mut res = Map::new();
         
         res.insert(String::from("type"), json!("Polygon"));
-        res.insert(String::from("coordinates"), json!(vec![transform_lonlats(&self.lonlats, self.reversed)]));
+        res.insert(String::from("coordinates"), json!(vec![read_lonlats(&self.lonlats, self.reversed)]));
         Ok(json!(res))
     }
-        
-    pub fn to_geojson(&self) -> std::io::Result<Value> {
+ }
+
+impl GeoJsonable for SimplePolygonGeometry {       
+    fn to_geojson(&self) -> std::io::Result<Value> {
         
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
@@ -85,7 +94,7 @@ impl SimplePolygonGeometry {
             None => {},
             Some(l) => { res.insert(String::from("minzoom"), json!(l)); }
         }
-        res.insert(String::from("bounds"), pack_bounds(&self.bounds()));
+        res.insert(String::from("bbox"), pack_bounds(&self.bounds()));
                 
         Ok(json!(res))
     }

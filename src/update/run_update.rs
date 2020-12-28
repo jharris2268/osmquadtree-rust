@@ -49,7 +49,12 @@ fn check_state(
     let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
     let state_ff = File::open(format!("{}state.csv", settings.diffs_location))
         .expect("failed to open state.csv file");
-    for row in csv::Reader::from_reader(state_ff).records() {
+        
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(state_ff);
+        
+    for row in rdr.records() {
         let row = row.expect("?");
 
         if row.len() == 2 {

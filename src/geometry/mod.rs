@@ -16,12 +16,12 @@ use crate::elements::{Quadtree,Node,Way,Relation};
 pub use crate::geometry::waywithnodes::{CollectWayNodes};
 pub use crate::geometry::position::{LonLat,XY};
 
-pub use crate::geometry::process_geometry::process_geometry;
+pub use crate::geometry::process_geometry::{process_geometry,OutputType};
 pub use crate::geometry::style::GeometryStyle;
 pub use crate::geometry::geometry_block::{GeometryBlock,Object,};
 pub use crate::geometry::elements::{PointGeometry,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,LinestringGeometry,SimplePolygonGeometry};
 
-
+use std::collections::BTreeMap;
 
 
 
@@ -46,7 +46,7 @@ impl WorkingBlock {
 pub enum OtherData {
     Errors(Vec<(Object, String)>),
     Messages(Vec<String>),
-    GeometryBlocks(Vec<GeometryBlock>)
+    GeometryBlocks(BTreeMap<Quadtree,GeometryBlock>)
 }
 
 pub type Timings = crate::utils::Timings<OtherData>;

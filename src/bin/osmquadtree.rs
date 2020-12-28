@@ -11,7 +11,7 @@ use osmquadtree::utils::{parse_timestamp};
 use osmquadtree::pbfformat::read_file_block::file_length;
 
 use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
-use osmquadtree::geometry::{process_geometry,GeometryStyle};
+use osmquadtree::geometry::{process_geometry,GeometryStyle,OutputType};
 
 use std::sync::Arc;
 use std::io::{Error, ErrorKind, Result};
@@ -244,10 +244,48 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry")   
+            SubCommand::with_name("process_geometry_null")   
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_null")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_json")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_tiled_json")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_pbffile")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
@@ -387,10 +425,40 @@ fn main() {
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
-        ("process_geometry", Some(geom)) => {
+        ("process_geometry_null", Some(geom)) => {
             process_geometry(
                 geom.value_of("INPUT").unwrap(),
-                geom.value_of("OUTFN"),
+                OutputType::None,
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("process_geometry_json", Some(geom)) => {
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::Json(String::from(geom.value_of("OUTFN").unwrap())),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("process_geometry_tiled_json", Some(geom)) => {
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::TiledJson(String::from(geom.value_of("OUTFN").unwrap())),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("process_geometry_pbffile", Some(geom)) => {
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::PbfFile(String::from(geom.value_of("OUTFN").unwrap())),
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),

@@ -41,7 +41,7 @@ pub fn write_filelist(prfx: &str, filelist: &Vec<FilelistEntry>) {
     serde_json::to_writer(&flfile, &filelist).expect("failed to write filelist json");
 }
 
-pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(Quadtree, Vec<(usize, u64)>)>);
+pub type ParallelFileLocs = (Vec<BufReader<File>>, Vec<(Quadtree, Vec<(usize, u64)>)>, u64);
 
 
 pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<ParallelFileLocs> {
@@ -62,16 +62,19 @@ pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<Parallel
         return Err(Error::new(ErrorKind::Other,"no locations in header"));
     }
     
+    let mut total_len=0;
+    
     for entry in head.index {
         if filter.as_ref().is_none() || filter.as_ref().unwrap().overlaps(&entry.quadtree.as_bbox(0.05)) {
             locs.insert(entry.quadtree.clone(), (locs.len(), vec![(0,entry.location)]));
+            total_len += entry.length;
         }
     }
     let mut locsv = Vec::new();
     for (a,(_b,c)) in locs {
         locsv.push((a,c));
     }
-    Ok((vec![fbuf], locsv))
+    Ok((vec![fbuf], locsv, total_len))
 }
     
 
@@ -99,6 +102,7 @@ pub fn get_file_locs(
         None => 5 * 1024 * 1024,
     };
     let mut all_locs=0;
+    let mut total_len=0;
     for (i, fle) in filelist.iter().enumerate() {
         let fle_ts = parse_timestamp(&fle.end_date)?;
         if !timestamp.is_none() && fle_ts > timestamp.unwrap() {
@@ -123,10 +127,12 @@ pub fn get_file_locs(
                 if filter.as_ref().is_none() || filter.as_ref().unwrap().overlaps(&entry.quadtree.as_bbox(0.05)) {
                     locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
                     locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
+                    total_len += entry.length;
                 }
             } else {
                 if locs.contains_key(&entry.quadtree) {
                     locs.get_mut(&entry.quadtree).unwrap().1.push((i, entry.location));
+                    total_len += entry.length;
                 }
             }
         }
@@ -136,17 +142,19 @@ pub fn get_file_locs(
     }
     
     let mut locsv = Vec::new();
+    
     for (a,(_b,c)) in locs {
         locsv.push((a,c));
     }
 
     
     println!(
-        "{} files, {} / {} tiles",
+        "{} files, {} / {} tiles, {:0.1} mb",
         fbufs.len(),
         locsv.len(),
-        all_locs
+        all_locs,
+        (total_len as f64)/1024.0/1024.0
     );
     
-    Ok((fbufs, locsv))
+    Ok((fbufs, locsv, total_len))
 }

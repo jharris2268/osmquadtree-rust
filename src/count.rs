@@ -1,7 +1,7 @@
 use std::fs::File;
 
 use crate::pbfformat::read_file_block::{
-    file_length, read_all_blocks_parallel_prog, read_all_blocks_prog_fpos, FileBlock, ProgBarWrap,
+    file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock, ProgBarWrap,
 };
 
 use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
@@ -823,10 +823,9 @@ pub fn run_count(
         }
         println!("{}", cc);
     } else {
-        let (mut fbufs, locsv) = get_file_locs(fname, filter, None).expect("?");
+        let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, None).expect("?");
 
-        let mut pb = ProgBarWrap::new(100);
-        pb.set_range(100);
+        
         
         let mut pps: Vec<
             Box<
@@ -836,12 +835,12 @@ pub fn run_count(
                 >,
             >,
         > = Vec::new();
-
+        let msg: String;
         if use_primitive {
-            pb.set_message(&format!(
+            msg=format!(
                 "count blocks combine primitive {}, numchan={}",
                 fname, numchan
-            ));
+            );
             for _ in 0..numchan {
                 let cca = Box::new(CountPrim::new());
                 pps.push(Box::new(Callback::new(
@@ -849,10 +848,10 @@ pub fn run_count(
                 )));
             }
         } else {
-            pb.set_message(&format!(
+            msg=format!(
                 "count blocks combine minimal {}, numchan={}",
                 fname, numchan
-            ));
+            );
             for _ in 0..numchan {
                 let cca = Box::new(CountMinimal::new());
                 pps.push(Box::new(Callback::new(
@@ -861,8 +860,8 @@ pub fn run_count(
             }
         }
         let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        let (a, _b) = read_all_blocks_parallel_prog(&mut fbufs, &locsv, readb, &pb);
-        pb.finish();
+        let a = read_all_blocks_parallel_with_progbar(&mut fbufs, &locsv, readb, &msg, total_len);
+        
 
         let mut cc = Count::new();
         for (_, y) in &a.others {

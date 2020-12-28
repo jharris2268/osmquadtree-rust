@@ -101,6 +101,33 @@ pub fn calc_ring_area<T: Borrow<LonLat>>(lonlats: &[T]) -> f64 {
 
     return -1.0 * area / 2.0; //want polygon exteriors to be anti-clockwise
 }
+
+pub fn calc_ring_area_and_bbox<T: Borrow<LonLat>>(lonlats: &[T]) -> (f64,Bbox) {
+    
+    /*if lonlats.len() < 3 {
+        return 0.0;
+    }*/
+    let mut bbox = Bbox::empty();
+    if lonlats.len()==0 {
+        return (0.0, bbox);
+    }
+    let mut area = 0.0;
+    let l = lonlats[0].borrow();
+    bbox.expand(l.lon,l.lat);
+    let mut prev = l.forward();
+    
+    for i in 1..lonlats.len() {
+        let l = lonlats[i].borrow();
+        bbox.expand(l.lon,l.lat);
+        let curr = l.forward();
+        area += prev.x * curr.y - prev.y * curr.x;
+        
+        prev = curr
+    }
+    
+    return (-1.0 * area / 2.0, bbox); //want polygon exteriors to be anti-clockwise
+}
+
 #[allow(dead_code)]
 pub fn calc_ring_centroid<T: Borrow<LonLat>>(lonlats: &[T]) -> XY {
     
@@ -150,10 +177,12 @@ fn segment_side(p1: &LonLat, p2: &LonLat, q: &LonLat) -> i32 {
     }
 }
     
-    
+fn asbox(p1: &LonLat, p2: &LonLat) -> Bbox {
+    Bbox::new(i32::min(p1.lon,p2.lon),i32::min(p1.lat,p2.lat),i32::max(p1.lon,p2.lon),i32::max(p1.lat,p2.lat))
+}
     
 pub fn segment_intersects(p1: &LonLat, p2: &LonLat, q1: &LonLat, q2: &LonLat) -> bool {
-    
+    if !asbox(p1,p2).overlaps(&asbox(p1,p2)) { return false; }
     let pq1 = segment_side(p1,p2,q1);
     let pq2 = segment_side(p1,p2,q2);
     if pq1==pq2 { return false; }
@@ -256,11 +285,13 @@ pub fn polygon_box_intersects<T: Borrow<LonLat>>(poly: &[T], bbox: &Bbox) -> boo
     return false;
 }
 
-
+#[allow(dead_code)]
 pub fn polygon_contains<T0: Borrow<LonLat>,T1: Borrow<LonLat>>(bigger: &[T0], smaller: &[T1]) -> bool {
-    if line_intersects(bigger, smaller) {
+    if !point_in_poly(bigger, smaller[0].borrow()) {
         return false;
     }
     
-    point_in_poly(bigger, smaller[0].borrow())
+    !line_intersects(bigger, smaller)
+    
+    
 }
