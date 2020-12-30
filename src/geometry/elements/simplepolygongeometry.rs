@@ -6,6 +6,8 @@ use crate::geometry::elements::GeoJsonable;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 use std::borrow::Borrow;
+extern crate geo;
+
 pub fn read_lonlats<T: Borrow<LonLat>>(lonlats: &Vec<T>, is_reversed: bool) -> Vec<(f64,f64)> {
     let mut res = Vec::with_capacity(lonlats.len());
     for l in lonlats {
@@ -50,6 +52,10 @@ pub struct SimplePolygonGeometry {
 impl SimplePolygonGeometry {
     pub fn from_way(w: Way, lonlats: Vec<LonLat>, tgs: Vec<Tag>, area: f64, layer: Option<i64>, z_order: Option<i64>, reversed: bool) -> SimplePolygonGeometry {
         SimplePolygonGeometry{id: w.id, info: w.info, tags: tgs, refs: w.refs, lonlats: lonlats, quadtree: w.quadtree, area: area, layer: layer, z_order: z_order, minzoom: None, reversed: reversed}
+    }
+    
+    pub fn to_geo(&self, transform: bool) -> geo::Polygon<f64> {
+        geo::Polygon::new(self.lonlats.iter().map(|l| { l.to_xy(transform) }).collect(), Vec::new())
     }
     
     pub fn bounds(&self) -> Bbox {

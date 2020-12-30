@@ -2,6 +2,11 @@ use crate::elements::quadtree::{
         EARTH_WIDTH, coordinate_as_float, coordinate_as_integer,
         latitude_mercator, latitude_un_mercator, Bbox};
 
+
+
+extern crate geo;
+pub use geo::Coordinate;
+
 use std::borrow::Borrow;
 
 #[derive(Clone,Eq,PartialEq,Ord,PartialOrd,Debug)]
@@ -11,15 +16,36 @@ pub struct LonLat {
 }
 impl LonLat {
     pub fn new(lon: i32, lat: i32) -> LonLat {
-        LonLat{lon,lat}
+        LonLat{lon: lon, lat: lat}
     }
     
+    
+    pub fn backward(xy: &XY) -> LonLat {
+        let lon = coordinate_as_integer(xy.x*180.0 /EARTH_WIDTH);
+        let lat = coordinate_as_integer(latitude_un_mercator(xy.y, EARTH_WIDTH));
+        LonLat::new(lon, lat)
+    }
+
+        
     pub fn forward(&self) -> XY {
         let x = coordinate_as_float(self.lon)*EARTH_WIDTH / 180.0;
         let y = latitude_mercator(coordinate_as_float(self.lat), EARTH_WIDTH);
-        XY::new(f64::round(x*100.0)/100.0, f64::round(y*100.0)/100.0)
+        XY::from((f64::round(x*100.0)/100.0, f64::round(y*100.0)/100.0))
+    }
+    
+    pub fn as_xy(&self) -> XY {
+        XY::from((coordinate_as_float(self.lon),coordinate_as_float(self.lat)))
+    }
+    
+    pub fn to_xy(&self, transform: bool) -> XY {
+        if transform {
+            self.forward()
+        } else {
+            self.as_xy()
+        }
     }
 }
+
 
 use serde::ser::{Serialize, Serializer, SerializeSeq};
 impl Serialize for LonLat {
@@ -35,14 +61,27 @@ impl Serialize for LonLat {
 }
 
 
-#[derive(Clone,PartialEq,PartialOrd,Debug)]
+pub type XY = Coordinate<f64>;
+
+/*#[derive(Clone,PartialEq,Debug)]
+pub struct XY();
+
+impl Deref for XY {
+    type Target = Coordinate<f64>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/*#[derive(Clone,PartialEq,PartialOrd,Debug)]
 pub struct XY {
     pub x: f64,
     pub y: f64
-}
+}*/
 impl XY {
     pub fn new(x: f64, y: f64) -> XY {
-        XY{x,y}
+        //XY{x,y}
+        XY(Coordinate::from((x,y)))
     }
     pub fn backward(&self) -> LonLat {
         let lon = coordinate_as_integer(self.x*180.0 /EARTH_WIDTH);
@@ -50,7 +89,9 @@ impl XY {
         LonLat::new(lon, lat)
     }
     
-}
+}*/
+
+
 
 
 #[allow(dead_code)]
@@ -132,7 +173,7 @@ pub fn calc_ring_area_and_bbox<T: Borrow<LonLat>>(lonlats: &[T]) -> (f64,Bbox) {
 pub fn calc_ring_centroid<T: Borrow<LonLat>>(lonlats: &[T]) -> XY {
     
     if lonlats.len() == 0 {
-        return XY::new(0.0,0.0);
+        return XY::from((0.0,0.0));
     }
     
     let mut prev = lonlats[0].borrow().forward();
@@ -142,11 +183,11 @@ pub fn calc_ring_centroid<T: Borrow<LonLat>>(lonlats: &[T]) -> XY {
     
     if lonlats.len() == 2 {
         let curr = lonlats[1].borrow().forward();
-        return XY::new( (prev.x+curr.x) / 2.0, (prev.y+curr.y)/2.0);
+        return XY::from(( (prev.x+curr.x) / 2.0, (prev.y+curr.y)/2.0));
     }
     
     let mut area = 0.0;
-    let mut res = XY::new(0.0, 0.0);
+    let mut res = XY::from((0.0, 0.0));
     for i in 1..lonlats.len() {
         let curr = lonlats[i].borrow().forward();
         
@@ -267,6 +308,50 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
     }
     c
 }
+
+fn check_seg(test: &XY, aa: &XY, bb: &XY) -> bool {
+    if (aa.y > test.y) != (bb.y > test.y) {
+        if test.x < (bb.x-aa.x) * (test.y - aa.y) / (bb.y - aa.y) + aa.x {
+            return true;
+        }
+    }
+    false
+}
+//crate::geometry::elements::PolygonPart
+pub fn point_in_poly_iter<'a, T: Iterator<Item=&'a LonLat>>(line: &'a mut T, pt: &LonLat) -> bool {
+    //let mut line = ring.exterior.lonlats_iter();
+    
+    let first: XY;
+    match line.next() {
+        None => { return false; }
+        Some(f) => {
+            first = f.as_xy();
+        }
+    }
+    let test=pt.as_xy();
+    
+    let mut c = false;
+    let mut prev = first.clone();
+    loop {
+        match line.next() {
+            None => { break; }
+            Some(p) => {
+                let curr = p.as_xy();
+                if check_seg(&test, &prev, &curr) {
+                    c=!c;
+                }
+                prev = curr;
+            }
+        }
+    }
+    if check_seg(&test, &prev, &first) {
+        c = !c;
+    }
+    c
+}
+
+
+
 #[allow(dead_code)]
 pub fn polygon_box_intersects<T: Borrow<LonLat>>(poly: &[T], bbox: &Bbox) -> bool {
 

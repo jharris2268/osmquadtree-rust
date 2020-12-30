@@ -9,6 +9,7 @@ use std::io::{Error,ErrorKind,Result};
 use std::fmt;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
+extern crate geo;
 
 #[derive(Serialize)]
 pub struct RingPart {
@@ -118,6 +119,7 @@ impl Ring {
         Ok(res)
     }
     pub fn lonlats<'a>(&'a self) -> Result<Vec<&'a LonLat>> {
+        
         let mut res = Vec::new();
         for p in &self.parts {
         
@@ -151,10 +153,72 @@ impl Ring {
         
         Ok(res)
     }
+       
+    pub fn lonlats_iter<'a>(&'a self) -> RingLonLatsIter<'a> {
+        RingLonLatsIter::new(self)
+    }
     
-    
-    
+    pub fn to_geo(&self, transform: bool) -> geo::LineString<f64> {
+        geo::LineString(self.lonlats_iter().map(|l| { l.to_xy(transform) }).collect())
+    }
 }
+
+pub struct RingLonLatsIter<'a> {
+    ring: &'a Ring,
+    part_idx: usize,
+    coord_idx: usize
+}
+
+impl<'a> RingLonLatsIter<'a> {
+    pub fn new(ring: &'a Ring) -> RingLonLatsIter<'a> {
+        RingLonLatsIter{ring: ring, part_idx: 0, coord_idx: 0}
+    }
+    
+    fn curr(&self) -> Option<&'a LonLat> {
+        if self.part_idx >= self.ring.parts.len() {
+            return None;
+        }
+        
+        let p = &self.ring.parts[self.part_idx];
+        
+        if p.is_reversed {
+            Some(&p.lonlats[p.lonlats.len() - 1 - self.coord_idx])
+        } else {
+            Some(&p.lonlats[self.coord_idx])
+        }
+    }
+    
+    fn next(&mut self) {
+        if self.part_idx >= self.ring.parts.len() {
+            return;
+        }
+        self.coord_idx += 1;
+        while self.coord_idx == self.ring.parts[self.part_idx].lonlats.len() {
+            self.part_idx += 1;
+            if self.part_idx >= self.ring.parts.len() {
+                return;
+            }
+            self.coord_idx=0;
+        }
+    }
+        
+}
+
+impl<'a> Iterator for RingLonLatsIter<'a> {
+    type Item = &'a LonLat;
+    
+    fn next(&mut self) -> Option<&'a LonLat> {
+        match self.curr() {
+            None => None,
+            Some(r) => {
+                self.next();
+                Some(r)
+            }
+        }
+    }
+}
+    
+
 
 fn merge_rings(rings: &mut Vec<Ring>) -> (bool,Option<Ring>) {
     if rings.len() == 0 { return (false,None); }
@@ -316,6 +380,23 @@ impl ComplicatedPolygonGeometry {
                 z_order: z_order, layer: layer, area: area, minzoom: None, quadtree: relation.quadtree}
     }
     
+    pub fn to_geo(&self, transform: bool) -> geo::MultiPolygon<f64> {
+        
+        let mut polys = Vec::new();
+        for p in &self.parts {
+            //let ext = p.exterior.lonlats().unwrap().iter().map(|l| { l.to_xy(transform) }).collect();
+            //let ext = p.exterior.lonlats_iter().map(|l| { l.to_xy(transform) }).collect();
+            let ext = p.exterior.to_geo(transform);
+            let mut ints = Vec::new();
+            for ii in &p.interiors {
+                //ints.push(ii.lonlats().unwrap().iter().map(|l| { l.to_xy(transform) }).collect());
+                //ints.push(ii.lonlats_iter().map(|l| { l.to_xy(transform) }).collect());
+                ints.push(ii.to_geo(transform));
+            }
+            polys.push(geo::Polygon::new(ext, ints));
+        }
+        geo::MultiPolygon(polys)
+    }
     
     pub fn bounds(&self) -> Bbox {
         let mut res=Bbox::empty();

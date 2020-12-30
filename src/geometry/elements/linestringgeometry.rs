@@ -6,6 +6,8 @@ use crate::geometry::elements::GeoJsonable;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 
+extern crate geo;
+
 #[derive(Serialize)]
 pub struct LinestringGeometry {
     pub id: i64,
@@ -23,6 +25,10 @@ pub struct LinestringGeometry {
 impl LinestringGeometry {
     pub fn from_way(w: Way, lonlats: Vec<LonLat>, tgs: Vec<Tag>, length: f64, layer: Option<i64>, z_order: Option<i64>) -> LinestringGeometry {
         LinestringGeometry{id: w.id, info: w.info, tags: tgs, refs: w.refs, lonlats: lonlats, quadtree: w.quadtree, length: length, layer: layer, z_order: z_order, minzoom: None}
+    }
+    
+    pub fn to_geo(&self, transform: bool) -> geo::LineString<f64> {
+        geo::LineString(self.lonlats.iter().map(|l| { l.to_xy(transform) }).collect())
     }
     
     pub fn bounds(&self) -> Bbox {

@@ -1,7 +1,10 @@
 use crate::geometry::elements::GeoJsonable;
 use crate::elements::{Info,Tag,Quadtree,Node};
-use crate::elements::quadtree::coordinate_as_float;
+//use crate::elements::quadtree::coordinate_as_float;
 use crate::geometry::LonLat;
+
+extern crate geo;
+extern crate geojson;
 
 use serde::Serialize;
 use serde_json::{json,Value,Map};
@@ -31,14 +34,21 @@ impl PointGeometry {
         PointGeometry{id: n.id, info: n.info, tags: tgs, lonlat: LonLat::new(n.lon,n.lat), quadtree: n.quadtree, layer: layer, minzoom: None}
     }
     
+    pub fn to_geo(&self, transform: bool) -> geo::Point<f64> {
+        geo::Point(self.lonlat.to_xy(transform))
+    }
     
     fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+        let geom = geojson::Value::from(&self.to_geo(false));
+        
+        Ok(Value::from(&geom))
+        /*
         
         let mut res = Map::new();
         //let p = self.lonlat.forward();
         res.insert(String::from("type"), json!("Point"));
         res.insert(String::from("coordinates"), json!((coordinate_as_float(self.lonlat.lon),coordinate_as_float(self.lonlat.lat))));
-        Ok(json!(res))
+        Ok(json!(res))*/
     }
 }
 

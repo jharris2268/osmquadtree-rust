@@ -1,6 +1,6 @@
 use crate::elements::{Relation,ElementType,Way,Quadtree};
 use crate::geometry::{WorkingBlock,GeometryStyle,Object,LonLat,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
-use crate::geometry::position::{point_in_poly};
+use crate::geometry::position::{point_in_poly_iter};
 use crate::geometry::elements::collect_rings;
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
@@ -12,16 +12,13 @@ use std::io::{Error,ErrorKind,Result};
 type WayEntry = (Way,Vec<LonLat>,Vec<String>);
 type PendingWays = BTreeMap<i64, (BTreeSet<i64>, Option<WayEntry>)>;
 
-
+use geo::prelude::Contains;
 
 fn add_ring<'a>(res: &mut Vec<PolygonPart>, q: Ring, must_be_inner: bool) -> Option<Ring> {
+    let y = &q.parts[0].lonlats[0];//.as_xy();
     for a in res.iter_mut() {
         if a.exterior.bbox.contains(&q.bbox) {
-            let x = a.exterior.lonlats().unwrap();
-            let y = &q.parts[0].lonlats[0];
-            if point_in_poly(&x, y) {
-            //let y = q.lonlats().unwrap();
-            //if polygon_contains(&x, &y) {
+            if point_in_poly_iter(&mut a.exterior.lonlats_iter(), &y) {
                 a.add_interior(q);
                 return None;
             }
