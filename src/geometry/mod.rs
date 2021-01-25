@@ -11,10 +11,12 @@ mod addparenttag;
 mod relationtags;
 mod default_minzoom_values;
 mod minzoom;
+pub mod postgresql;
+mod wkb;
 
 use crate::elements::{Quadtree,Node,Way,Relation};
 pub use crate::geometry::waywithnodes::{CollectWayNodes};
-pub use crate::geometry::position::{LonLat,XY};
+pub use crate::geometry::position::{LonLat,XY,get_srid};
 
 pub use crate::geometry::process_geometry::{process_geometry,OutputType};
 pub use crate::geometry::style::GeometryStyle;
@@ -29,7 +31,7 @@ pub struct WorkingBlock {
     geometry_block: GeometryBlock,
     
     pending_nodes: Vec<Node>,
-    pending_ways: Vec<(Way,Vec<LonLat>,Vec<String>)>,
+    pending_ways: Vec<(Way,Vec<LonLat>)>,
     pending_relations: Vec<Relation>,
     
     
@@ -50,3 +52,5 @@ pub enum OtherData {
 }
 
 pub type Timings = crate::utils::Timings<OtherData>;
+
+pub type CallFinishGeometryBlock = Box<dyn crate::callback::CallFinish<CallType=GeometryBlock, ReturnType=Timings>>;

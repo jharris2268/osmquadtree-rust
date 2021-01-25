@@ -22,7 +22,7 @@ fn call_all<T: Send + 'static, U: Send + 'static>(
 
 fn call_all_sync<T: Send + 'static, U: Send + 'static>(
     recvs: Vec<mpsc::Receiver<T>>,
-    mut cf: Box<impl CallFinish<CallType = T, ReturnType = U>>,
+    mut cf: Box<impl CallFinish<CallType = T, ReturnType = U> +?Sized>,
 ) -> Result<U> {
     let mut i = 0;
     let l = recvs.len();
@@ -114,7 +114,7 @@ where
     U: Send + 'static,
 {
     pub fn new(
-        cf: Box<impl CallFinish<CallType = T, ReturnType = U>>,
+        cf: Box<impl CallFinish<CallType = T, ReturnType = U> + ?Sized>,
         numchan: usize,
     ) -> Vec<Box<CallbackSync<T, U>>> {
         if numchan == 0 || numchan > MAXNUMCHAN {

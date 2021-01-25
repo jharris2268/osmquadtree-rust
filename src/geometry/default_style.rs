@@ -2,6 +2,8 @@
 pub const DEFAULT_GEOMETRY_STYLE:&str = r#"
 {
     "boundary_relations": true,
+    "all_objs": false,
+    "drop_keys": [],
     "feature_keys": [
         "aerialway",
         "aeroway",

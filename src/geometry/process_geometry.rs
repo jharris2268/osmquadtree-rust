@@ -1,3 +1,5 @@
+pub use crate::geometry::postgresql::{PostgresqlOptions,make_write_postgresql_geometry};
+
 use crate::geometry::{WorkingBlock,Timings,CollectWayNodes,OtherData,GeometryStyle,GeometryBlock,LinestringGeometry,PointGeometry,SimplePolygonGeometry};
 use crate::geometry::multipolygons::ProcessMultiPolygons;
 use crate::geometry::position::{calc_ring_area, calc_line_length};
@@ -168,17 +170,9 @@ impl<T> MakeGeometries<T>
             }
         }
         
-        for (mut w,ll,finished) in std::mem::take(&mut bl.pending_ways) {
+        for (w,ll) in std::mem::take(&mut bl.pending_ways) {
             
-            if !finished.is_empty() {
-                let mut tgs=Vec::new();
-                for t in std::mem::take(&mut w.tags) {
-                    if !finished.contains(&t.key) {
-                        tgs.push(t);
-                    }
-                }
-                w.tags=tgs;
-            }
+            
             let is_ring = w.refs[0] == w.refs[w.refs.len()-1];
             
             match self.style.process_way(&w.tags, is_ring) {
@@ -293,10 +287,11 @@ pub enum OutputType {
     Json(String),
     TiledJson(String),
     PbfFile(String),
+    Postgresql(PostgresqlOptions),
 }
 
 
-pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, numchan: usize) -> Result<()> {
+pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, style_name: Option<&str>, numchan: usize) -> Result<()> {
 
 
     let mut tx=LogTimes::new();
@@ -313,7 +308,10 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
     let mut pfilelocs = get_file_locs(prfx, Some(bbox.clone()), timestamp)?;
     tx.add("get_file_locs");
 
-    let style = Arc::new(GeometryStyle::default());
+    let style = match style_name {
+        None => Arc::new(GeometryStyle::default()),
+        Some(fname) => Arc::new(GeometryStyle::from_file(&fname)?)
+    };
     tx.add("load_style");
     
     let minzoom: Option<MinZoomSpec> = if find_minzoom { Some(MinZoomSpec::default()) } else { None };
@@ -336,10 +334,15 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
                 }
                 Some(Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new()))))
             }
+        },
+        OutputType::Postgresql(options) => {
+            Some(make_write_postgresql_geometry(&options, numchan)?)
         }
     };
     
     let cf = Box::new(CollectWorkingTiles::new(out));
+    
+    type CallFinishWorkingBlock = Box<dyn CallFinish<CallType=WorkingBlock,ReturnType=Timings>>;
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>> = if numchan == 0 {
         let fm = Box::new(FindMinZoom::new(cf, minzoom));
@@ -351,11 +354,27 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
         make_read_primitive_blocks_combine_call_all(ww)
     } else {
         let cfb = Box::new(Callback::new(cf));
-        let fm = Box::new(Callback::new(Box::new(FindMinZoom::new(cfb, minzoom))));
+        let fm: CallFinishWorkingBlock = if find_minzoom {
+            Box::new(Callback::new(Box::new(FindMinZoom::new(cfb, minzoom))))
+        } else {
+            cfb
+        };
         let mg = Box::new(Callback::new(Box::new(MakeGeometries::new(fm, style.clone(),true))));
-        let mm = Box::new(Callback::new(Box::new(ProcessMultiPolygons::new(style.clone(), mg))));
-        let rt = Box::new(Callback::new(Box::new(AddRelationTags::new(mm, style.clone()))));
-        let ap = Box::new(Callback::new(Box::new(AddParentTag::new(rt, style.clone()))));
+        let mm: CallFinishWorkingBlock = if style.multipolygons || style.boundary_relations { 
+            Box::new(Callback::new(Box::new(ProcessMultiPolygons::new(style.clone(), mg))))
+        } else {
+            mg
+        };
+        let rt: CallFinishWorkingBlock = if !style.relation_tag_spec.is_empty() {
+            Box::new(Callback::new(Box::new(AddRelationTags::new(mm, style.clone()))))
+        } else {
+            mm
+        };
+        let ap: CallFinishWorkingBlock = if !style.parent_tags.is_empty() {
+            Box::new(Callback::new(Box::new(AddParentTag::new(rt, style.clone()))))
+        } else {
+            rt
+        };
         
         let ww = CallbackSync::new(Box::new(CollectWayNodes::new(ap,style.clone())), numchan);
         
@@ -393,7 +412,7 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
     tx.add("finish process_geometry");
     if !all_tiles.is_empty() {
         match outfn {
-            OutputType::None | OutputType::PbfFile(_) => {},
+            OutputType::None | OutputType::PbfFile(_) | OutputType::Postgresql(_) => {},
             OutputType::Json(ofn) => {
                 write_geojson_flat(all_tiles, &ofn)?;
                 tx.add("write json");

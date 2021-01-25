@@ -109,6 +109,8 @@ pub struct GeometryStyle {
     pub polygon_tags: BTreeMap<String, PolyTagSpec>,
     pub parent_tags: BTreeMap<String, ParentTagSpec>,
     pub relation_tag_spec: Vec<RelationTagSpec>,
+    pub all_objs: bool,
+    pub drop_keys: BTreeSet<String>,
     pub multipolygons: bool,
     pub boundary_relations: bool
 }
@@ -136,6 +138,7 @@ impl GeometryStyle {
         false
     }
     fn has_key(&self, k: &str) -> bool {
+        
         match &self.other_keys {
             None => { return true; },
             Some(o) => {
@@ -147,7 +150,24 @@ impl GeometryStyle {
         
         self.feature_keys.contains(k)
     }
+    
+    fn is_drop(&self, k: &str) -> bool {
+        if self.drop_keys.is_empty() {
+            return false;
+        }
         
+        if self.drop_keys.contains(k) {
+            return true;
+        }
+        
+        match k.find(':') {
+            None =>  { false },
+            Some(x) => {
+                self.drop_keys.contains(&k[0..x+1])
+            }
+        }
+        
+    }
         
     
     fn filter_tags(&self, tags: &[Tag]) -> (Vec<Tag>, Option<i64>, Option<i64>) {
@@ -157,7 +177,9 @@ impl GeometryStyle {
         let mut layer:Option<i64>=None;
         for t in tags {
             if self.has_key(&t.key) {
-                res.push(t.clone());
+                if !self.is_drop(&t.key) {
+                    res.push(t.clone());
+                }
             }
             
             if t.key == "layer" {
@@ -212,7 +234,7 @@ impl GeometryStyle {
     
     pub fn process_multipolygon_relation(&self, tags: &[Tag]) -> Result<(Vec<Tag>, Option<i64>, Option<i64>)> {
         
-        if !self.has_feature_key(&tags) {
+        if !self.all_objs && !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
         }
         
@@ -225,7 +247,7 @@ impl GeometryStyle {
         
     pub fn process_way(&self, tags: &[Tag], is_ring: bool) -> Result<(bool, Vec<Tag>, Option<i64>, Option<i64>)> {
         
-        if !self.has_feature_key(&tags) {
+        if !self.all_objs && !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
         }
         let is_poly = is_ring && self.check_polygon_tags(&tags);
@@ -235,7 +257,7 @@ impl GeometryStyle {
     }
     
     pub fn process_node(&self, tags: &[Tag]) -> Result<(Vec<Tag>, Option<i64>)> {
-        if !self.has_feature_key(&tags) {
+        if !self.all_objs && !self.has_feature_key(&tags) {
             return Err(Error::new(ErrorKind::Other, "not a feature"));
         }
      

@@ -5,13 +5,14 @@ use crate::geometry::position::calc_ring_area_and_bbox;
 use crate::geometry::elements::pointgeometry::pack_tags;
 use crate::geometry::elements::simplepolygongeometry::{read_lonlats,pack_bounds};
 use crate::geometry::elements::GeoJsonable;
+use crate::geometry::wkb::{prep_wkb,write_uint32,write_ring,AsWkb};
 use std::io::{Error,ErrorKind,Result};
 use std::fmt;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 extern crate geo;
 
-#[derive(Serialize)]
+#[derive(Serialize,Clone)]
 pub struct RingPart {
     pub orig_id: i64,
     pub is_reversed: bool,
@@ -41,17 +42,19 @@ pub struct Ring {
     pub parts: Vec<RingPart>,
     pub area: f64,
     pub bbox: Bbox,
+    pub geo: Option<geo::LineString<f64>>
 }
 
 impl Ring {
     pub fn new() -> Ring {
-        Ring{parts: Vec::new(), area: 0.0, bbox: Bbox::empty()}
+        Ring{parts: Vec::new(), area: 0.0, bbox: Bbox::empty(), geo: None}
     }
     
     pub fn calc_area_bbox(&mut self) -> Result<()> {
         let x = calc_ring_area_and_bbox(&self.lonlats()?);
         self.area=x.0;
         self.bbox=x.1;
+        self.geo = Some(self.to_geo(false));
         Ok(())
     }
     
@@ -61,6 +64,18 @@ impl Ring {
             p.is_reversed = !p.is_reversed;
         }
         self.area *= -1.0;
+    }
+    
+    pub fn len(&self) -> usize {
+        if self.parts.is_empty() {
+            return 0;
+        }
+        let mut r = 0;
+        for p in &self.parts {
+            if r>0 { r -= 1; }
+            r += p.lonlats.len();
+        }
+        r
     }
     
     pub fn first_last(&self) -> (i64, i64) {
@@ -159,6 +174,9 @@ impl Ring {
     }
     
     pub fn to_geo(&self, transform: bool) -> geo::LineString<f64> {
+        if !transform && !self.geo.is_none() {
+            return self.geo.as_ref().unwrap().clone();
+        }
         geo::LineString(self.lonlats_iter().map(|l| { l.to_xy(transform) }).collect())
     }
 }
@@ -198,7 +216,7 @@ impl<'a> RingLonLatsIter<'a> {
             if self.part_idx >= self.ring.parts.len() {
                 return;
             }
-            self.coord_idx=0;
+            self.coord_idx=1;
         }
     }
         
@@ -350,6 +368,17 @@ impl PolygonPart {
         
         Ok(rings)
     }
+    pub fn to_wkb(&self, transform: bool, with_srid: bool) -> Result<Vec<u8>> {
+        let mut res = prep_wkb(with_srid, transform, 3, 0)?;
+        
+        write_uint32(&mut res, 1+self.interiors.len() as u32)?;
+        write_ring(&mut res, self.exterior.len(), self.exterior.lonlats_iter().map(|l| { l.to_xy(transform) }))?;
+        for ii in &self.interiors {
+            write_ring(&mut res, ii.len(), ii.lonlats_iter().map(|l| { l.to_xy(transform) }))?;
+        }
+        Ok(res)
+    }
+        
     
 }
 
@@ -396,6 +425,27 @@ impl ComplicatedPolygonGeometry {
             polys.push(geo::Polygon::new(ext, ints));
         }
         geo::MultiPolygon(polys)
+    }
+    
+    pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
+        let xx = self.to_geo(transform);
+        let srid = if with_srid { Some(if transform { 3857 } else { 4326 }) } else { None };
+        xx.as_wkb(srid)
+        
+        /*
+        
+        if self.parts.len()==1 {
+            self.parts[0].to_wkb(transform, with_srid)
+            
+        } else {
+            let mut res = prep_wkb(with_srid, transform, 6, 4)?;
+            write_uint32(&mut res, self.parts.len() as u32)?;
+            for p in &self.parts {
+                res.extend(p.to_wkb(transform, with_srid)?);
+            }
+        
+            Ok(res)
+        }*/
     }
     
     pub fn bounds(&self) -> Bbox {

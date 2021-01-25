@@ -3,6 +3,7 @@ use crate::geometry::LonLat;
 use crate::geometry::elements::pointgeometry::pack_tags;
 use crate::geometry::elements::simplepolygongeometry::{read_lonlats,pack_bounds};
 use crate::geometry::elements::GeoJsonable;
+use crate::geometry::wkb::{prep_wkb,write_ring};
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 
@@ -30,6 +31,15 @@ impl LinestringGeometry {
     pub fn to_geo(&self, transform: bool) -> geo::LineString<f64> {
         geo::LineString(self.lonlats.iter().map(|l| { l.to_xy(transform) }).collect())
     }
+    
+    pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
+        
+        
+        let mut res = prep_wkb(with_srid, transform, 2, 4+16*self.lonlats.len())?;
+        write_ring(&mut res, self.lonlats.len(), self.lonlats.iter().map(|l| { l.to_xy(transform) }))?;
+        Ok(res)
+    }
+    
     
     pub fn bounds(&self) -> Bbox {
         let mut res=Bbox::empty();
@@ -75,5 +85,31 @@ impl GeoJsonable for LinestringGeometry {
         res.insert(String::from("bbox"), pack_bounds(&self.bounds()));
                 
         Ok(json!(res))
+    }
+}
+
+
+use crate::elements::{WithId,WithInfo,WithTags,WithQuadtree};
+impl WithId for LinestringGeometry {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+
+impl WithInfo for LinestringGeometry {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+impl WithTags for LinestringGeometry {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+
+impl WithQuadtree for LinestringGeometry {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
     }
 }

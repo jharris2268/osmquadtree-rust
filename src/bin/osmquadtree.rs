@@ -12,6 +12,7 @@ use osmquadtree::pbfformat::read_file_block::file_length;
 
 use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
 use osmquadtree::geometry::{process_geometry,GeometryStyle,OutputType};
+use osmquadtree::geometry::postgresql::{PostgresqlConnection,PostgresqlOptions};
 
 use std::sync::Arc;
 use std::io::{Error, ErrorKind, Result};
@@ -250,15 +251,7 @@ fn main() {
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-        )
-        .subcommand(
-            SubCommand::with_name("process_geometry_null")   
-                .about("process_geometry")
-                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -269,6 +262,7 @@ fn main() {
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -279,6 +273,7 @@ fn main() {
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -289,8 +284,34 @@ fn main() {
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
+        .subcommand(
+            SubCommand::with_name("process_geometry_postgresqlblob")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--exteded").help("extended table spec"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_postgresqlblob_pbf")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--exteded").help("extended table spec"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        
         .subcommand(
             SubCommand::with_name("dump_geometry_style")
                 .arg(Arg::with_name("OUTPUT").required(true))
@@ -432,6 +453,7 @@ fn main() {
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -442,6 +464,7 @@ fn main() {
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -452,6 +475,7 @@ fn main() {
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -462,6 +486,41 @@ fn main() {
                 geom.value_of("FILTER"),
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("process_geometry_postgresqlblob", Some(geom)) => {
+            let pc = PostgresqlConnection::CopyFilePrfx(String::from(geom.value_of("OUTFN").unwrap()));
+            let po = if geom.is_present("EXTENDED") {
+                PostgresqlOptions::extended(pc, &GeometryStyle::default())
+            } else {
+                PostgresqlOptions::osm2pgsql(pc, &GeometryStyle::default())
+            };
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::Postgresql(po),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        },
+        ("process_geometry_postgresqlblob_pbf", Some(geom)) => {
+            let pc = PostgresqlConnection::CopyFileBlob(String::from(geom.value_of("OUTFN").unwrap()));
+            let po = if geom.is_present("EXTENDED") {
+                PostgresqlOptions::extended(pc, &GeometryStyle::default())
+            } else {
+                PostgresqlOptions::osm2pgsql(pc, &GeometryStyle::default())
+            };
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::Postgresql(po),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },

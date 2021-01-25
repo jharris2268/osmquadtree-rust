@@ -16,7 +16,7 @@ fn find_tag<'a>(tgs: &'a Vec<Tag>, k: &String) -> Option<&'a String> {
     None
 }
 
-pub struct AddParentTag<T> {
+pub struct AddParentTag<T: ?Sized> {
     out: Box<T>,
     style: Arc<GeometryStyle>,
     pending: BTreeMap<i64,(Node,BTreeMap<String,(String,i64)>)>,
@@ -46,7 +46,7 @@ fn has_tag(tags: &Vec<Tag>, keys: &Vec<String>) -> bool {
 }
 
 impl<T> AddParentTag<T>
-    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings> + ?Sized
 {
     pub fn new(out: Box<T>, style: Arc<GeometryStyle>) -> AddParentTag<T> {
         
@@ -141,7 +141,7 @@ impl<T> AddParentTag<T>
         bl.pending_nodes = nn;
         
         
-        for (w,_,_) in bl.pending_ways.iter_mut() {
+        for (w,_) in bl.pending_ways.iter_mut() {
             if self.has_node(w) {
                 self.process_way(w);
             }
@@ -204,7 +204,7 @@ impl<T> AddParentTag<T>
 }
 
 impl<T> CallFinish for AddParentTag<T>
-    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings> + ?Sized
 {
     type CallType=WorkingBlock;
     type ReturnType=Timings;

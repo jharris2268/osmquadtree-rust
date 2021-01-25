@@ -94,14 +94,18 @@ impl XY {
 
 
 
-#[allow(dead_code)]
-pub fn epsg_code(transform: bool) -> u32 {
-    if transform {
-        3857
+
+pub fn get_srid(transform: bool, with_srid: bool) -> Option<i32> {
+    if !with_srid {
+        None
+    } else if transform {
+        Some(3857)
     } else {
-        4326
+        Some(4326)
     }
 }
+
+
 #[allow(dead_code)]
 pub fn pythag(p: &XY, q: &XY) -> f64 {
     f64::sqrt(f64::powi(p.x-q.x, 2) + f64::powi(p.y-q.y, 2))
@@ -292,7 +296,7 @@ int pnpoly(int nvert, float *vertx, float *verty, float testx, float testy)
     let testy = coordinate_as_float(pt.lat);
 
     let mut c = false;
-    for i in 0..line.len() {
+    for i in 1..line.len() {
         let j = if i==0 { line.len()-1 } else { i-1 };
         let vxi = coordinate_as_float(line[i].borrow().lon);
         let vyi = coordinate_as_float(line[i].borrow().lat);
@@ -318,20 +322,22 @@ fn check_seg(test: &XY, aa: &XY, bb: &XY) -> bool {
     false
 }
 //crate::geometry::elements::PolygonPart
+
+#[allow(dead_code)]
 pub fn point_in_poly_iter<'a, T: Iterator<Item=&'a LonLat>>(line: &'a mut T, pt: &LonLat) -> bool {
     //let mut line = ring.exterior.lonlats_iter();
     
-    let first: XY;
+    let mut prev: XY;
     match line.next() {
         None => { return false; }
         Some(f) => {
-            first = f.as_xy();
+            prev = f.as_xy();
         }
     }
     let test=pt.as_xy();
     
     let mut c = false;
-    let mut prev = first.clone();
+    
     loop {
         match line.next() {
             None => { break; }
@@ -344,13 +350,30 @@ pub fn point_in_poly_iter<'a, T: Iterator<Item=&'a LonLat>>(line: &'a mut T, pt:
             }
         }
     }
+    /*don't need: always first == last
     if check_seg(&test, &prev, &first) {
         c = !c;
     }
+    */
     c
 }
 
-
+pub fn point_in_poly_xy(line: &geo::LineString<f64>, test: &XY) -> bool {
+    //let mut line = ring.exterior.lonlats_iter();
+    if line.0.len() < 3 { return false; }
+    
+    let mut crossings=0;
+    for l in line.lines() {
+        if check_seg(test, &l.start, &l.end) {
+    //for i in 0..line.0.len()-1 {
+    //    if check_seg(test, &line.0[i], &line.0[i+1]) {
+            crossings+=1;
+        }
+    }
+    
+    (crossings % 2)==1
+    
+}
 
 #[allow(dead_code)]
 pub fn polygon_box_intersects<T: Borrow<LonLat>>(poly: &[T], bbox: &Bbox) -> bool {

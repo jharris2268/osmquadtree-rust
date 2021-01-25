@@ -1,6 +1,6 @@
-use crate::elements::{Relation,ElementType,Way,Quadtree};
-use crate::geometry::{WorkingBlock,GeometryStyle,Object,LonLat,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
-use crate::geometry::position::{point_in_poly_iter};
+use crate::elements::{Relation,ElementType,Quadtree};
+use crate::geometry::{WorkingBlock,GeometryStyle,Object,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
+use crate::geometry::position::{point_in_poly_xy};
 use crate::geometry::elements::collect_rings;
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
@@ -9,16 +9,20 @@ use std::sync::Arc;
 use std::collections::{BTreeMap,BTreeSet};
 use std::io::{Error,ErrorKind,Result};
 
-type WayEntry = (Way,Vec<LonLat>,Vec<String>);
-type PendingWays = BTreeMap<i64, (BTreeSet<i64>, Option<WayEntry>)>;
 
-use geo::prelude::Contains;
+type PendingWays = BTreeMap<i64, (BTreeSet<i64>, Option<RingPart>)>;
+
+//use geo::prelude::Contains;
 
 fn add_ring<'a>(res: &mut Vec<PolygonPart>, q: Ring, must_be_inner: bool) -> Option<Ring> {
-    let y = &q.parts[0].lonlats[0];//.as_xy();
+    let y = &q.geo.as_ref().unwrap()[0];
+    //let y = &q.parts[0].lonlats[0];
     for a in res.iter_mut() {
         if a.exterior.bbox.contains(&q.bbox) {
-            if point_in_poly_iter(&mut a.exterior.lonlats_iter(), &y) {
+            //if point_in_poly_iter(&mut a.exterior.lonlats_iter(), &y) {
+            //if a.exterior.geo.as_ref().unwrap().contains(y) {
+            //if a.exterior.geo.as_ref().unwrap().contains(y) {
+            if point_in_poly_xy(a.exterior.geo.as_ref().unwrap(), y) {
                 a.add_interior(q);
                 return None;
             }
@@ -171,7 +175,7 @@ impl MultiPolygons {
     fn finish_relation(&mut self, finished_ways: &mut BTreeSet<i64>, rel: Relation) -> Option<ComplicatedPolygonGeometry> {
         
         let mut inner_ringparts=Vec::new();
-        let mut ringparts = Vec::new();
+        let mut ringparts= Vec::new();
         
         for m in &rel.members {
             match m.mem_type {
@@ -181,14 +185,14 @@ impl MultiPolygons {
                         
                         Some(p) => {
                             
-                            match p.1.as_ref() {
+                            match &p.1 {
                                 Some(qq) => {
                                     p.0.remove(&rel.id);
-                                    if p.0.is_empty() { finished_ways.insert(qq.0.id.clone()); }
+                                    if p.0.is_empty() { finished_ways.insert(m.mem_ref); }
                                     if m.role == "inner" {
-                                        inner_ringparts.push(RingPart::new(qq.0.id.clone(), false, qq.0.refs.clone(), qq.1.clone()));
+                                        inner_ringparts.push(qq.clone());
                                     } else {
-                                        ringparts.push(RingPart::new(qq.0.id.clone(), false, qq.0.refs.clone(), qq.1.clone()));
+                                        ringparts.push(qq.clone());
                                     }
                                 },
                                 None => {
@@ -227,7 +231,7 @@ impl MultiPolygons {
         let mut tm=ThreadTimer::new();
         
         let mut rr = Vec::new();
-        let mut ww = Vec::new();
+        
         let mut finished_rels=Vec::new();
         
         let mut rels_taken=0;
@@ -249,22 +253,22 @@ impl MultiPolygons {
         self.tma += tm.since();
         tm=ThreadTimer::new();
         
-        for w in std::mem::take(&mut wb.pending_ways) {
-            let i = w.0.id;
-            match self.pending_ways.get_mut(&i) {
-                None => { ww.push(w); },
+        for (w,ll) in &wb.pending_ways {
+            
+            match self.pending_ways.get_mut(&w.id) {
+                None => { },
                 
                 Some(pw) => {
                     ways_taken+=1;
                     if !pw.1.is_none() { 
                         panic!("way already present!");
                     }
-                    pw.1 = Some(w);
+                    pw.1 = Some(RingPart::new(w.id.clone(), false, w.refs.clone(), ll.clone()));
                     for r in &pw.0 {
                         match self.pending_relations.get_mut(r) {
                             None => { panic!("missing rel"); },
                             Some((_,s)) => {
-                                s.remove(&i);
+                                s.remove(&w.id);
                                 if s.is_empty() {
                                     finished_rels.push(*r);
                                 }
@@ -275,7 +279,7 @@ impl MultiPolygons {
             }
         }
         
-        wb.pending_ways = ww;
+        
         self.tmb += tm.since();
         tm=ThreadTimer::new();
         let mut finished_ways = BTreeSet::new();
@@ -302,9 +306,9 @@ impl MultiPolygons {
                 Some(pw) => {
                     match pw.1.1 {
                         None => { println!("way not found.. {}", w); },
-                        Some(x) => {
+                        Some(_) => {
                             ways_finished+=1;
-                            wb.pending_ways.push(x);
+                            
                         },
                     }
                 }
@@ -335,7 +339,7 @@ impl MultiPolygons {
                 Some(pw) => {
                     match pw.1.1 {
                         None => { println!("way not found.. {}", w); },
-                        Some(x) => {res.pending_ways.push(x); },
+                        Some(_) => { },
                     }
                 }
             }

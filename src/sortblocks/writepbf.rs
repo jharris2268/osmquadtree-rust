@@ -111,9 +111,13 @@ pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnTy
     includeqts: bool,
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
     let conv = Box::new(move |bl: PrimitiveBlock| {
+        if bl.len() == 0 {
+            return vec![];
+        }
         let xx = bl.pack(includeqts, false).expect("failed to pack");
         let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
-        vec![(bl.index as i64, ob)]
+        let i = if includeqts { bl.quadtree.as_int() } else { bl.index as i64};
+        vec![(i, ob)]
     });
     return Box::new(CallAll::new(out, "pack", conv));
 }
@@ -127,9 +131,12 @@ pub fn make_packprimblock_many<
     let conv = Box::new(move |bls: Vec<PrimitiveBlock>| {
         let mut res = Vec::new();
         for bl in bls {
-            let xx = bl.pack(includeqts, false).expect("failed to pack");
-            let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
-            res.push((bl.index as i64, ob));
+            if bl.len() > 0 {
+                let xx = bl.pack(includeqts, false).expect("failed to pack");
+                let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
+                let i = if includeqts { bl.quadtree.as_int() } else { bl.index as i64};
+                res.push((i, ob));
+            }
         }
         res
     });

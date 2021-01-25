@@ -187,7 +187,7 @@ impl<T> CallFinish for AddRelationTags<T>
             self.process_relation(r);
         }
         
-        for (w,_,_) in bl.pending_ways.iter_mut() {
+        for (w,_) in bl.pending_ways.iter_mut() {
             self.process_way(w);
         }
         

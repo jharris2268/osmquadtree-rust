@@ -101,7 +101,7 @@ fn node_has_tag(style: &GeometryStyle, n: &Node) -> bool {
     false
 }
 
-pub struct CollectWayNodes<T> {
+pub struct CollectWayNodes<T: ?Sized> {
     
     out: Box<T>,
     locs: Locations,
@@ -111,7 +111,7 @@ pub struct CollectWayNodes<T> {
 }
 
 impl<T> CollectWayNodes<T>
-    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings> + ?Sized
 {
     pub fn new(out: Box<T>, style: Arc<GeometryStyle>) -> CollectWayNodes<T> {
         CollectWayNodes{out: out, locs: Locations::new(style), errs: Vec::new(), tm: 0.0}
@@ -126,7 +126,7 @@ impl<T> CollectWayNodes<T>
         
         for w in pb.ways {
             match self.locs.get_locs(&w.refs) {
-                Ok(rr) => { res.pending_ways.push((w, rr, Vec::new())); },
+                Ok(rr) => { res.pending_ways.push((w, rr)); },
                 Err(e) => { self.errs.push((Object::Way(w), e.to_string())); }
             }
         }
@@ -141,7 +141,7 @@ impl<T> CollectWayNodes<T>
 }
 
 impl<T> CallFinish for CollectWayNodes<T> 
-    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings>
+    where T: CallFinish<CallType=WorkingBlock, ReturnType=Timings> + ?Sized
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;

@@ -1,7 +1,8 @@
 use crate::geometry::elements::GeoJsonable;
 use crate::elements::{Info,Tag,Quadtree,Node};
-//use crate::elements::quadtree::coordinate_as_float;
-use crate::geometry::LonLat;
+use crate::geometry::wkb::{prep_wkb,write_point};
+
+use crate::geometry::{LonLat};
 
 extern crate geo;
 extern crate geojson;
@@ -50,7 +51,16 @@ impl PointGeometry {
         res.insert(String::from("coordinates"), json!((coordinate_as_float(self.lonlat.lon),coordinate_as_float(self.lonlat.lat))));
         Ok(json!(res))*/
     }
+    
+    pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
+        let xy = self.lonlat.to_xy(transform);
+        
+        let mut res = prep_wkb(with_srid, transform, 1, 16)?;
+        write_point(&mut res, &xy)?;
+        Ok(res)
+    }
 }
+        
 
 impl GeoJsonable for PointGeometry {        
     fn to_geojson(&self) -> std::io::Result<Value> {
@@ -75,6 +85,31 @@ impl GeoJsonable for PointGeometry {
         res.insert(String::from("bbox"), json!(vec![p.x,p.y,p.x,p.y]));
                 
         Ok(json!(res))
+    }
+}
+
+use crate::elements::{WithId,WithInfo,WithTags,WithQuadtree};
+impl WithId for PointGeometry {
+    fn get_id(&self) -> i64 {
+        self.id
+    }
+}
+
+impl WithInfo for PointGeometry {
+    fn get_info<'a>(&'a self) -> &Option<Info> {
+        &self.info
+    }
+}
+
+impl WithTags for PointGeometry {
+    fn get_tags<'a>(&'a self) -> &'a [Tag] {
+        &self.tags
+    }
+}
+
+impl WithQuadtree for PointGeometry {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
     }
 }
 
