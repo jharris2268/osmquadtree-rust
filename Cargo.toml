@@ -24,6 +24,7 @@ geo= { version = "0.16", features = ["use-proj", "use-serde"] }
 geojson = { version = "0.21", features = ["geo-types"] }
 postgis = "0.7"
 postgres = { version = "0.19", features = ["with-serde_json-1"]}
+geos = { version="7", features = ["v3_8_0", "dox"]}
 [profile.release]
 #debug = true
 

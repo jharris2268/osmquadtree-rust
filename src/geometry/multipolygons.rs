@@ -88,10 +88,13 @@ fn is_multipolygon_rel(rel: &Relation) -> bool {
     //is_bound && is_admin
     false
 }
+
+const MAX_ERR_COUNT: usize = 1000;
+
 struct MultiPolygons {
     style: Arc<GeometryStyle>,
     
-    pending_relations: BTreeMap<i64, (Relation, BTreeSet<i64>)>,
+    pending_relations: BTreeMap<i64, (Quadtree, Relation, BTreeSet<i64>)>,
     pending_ways: PendingWays,
     
     errs: Vec<(Object,String)>,
@@ -102,17 +105,20 @@ struct MultiPolygons {
     tmd: f64,
     tmca: f64,
     tmcb: f64,
-    skipped_big_poly: usize
+    skipped_big_poly: usize,
+    err_count: usize,
+    wnas: usize
 }
 
 impl MultiPolygons {
     pub fn new(style: Arc<GeometryStyle>, pass_rels: bool) -> MultiPolygons {
         MultiPolygons{style:style, 
                 pending_relations: BTreeMap::new(), pending_ways: BTreeMap::new(), errs: Vec::new(),
-                pass_rels:pass_rels,tma: 0.0, tmb: 0.0, tmc: 0.0, tmca: 0.0, tmcb: 0.0, tmd: 0.0, skipped_big_poly: 0}
+                pass_rels:pass_rels,tma: 0.0, tmb: 0.0, tmc: 0.0, tmca: 0.0, tmcb: 0.0, tmd: 0.0,
+                skipped_big_poly: 0, err_count:0, wnas: 0}
     }
     
-    fn add_relation(&mut self, r: Relation) {
+    fn add_relation(&mut self, tile: &Quadtree, r: Relation) {
         let mut pw = BTreeSet::new();
         for m in &r.members {
             match m.mem_type {
@@ -130,7 +136,7 @@ impl MultiPolygons {
                 _ => {}
             }
         }
-        self.pending_relations.insert(r.id, (r,pw));
+        self.pending_relations.insert(r.id, (tile.clone(), r,pw));
     }
     
     fn make_complicated_polygon(&mut self, outer_ringparts: Vec<RingPart>, inner_ringparts: Vec<RingPart>, rel: &Relation) -> Result<Option<ComplicatedPolygonGeometry>> {
@@ -196,7 +202,8 @@ impl MultiPolygons {
                                     }
                                 },
                                 None => {
-                                    println!("way object {} never added? [{:?}]", m.mem_ref, p.0);
+                                    //println!("way object {} never added? [{:?}]", m.mem_ref, p.0);
+                                    self.wnas += 1;
                                     p.0.remove(&rel.id);
                                 }
                             }
@@ -210,7 +217,10 @@ impl MultiPolygons {
         //if ringparts.len()+inner_ringparts.len() < 125 {
             match self.make_complicated_polygon(ringparts, inner_ringparts, &rel) {
                 Err(e) => {
-                    self.errs.push((Object::Relation(rel), e.to_string()));
+                    self.err_count += 1;
+                    if self.errs.len() < MAX_ERR_COUNT {
+                        self.errs.push((Object::Relation(rel), e.to_string()));
+                    }
                     None
                 },
                 Ok(p) => {
@@ -232,7 +242,7 @@ impl MultiPolygons {
         
         let mut rr = Vec::new();
         
-        let mut finished_rels=Vec::new();
+        let mut finished_rels=BTreeSet::new();
         
         let mut rels_taken=0;
         let mut rels_finished=0;
@@ -243,7 +253,7 @@ impl MultiPolygons {
         for r in wb.pending_relations {
             if is_multipolygon_rel(&r) {
                 rels_taken+=1;
-                self.add_relation(r);
+                self.add_relation(&wb.geometry_block.quadtree, r);
             } else if self.pass_rels {
                 rr.push(r);
             }
@@ -267,10 +277,10 @@ impl MultiPolygons {
                     for r in &pw.0 {
                         match self.pending_relations.get_mut(r) {
                             None => { panic!("missing rel"); },
-                            Some((_,s)) => {
+                            Some((_,_,s)) => {
                                 s.remove(&w.id);
                                 if s.is_empty() {
-                                    finished_rels.push(*r);
+                                    finished_rels.insert(*r);
                                 }
                             },
                         }
@@ -278,6 +288,14 @@ impl MultiPolygons {
                 }
             }
         }
+        if wb.geometry_block.quadtree.as_int() >= 0 {
+            for (k,(tile,_,_)) in &self.pending_relations {
+                if !tile.is_parent(&wb.geometry_block.quadtree) {
+                    finished_rels.insert(k.clone());
+                }
+            }
+        }
+            
         
         
         self.tmb += tm.since();
@@ -287,7 +305,7 @@ impl MultiPolygons {
         
         
         for r in finished_rels {
-            let (_,(rel,_)) = self.pending_relations.remove_entry(&r).expect("!");
+            let (_,(_, rel,_)) = self.pending_relations.remove_entry(&r).expect("!");
             match self.finish_relation(&mut finished_ways, rel) {
                 Some(r) => { 
                     rels_finished+=1;
@@ -319,11 +337,11 @@ impl MultiPolygons {
         (wb,(rels_taken,ways_taken,rels_finished,ways_finished))
     }
     
-    pub fn finish(&mut self) -> (WorkingBlock, Vec<(Object,String)>, String) {
+    pub fn finish(&mut self) -> (WorkingBlock, Vec<(Object,String)>, Vec<String>) {
         let mut tm=ThreadTimer::new();
         let mut res = WorkingBlock::new(-1, Quadtree::empty(), 0);
         let mut finished_ways = BTreeSet::new();
-        for (_,(rel,_)) in std::mem::take(&mut self.pending_relations) {
+        for (_,(_,rel,_)) in std::mem::take(&mut self.pending_relations) {
             match self.finish_relation(&mut finished_ways, rel) {
                 Some(r) => { res.geometry_block.complicated_polygons.push(r); },
                 None => {},
@@ -345,7 +363,11 @@ impl MultiPolygons {
             }
         }
         self.tmd += tm.since();
-        (res, std::mem::take(&mut self.errs), format!("check rels: {:0.1}s, check ways: {:0.1}s, make poly: {:0.1}s [collect rings: {:0.1}s, merge rings: {:0.1}s], finish ways: {:0.1}s. Skipped {} big polys", self.tma, self.tmb, self.tmc, self.tmca, self.tmcb, self.tmd, self.skipped_big_poly))
+        let mm = vec![
+            format!("check rels: {:0.1}s, check ways: {:0.1}s, make poly: {:0.1}s [collect rings: {:0.1}s, merge rings: {:0.1}s], finish ways: {:0.1}s. Skipped {} big polys", self.tma, self.tmb, self.tmc, self.tmca, self.tmcb, self.tmd, self.skipped_big_poly),
+            format!("{} errors [{} passed]. {} ways never added?", self.err_count, self.errs.len(), self.wnas)
+        ];
+        (res, std::mem::take(&mut self.errs), mm)
     }
     
 }                
@@ -383,16 +405,18 @@ impl<T> CallFinish for ProcessMultiPolygons<T>
     
     fn finish(&mut self) -> Result<Timings> {
         let tx= ThreadTimer::new();
-        let (ans,errs,mm) = self.multipolygons.finish();
-        let a = format!("finished {} rels & {} ways at end", ans.geometry_block.complicated_polygons.len(), ans.pending_ways.len());
+        let (ans,errs,mut msgs) = self.multipolygons.finish();
+        
+        msgs.push(format!("finished {} rels & {} ways at end", ans.geometry_block.complicated_polygons.len(), ans.pending_ways.len()));
         
         self.tm += tx.since();
         self.out.call(ans);
         
         let mut tms = self.out.finish()?;
         tms.add("ProcessMultiPolygons", self.tm);
-        let m = format!("rels taken/finished: {}/{}, ways_taken/finished: {}/{}", self.counts.0,self.counts.2,self.counts.1,self.counts.3);
-        tms.add_other("ProcessMultiPolygons", OtherData::Messages(vec![m,a,mm]));
+        msgs.push(format!("rels taken/finished: {}/{}, ways_taken/finished: {}/{}", self.counts.0,self.counts.2,self.counts.1,self.counts.3));
+        
+        tms.add_other("ProcessMultiPolygons", OtherData::Messages(msgs));
         tms.add_other("ProcessMultiPolygons", OtherData::Errors(errs));
         Ok(tms)
     }

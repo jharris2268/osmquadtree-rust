@@ -1,11 +1,13 @@
 use crate::geometry::postgresql::{TableSpec,ColumnSource,ColumnType};
-use crate::geometry::wkb::{write_uint16,write_int32,write_int64,/*write_uint32,write_uint64,*/write_f64};
+use crate::geometry::wkb::{write_uint16,write_int32,write_int64,write_f64/*write_uint32,write_uint64,AsWkb*/};
 use crate::geometry::{GeometryBlock,PointGeometry,LinestringGeometry,SimplePolygonGeometry,ComplicatedPolygonGeometry};
 use crate::elements::{WithId,WithTags,WithQuadtree,Tag,Quadtree};
 
 use std::io::{Result,Error,ErrorKind,Write};
+use std::convert::TryInto;
 use std::collections::BTreeMap;
-
+use geos::Geom;
+//use geos::from_geo::TryInto;
 //use postgres::types::{ToSql};
 //use postgres::binary_copy::BinaryCopyInWriter;
 //use postgis::ewkb::{AsEwkbPoint,EwkbWrite};
@@ -28,6 +30,7 @@ pub struct PrepTable {
     boundary_line_geometry: Option<usize>,
 
     num_cols: usize,
+    validate_geometry: bool
     
 }
 
@@ -82,13 +85,15 @@ impl PrepTable {
             minzoom_col: None, layer_col: None, z_order_col: None,
             length_col: None, area_col: None,
             geometry_col: None, representative_point_geometry_col: None, boundary_line_geometry: None,
-            num_cols: 0
+            num_cols: 0, validate_geometry: false
         }
     }
                 
     
     pub fn from_tablespec(spec: &TableSpec) -> Result<PrepTable> {
         let mut pt = PrepTable::new();
+        pt.validate_geometry=true;
+        
         
         pt.num_cols = spec.columns.len();
         for (i,(n, src, typ)) in spec.columns.iter().enumerate() {
@@ -143,7 +148,7 @@ impl PrepTable {
                     check_type(i,n,src,typ, &ColumnType::Double)?;
                     pt.area_col = Some(i);
                 },
-                    ColumnSource::Geometry => {
+                ColumnSource::Geometry => {
                     match typ {
                         ColumnType::PointGeometry | ColumnType::LineGeometry | ColumnType::PolygonGeometry | ColumnType::Geometry => {},
                         _ => { check_type(i,n,src,typ,&ColumnType::PointGeometry)?; },
@@ -221,13 +226,25 @@ impl PrepTable {
         
         let mut res = self.pack_common(pg, tile, false)?;
         
-        
         match &self.geometry_col {
             None => {},
             Some((typ,i)) => {
                 if *typ != ColumnType::PointGeometry {
                     return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for PointGeometry", typ)));
                 }
+                if self.validate_geometry {
+            
+                    let geo_obj = pg.to_geo(true);
+                    let geom: geos::Geometry = match (&geo_obj).try_into() {
+                        Ok(g) => Ok(g),
+                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
+                    }?;
+                    if !geom.is_valid() {
+                        return Err(Error::new(ErrorKind::Other, format!("invalid geometry")));
+                    }
+                        
+                }
+                
                 let d = pg.to_wkb(true,true)?;
                 res[*i] = CopyValue::Wkb(d);
                 
@@ -271,7 +288,18 @@ impl PrepTable {
                 if *typ != ColumnType::LineGeometry {
                     return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for LinestringGeometry", typ)));
                 }
-                
+                if self.validate_geometry {
+            
+                    let geo_obj = pg.to_geo(true);
+                    let geom: geos::Geometry = match (&geo_obj).try_into() {
+                        Ok(g) => Ok(g),
+                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
+                    }?;
+                    if !geom.is_valid() {
+                        return Err(Error::new(ErrorKind::Other, format!("invalid geometry")));
+                    }
+                        
+                }
                 let d = pg.to_wkb(true,true)?;
                 res[*i] = CopyValue::Wkb(d);
                 
@@ -318,22 +346,86 @@ impl PrepTable {
         Ok(res)
     }
     
+    
+    fn write_wkb(&self, geom: &geos::Geometry) -> Result<Vec<u8>> {
+        let mut wkb_writer = match geos::WKBWriter::new() {
+            Ok(w) => w,
+            Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); }
+        };
+        
+        wkb_writer.set_include_SRID(true);
+        wkb_writer.set_wkb_byte_order(geos::ByteOrder::BigEndian);
+        
+        match wkb_writer.write_wkb(geom) {
+            Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e))),
+            Ok(w) => Ok(w.into())
+        }
+    }
+    
+    
     pub fn pack_simple_polygon_geometry(&self, pg: &SimplePolygonGeometry, tile: &Quadtree) -> Result<Vec<CopyValue>>  {
         let mut res = self.pack_common(pg, tile, false)?;
         
         
-        match &self.geometry_col {
-            None => {},
-            Some((typ,i)) => {
-                if !((*typ == ColumnType::Geometry) || (*typ == ColumnType::PolygonGeometry)) {
-                    return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for SimplePolygonGeometry", typ)));
-                }
-                let d = pg.to_wkb(true,true)?;
-                res[*i] = CopyValue::Wkb(d);
+        if self.validate_geometry {
+            
+            let geo_obj = pg.to_geo(true);
+            let mut geom: geos::Geometry = match (&geo_obj).try_into() {
+                Ok(g) => Ok(g),
+                Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
+            }?;
+            geom.set_srid(3857);
+            if !geom.is_valid() {
+                geom = match geom.make_valid() {
+                    Ok(g) => Ok(g),
+                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                }?;
+                geom.set_srid(3857);
             }
             
             
             
+            
+        
+            match &self.geometry_col {
+                None => {},
+                Some((typ,i)) => {
+                    if *typ != ColumnType::Geometry {
+                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
+                    }
+                    let d = self.write_wkb(&geom)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
+            match &self.representative_point_geometry_col {
+                None => {},
+                Some(i) => {
+                    let mut rep_pt = match geom.point_on_surface() {
+                        Ok(g) =>  Ok(g),
+                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                    }?;
+                    rep_pt.set_srid(3857);
+                    let d = self.write_wkb(&rep_pt)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
+            
+            
+            
+        } else {
+            match &self.geometry_col {
+                None => {},
+                Some((typ,i)) => {
+                    if *typ != ColumnType::Geometry {
+                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
+                    }
+                    let d = pg.to_wkb(true,true)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
         }
                 
         
@@ -375,21 +467,66 @@ impl PrepTable {
     pub fn pack_complicated_polygon_geometry(&self, pg: &ComplicatedPolygonGeometry, tile: &Quadtree) -> Result<Vec<CopyValue>>  {
         let mut res = self.pack_common(pg, tile, true)?;
         
-        
-        match &self.geometry_col {
-            None => {},
-            Some((typ,i)) => {
-                if *typ != ColumnType::Geometry {
-                    return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
-                }
-                let d = pg.to_wkb(true,true)?;
-                res[*i] = CopyValue::Wkb(d);
+        if self.validate_geometry {
+            
+            let geo_obj = pg.to_geo(true);
+            let mut geom: geos::Geometry = match (&geo_obj).try_into() {
+                Ok(g) => Ok(g),
+                Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
+            }?;
+            geom.set_srid(3857);
+            if !geom.is_valid() {
+                geom = match geom.make_valid() {
+                    Ok(g) => Ok(g),
+                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                }?;
+                geom.set_srid(3857);
             }
             
             
             
+            
+        
+            match &self.geometry_col {
+                None => {},
+                Some((typ,i)) => {
+                    if *typ != ColumnType::Geometry {
+                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
+                    }
+                    let d = self.write_wkb(&geom)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
+            match &self.representative_point_geometry_col {
+                None => {},
+                Some(i) => {
+                    let mut rep_pt = match geom.point_on_surface() {
+                        Ok(g) =>  Ok(g),
+                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                    }?;
+                    rep_pt.set_srid(3857);
+                    let d = self.write_wkb(&rep_pt)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
+            
+            
+            
+        } else {
+            match &self.geometry_col {
+                None => {},
+                Some((typ,i)) => {
+                    if *typ != ColumnType::Geometry {
+                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
+                    }
+                    let d = pg.to_wkb(true,true)?;
+                    
+                    res[*i] = CopyValue::Wkb(d);
+                }        
+            }
         }
-                
         
         match self.layer_col {
             None => {},
@@ -493,43 +630,59 @@ fn pack_all<W: Write>(w: &mut W, row: &Vec<CopyValue>) -> Result<()> {
     
     
 
-pub fn pack_geometry_block<W: Write,A: Fn(&GeometryType)->Vec<usize> + ?Sized>(packers: &Vec<PrepTable>, outs: &mut Vec<W>, alloc_func: &A, bl: &GeometryBlock) -> Result<usize> {
+pub fn pack_geometry_block<W: Write,A: Fn(&GeometryType)->Vec<usize> + ?Sized>(packers: &Vec<PrepTable>, outs: &mut Vec<W>, alloc_func: &A, bl: &GeometryBlock) -> Result<(usize,usize)> {
     let mut count=0;
+    let mut errs =0;
     for obj in &bl.points {
         for i in alloc_func(&GeometryType::Point(obj)) {
-            let tt = packers[i].pack_point_geometry(obj, &bl.quadtree)?;
-            pack_all(&mut outs[i], &tt)?;
-                
-            count+=1;
-        
+            
+            match packers[i].pack_point_geometry(obj, &bl.quadtree) {
+                Ok(tt) => {
+                    pack_all(&mut outs[i], &tt)?;
+                    count+=1;
+                },
+                Err(_) => { errs+=1; }
+            }
         }
     }
     
     for obj in &bl.linestrings {
         for i in alloc_func(&GeometryType::Linestring(obj)) {
-            let tt = packers[i].pack_linestring_geometry(obj, &bl.quadtree)?;
-            pack_all(&mut outs[i], &tt)?;
-            count+=1;
+            match packers[i].pack_linestring_geometry(obj, &bl.quadtree) {
+                Ok(tt) => {
+                    pack_all(&mut outs[i], &tt)?;
+                    count+=1;
+                },
+                Err(_) => { errs+=1; }
+            }
         }
     }
     
     for obj in &bl.simple_polygons {
         for i in alloc_func(&GeometryType::SimplePolygon(obj)) {
             
-            let tt = packers[i].pack_simple_polygon_geometry(obj, &bl.quadtree)?;
-            pack_all(&mut outs[i], &tt)?;
-            count+=1;
+            match packers[i].pack_simple_polygon_geometry(obj, &bl.quadtree) {
+                Ok(tt) => {
+                    pack_all(&mut outs[i], &tt)?;
+                    count+=1;
+                },
+                Err(_) => { errs+=1; }
+            }
         }
     }
     
     for obj in &bl.complicated_polygons {
         for i in alloc_func(&GeometryType::ComplicatedPolygon(obj)) {
-            let tt = packers[i].pack_complicated_polygon_geometry(obj, &bl.quadtree)?;
-            pack_all(&mut outs[i], &tt)?;
-            count+=1;
+            match packers[i].pack_complicated_polygon_geometry(obj, &bl.quadtree) {
+                Ok(tt) => {
+                    pack_all(&mut outs[i], &tt)?;
+                    count+=1;
+                },
+                Err(_) => { errs+=1; }
+            }
         }
     }
-    Ok(count)
+    Ok((count,errs))
 }
     
 

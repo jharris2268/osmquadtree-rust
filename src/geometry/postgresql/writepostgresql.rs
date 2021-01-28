@@ -228,14 +228,15 @@ struct PackPostgresData<T: ?Sized> {
     alloc_func: AllocFunc,
     preptables: Arc<Vec<PrepTable>>,
     tt: f64,
-    count: usize
+    count: usize,
+    errs: usize,
 }
 
 impl<T> PackPostgresData<T> 
     where T: CallFinish<CallType=Vec<PackedBlob>, ReturnType=Timings> + ?Sized
 {
     pub fn new(out: Box<T>, alloc_func: AllocFunc, preptables: Arc<Vec<PrepTable>>) -> PackPostgresData<T> {
-        PackPostgresData{out: out, alloc_func: alloc_func, preptables: preptables, tt: 0.0, count: 0}
+        PackPostgresData{out: out, alloc_func: alloc_func, preptables: preptables, tt: 0.0, count: 0, errs: 0}
     }
 
 
@@ -248,8 +249,9 @@ impl<T> PackPostgresData<T>
             blobs.push(PackedBlob::new(i));
             //outs.push(&blobs[i] as &mut dyn Write);
         }
-
-        self.count += pack_geometry_block(&self.preptables, &mut blobs, &*self.alloc_func, &geoms).expect("!");
+        let (c,e) = pack_geometry_block(&self.preptables, &mut blobs, &*self.alloc_func, &geoms).expect("!");
+        self.count += c;
+        self.errs+=e;
         blobs
     }
 
@@ -272,7 +274,10 @@ impl<T> CallFinish for PackPostgresData<T>
     fn finish(&mut self) -> Result<Timings> {
         let mut tm = self.out.finish()?;
         tm.add("PackPostgresData", self.tt);
-        tm.add_other("PackPostgresData", OtherData::Messages(vec![format!("added {} objects", self.count)]));
+        tm.add_other("PackPostgresData", OtherData::Messages(vec![
+            format!("added {} objects", self.count),
+            format!("skipped {} errors", self.errs)
+        ]));
         Ok(tm)
     }
 }
