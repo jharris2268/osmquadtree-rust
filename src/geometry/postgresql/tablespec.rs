@@ -131,7 +131,7 @@ fn make_linestring_spec(with_quadtree: bool, tag_cols: &Vec<String>, with_other_
 }
 
 
-fn make_polygon_spec(with_quadtree: bool, tag_cols: &Vec<String>, with_other_tags: bool, with_point_geom: bool, with_minzoom: bool) -> Vec<(String, ColumnSource, ColumnType)> {
+fn make_polygon_spec(with_quadtree: bool, tag_cols: &Vec<String>, with_other_tags: bool, with_point_geom: bool, with_boundary_geom: bool, with_minzoom: bool) -> Vec<(String, ColumnSource, ColumnType)> {
     
     let mut res = Vec::new();
     res.push((String::from("osm_id"), ColumnSource::OsmId, ColumnType::BigInteger));
@@ -159,6 +159,9 @@ fn make_polygon_spec(with_quadtree: bool, tag_cols: &Vec<String>, with_other_tag
     res.push((String::from("way"), ColumnSource::Geometry, ColumnType::Geometry));
     if with_point_geom {
         res.push((String::from("way_point"), ColumnSource::RepresentativePointGeometry, ColumnType::PointGeometry));
+    }
+    if with_boundary_geom {
+        res.push((String::from("way_exterior"), ColumnSource::BoundaryLineGeometry, ColumnType::Geometry));
     }
     
     res
@@ -216,11 +219,11 @@ pub fn make_table_spec(style: &GeometryStyle, extended: bool) -> Vec<TableSpec> 
     
     res.push(TableSpec::new("point", make_point_spec(extended, &point_tag_cols, true, extended)));
     res.push(TableSpec::new("line", make_linestring_spec(extended, &line_tag_cols, true, extended, extended)));
-    res.push(TableSpec::new("polygon", make_polygon_spec(extended, &poly_tag_cols, true, extended, extended)));
+    res.push(TableSpec::new("polygon", make_polygon_spec(extended, &poly_tag_cols, true, extended, false, extended)));
     if extended {
         res.push(TableSpec::new("highway", make_linestring_spec(true, &line_tag_cols, true, true, true)));
-        res.push(TableSpec::new("building", make_polygon_spec(true, &line_tag_cols, true, true, true)));
-        res.push(TableSpec::new("boundary", make_polygon_spec(true, &poly_tag_cols, true, true, true)));
+        res.push(TableSpec::new("building", make_polygon_spec(true, &line_tag_cols, true, true, false, true)));
+        res.push(TableSpec::new("boundary", make_polygon_spec(true, &poly_tag_cols, true, true, true, true)));
     }
     
     res

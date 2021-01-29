@@ -27,7 +27,7 @@ pub struct PrepTable {
     area_col: Option<usize>,
     geometry_col: Option<(ColumnType,usize)>,
     representative_point_geometry_col: Option<usize>,
-    boundary_line_geometry: Option<usize>,
+    boundary_line_geometry_col: Option<usize>,
 
     num_cols: usize,
     validate_geometry: bool
@@ -84,7 +84,7 @@ impl PrepTable {
             tag_cols: BTreeMap::new(), other_tags_col: None,
             minzoom_col: None, layer_col: None, z_order_col: None,
             length_col: None, area_col: None,
-            geometry_col: None, representative_point_geometry_col: None, boundary_line_geometry: None,
+            geometry_col: None, representative_point_geometry_col: None, boundary_line_geometry_col: None,
             num_cols: 0, validate_geometry: false
         }
     }
@@ -163,8 +163,8 @@ impl PrepTable {
                     //pt.null_row.push(Box::new(None: Option<postgis::ewkb::Geometry>));
                 },
                 ColumnSource::BoundaryLineGeometry => {
-                    check_type(i,n,src,typ, &ColumnType::LineGeometry)?;
-                    pt.boundary_line_geometry = Some(i);
+                    check_type(i,n,src,typ, &ColumnType::Geometry)?; //will be a mix of line and multiline
+                    pt.boundary_line_geometry_col = Some(i);
                     //pt.null_row.push(Box::new(None: Option<postgis::ewkb::Geometry>));
                 },
             }
@@ -362,6 +362,58 @@ impl PrepTable {
         }
     }
     
+    fn handle_geos_polygon(&self, res: &mut Vec<CopyValue>, mut geom: geos::Geometry) -> Result<()> {
+        geom.set_srid(3857);
+        
+        if !geom.is_valid() {
+            match geom.make_valid() {
+                Ok(g) => { geom = g; },
+                Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); }
+            }
+            
+            geom.set_srid(3857);
+        }
+        
+        
+        match &self.geometry_col {
+            None => {},
+            Some((typ,i)) => {
+                if *typ != ColumnType::Geometry {
+                    return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
+                }
+                let d = self.write_wkb(&geom)?;
+                
+                res[*i] = CopyValue::Wkb(d);
+            }        
+        }
+        match &self.representative_point_geometry_col {
+            None => {},
+            Some(i) => {
+                let mut rep_pt = match geom.point_on_surface() {
+                    Ok(g) =>  Ok(g),
+                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                }?;
+                rep_pt.set_srid(3857);
+                let d = self.write_wkb(&rep_pt)?;
+                
+                res[*i] = CopyValue::Wkb(d);
+            }        
+        }
+        match &self.boundary_line_geometry_col {
+            None => {},
+            Some(i) => {
+                let mut boundary = match geom.boundary() {
+                    Ok(g) =>  Ok(g),
+                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+                }?;
+                boundary.set_srid(3857);
+                let d = self.write_wkb(&boundary)?;
+                
+                res[*i] = CopyValue::Wkb(d);
+            }        
+        }
+        Ok(())
+    }
     
     pub fn pack_simple_polygon_geometry(&self, pg: &SimplePolygonGeometry, tile: &Quadtree) -> Result<Vec<CopyValue>>  {
         let mut res = self.pack_common(pg, tile, false)?;
@@ -370,47 +422,10 @@ impl PrepTable {
         if self.validate_geometry {
             
             let geo_obj = pg.to_geo(true);
-            let mut geom: geos::Geometry = match (&geo_obj).try_into() {
-                Ok(g) => Ok(g),
-                Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
-            }?;
-            geom.set_srid(3857);
-            if !geom.is_valid() {
-                geom = match geom.make_valid() {
-                    Ok(g) => Ok(g),
-                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-                }?;
-                geom.set_srid(3857);
-            }
-            
-            
-            
-            
-        
-            match &self.geometry_col {
-                None => {},
-                Some((typ,i)) => {
-                    if *typ != ColumnType::Geometry {
-                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
-                    }
-                    let d = self.write_wkb(&geom)?;
-                    
-                    res[*i] = CopyValue::Wkb(d);
-                }        
-            }
-            match &self.representative_point_geometry_col {
-                None => {},
-                Some(i) => {
-                    let mut rep_pt = match geom.point_on_surface() {
-                        Ok(g) =>  Ok(g),
-                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-                    }?;
-                    rep_pt.set_srid(3857);
-                    let d = self.write_wkb(&rep_pt)?;
-                    
-                    res[*i] = CopyValue::Wkb(d);
-                }        
-            }
+            match (&geo_obj).try_into() {
+                Ok(g) => { self.handle_geos_polygon(&mut res, g)?; },
+                Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}",e))); }
+            };
             
             
             
@@ -470,50 +485,10 @@ impl PrepTable {
         if self.validate_geometry {
             
             let geo_obj = pg.to_geo(true);
-            let mut geom: geos::Geometry = match (&geo_obj).try_into() {
-                Ok(g) => Ok(g),
-                Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}",e)))
-            }?;
-            geom.set_srid(3857);
-            if !geom.is_valid() {
-                geom = match geom.make_valid() {
-                    Ok(g) => Ok(g),
-                    Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-                }?;
-                geom.set_srid(3857);
-            }
-            
-            
-            
-            
-        
-            match &self.geometry_col {
-                None => {},
-                Some((typ,i)) => {
-                    if *typ != ColumnType::Geometry {
-                        return Err(Error::new(ErrorKind::Other, format!("{:?} wrong type for ComplicatedPolygonGeometry", typ)));
-                    }
-                    let d = self.write_wkb(&geom)?;
-                    
-                    res[*i] = CopyValue::Wkb(d);
-                }        
-            }
-            match &self.representative_point_geometry_col {
-                None => {},
-                Some(i) => {
-                    let mut rep_pt = match geom.point_on_surface() {
-                        Ok(g) =>  Ok(g),
-                        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-                    }?;
-                    rep_pt.set_srid(3857);
-                    let d = self.write_wkb(&rep_pt)?;
-                    
-                    res[*i] = CopyValue::Wkb(d);
-                }        
-            }
-            
-            
-            
+            match (&geo_obj).try_into() {
+                Ok(g) => { self.handle_geos_polygon(&mut res, g)?; },
+                Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}",e))); }
+            };
         } else {
             match &self.geometry_col {
                 None => {},
