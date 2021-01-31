@@ -1,14 +1,16 @@
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
-use crate::utils::{ThreadTimer,ReplaceNoneWithTimings, MergeTimings,CallAll};
+use crate::utils::{ThreadTimer,Timer,ReplaceNoneWithTimings, MergeTimings,CallAll};
 use crate::pbfformat::{writefile::WriteFile,header_block::HeaderType,write_pbf::pack_data,write_pbf::pack_value,read_file_block::pack_file_block};
-use crate::geometry::postgresql::{PostgresqlConnection,PostgresqlOptions,TableSpec,PrepTable,AllocFunc,pack_geometry_block};
+use crate::geometry::postgresql::{PostgresqlConnection,PostgresqlOptions,TableSpec,PrepTable,AllocFunc,pack_geometry_block,prepare_tables};
 use crate::geometry::{Timings,OtherData,GeometryBlock};
+use crate::geometry::postgresql::Connection;
 
 
+use serde::Serialize;
 use std::fs::File;
 use std::collections::BTreeMap;
-use std::io::{Result,Error,ErrorKind,Write};
-use std::sync::Arc;
+use std::io::{Result,Write};
+use std::sync::{Arc,Mutex};
 
 struct PackedBlob {
     table: usize,
@@ -61,8 +63,23 @@ impl CallFinish for WriteGzipBlob {
         Ok(())
     }
 }
-        
+       
+#[derive(Serialize,Debug)]
+struct CopySpec<'a> {
+    pub tabs: &'a Vec<TableSpec>,
+    pub before: Vec<String>,
+    pub copy: Vec<String>,
+    pub after: Vec<String>
+}
 
+impl<'a> CopySpec<'a> {
+    pub fn new(tabs: &'a Vec<TableSpec>, extended: bool) -> CopySpec<'a> {
+        
+        let (before,copy,after) = prepare_tables(None, &tabs, extended).expect("!");
+        CopySpec{tabs,before,copy,after}
+    }
+}
+        
 
 struct WritePackedFiles {
     
@@ -75,7 +92,7 @@ impl WritePackedFiles {
         let mut outputs = BTreeMap::new();
         
         match prfx {
-            Some(prfx) => { serde_json::to_writer(std::fs::File::create(&format!("{}spec.json", prfx)).expect("!"), &tabs).expect("!"); },
+            Some(prfx) => { serde_json::to_writer(std::fs::File::create(&format!("{}spec.json", prfx)).expect("!"), &CopySpec::new(tabs, tabs.len()>3)).expect("!"); },
             None => {}
         }
         for (i,t) in tabs.iter().enumerate() {
@@ -195,7 +212,7 @@ fn pack_pbf_blobs(pbbs: Vec<PackedBlob>) -> Vec<(i64,Vec<u8>)> {
 
 fn make_write_packed_pbffile(p: &str, tabs: &Vec<TableSpec>, numchan: usize) -> Box<dyn CallFinish<CallType=Vec<PackedBlob>, ReturnType=Timings>> {
     let mut wf = Box::new(WritePackedPbfFile::new(&p));
-    let header = serde_json::to_vec(&tabs).expect("!");
+    let header = serde_json::to_vec(&CopySpec::new(tabs, tabs.len()>3)).expect("!");
     wf.call(vec![(-1,pack_file_block("BlobHeaderJson", &header, true).expect("!"))]);
     
     if numchan == 0 {
@@ -211,13 +228,132 @@ fn make_write_packed_pbffile(p: &str, tabs: &Vec<TableSpec>, numchan: usize) -> 
         Box::new(CallbackMerge::new(packs, Box::new(MergeTimings::new())))
     }
 }
+
+
+
+struct WritePostgresData {
+    conn: Arc<Mutex<Connection>>, // see altconnection.rs or postgresconnection.rs
     
+    copy: Vec<String>,
+    exec_after: bool,
+    after: Vec<String>,
+    tt: f64,
+    nc: usize,
+    nb: usize
+}
+
+impl WritePostgresData {
+    
+    pub fn new(conn: Connection, copy: Vec<String>, exec_after: bool, after: Vec<String>) -> WritePostgresData {
+        WritePostgresData{
+                conn: Arc::new(Mutex::new(conn)),
+                copy: copy, exec_after: exec_after, after: after,
+                tt: 0.0, nc: 0, nb: 0}
+    }
+    
+    pub fn connect(connstr: &str, tableprfx: &str, opts: &PostgresqlOptions, newthread: bool, exec_after: bool) -> Result<Box<dyn CallFinish<CallType=Vec<PackedBlob>,ReturnType=Timings>>> {
+        
+        let mut conn = Connection::connect(connstr)?;
+        
+        conn.execute("begin")?;
+        let (before,copy,after) = prepare_tables(Some(tableprfx), &opts.table_spec, opts.extended)?;
+        
+        for (i,qu) in before.iter().enumerate() {
+            let tx=Timer::new();
+            print!("{} {:100.100} ", i,qu);
+            conn.execute(&qu)?;
+            println!(": {:.1}s", tx.since());
+        }
+        let wpg = Box::new(WritePostgresData::new(conn, copy, exec_after, after));
+        if newthread {
+            Ok(Box::new(Callback::new(wpg)))
+        } else {
+            Ok(wpg)
+        }
+    }
+    
+    fn call_copy(&mut self, pb: &PackedBlob)  {
+        
+        
+        let mut conn = self.conn.lock().unwrap();
+        conn.copy(&self.copy[pb.table], &vec![PGCOPY_HEADER,&pb.data,PGCOPY_TAIL]).expect("copy failed");
+        
+        
+        self.nc+=1;
+        self.nb += pb.data.len();
+        
+    }
+        
+}
+
+impl CallFinish for WritePostgresData  {
+    type CallType = Vec<PackedBlob>;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, pbs: Vec<PackedBlob>) {
+        
+        let tx = ThreadTimer::new();
+        for pb in &pbs {
+            if !pb.data.is_empty() {
+                self.call_copy(pb);
+            }
+        }
+        
+        self.tt+=tx.since();
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        let mut tm = Timings::new();
+        tm.add("WritePostgresData::copy", self.tt);
+        
+        
+        
+        let mut conn = self.conn.lock().unwrap();
+        
+        let tx = Timer::new();
+        conn.execute("commit").expect("commit failed");
+        tm.add("WritePostgresData::commit", tx.since());
+        let txx = Timer::new();
+        
+        
+        if self.exec_after {
+           for (i,qu) in self.after.iter().enumerate() {
+                let tx=Timer::new();
+                print!("{} {:100.100} ", i,qu);
+                std::io::stdout().flush().unwrap();
+                
+                match conn.execute(&qu) {
+                    Ok(_) => {},
+                    Err(e) => { print!(" FAILED {:?}", e); }
+                };
+                println!(": {:.1}s", tx.since());
+            }
+            
+        } else {
+            println!("indices:");
+            for a in &self.after {
+                println!("{};", a);
+            }
+        }
+        tm.add("WritePostgresData::finish", txx.since());
+        
+        
+        tm.add_other("WritePostgresData", OtherData::Messages(vec![format!("added {} blobs [{} mb]", self.nc, (self.nb as f64)/1024.0/1024.0)]));
+        Ok(tm)
+    }
+}
+        
+    
+
+
+    
+
 
 
 fn prep_output(opts: &PostgresqlOptions, numchan: usize) -> Result<Box<dyn CallFinish<CallType=Vec<PackedBlob>, ReturnType=Timings>>> {
     match &opts.connection {
-        PostgresqlConnection::Connection(_) => Err(Error::new(ErrorKind::Other, "not impl")),
-        PostgresqlConnection::Null => Ok(Box::new(WritePackedFiles::new(None, &opts.table_spec, false))),
+        PostgresqlConnection::Connection((connstr, tableprfx,execindices)) => WritePostgresData::connect(connstr, tableprfx, opts, numchan != 0,*execindices),
+        PostgresqlConnection::Null => Ok(Box::new(WritePackedFiles::new(None, &opts.table_spec, numchan != 0))),
         PostgresqlConnection::CopyFilePrfx(p) => Ok(Box::new(WritePackedFiles::new(Some(&p), &opts.table_spec, numchan != 0))),
         PostgresqlConnection::CopyFileBlob(p) => Ok(make_write_packed_pbffile(&p, &opts.table_spec, numchan)),
     }

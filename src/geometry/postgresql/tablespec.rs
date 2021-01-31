@@ -1,7 +1,8 @@
 use crate::geometry::GeometryStyle;    
-use serde::Serialize;
+use serde::{Serialize,Deserialize};
+use std::collections::BTreeMap;
 
-#[derive(Eq,PartialEq,Debug,Clone,Serialize)]
+#[derive(Eq,PartialEq,Debug,Clone,Serialize,Deserialize)]
 pub enum ColumnType {
     Text,
     BigInteger,
@@ -61,15 +62,143 @@ impl TableSpec {
     }
 }
 
-pub fn make_createtable(spec: &TableSpec, prfx: &str) -> std::io::Result<String> {
-
-    let mut cols = Vec::new();
-    for (n,_,t) in &spec.columns {
-        cols.push(format!("{} {}", n, type_str(t)));
+pub fn prepare_tables(prfx: Option<&str>, spec: &Vec<TableSpec>, extended: bool) -> std::io::Result<(Vec<String>,Vec<String>,Vec<String>)> {
+    
+    let table_queries: BTreeMap<String,Vec<(TableQueryType,String)>> = serde_json::from_str(&TABLE_QUERIES)?;
+    
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    let mut copy = Vec::new();
+    for t in spec {
+        let tname = match prfx {
+            Some(prfx) => format!("{}{}", prfx, &t.name),
+            None => t.name.clone()
+        };
+                
+        before.push(format!("DROP TABLE IF EXISTS {} CASCADE", &tname));
+        before.push(make_createtable(t, prfx)?);
+        before.push(format!("ALTER TABLE {} SET (autovacuum_enabled=false)", &tname));
+        
+        copy.push(format!("COPY {} FROM STDIN WITH (FORMAT binary)", &tname));
+        
+        match table_queries.get(&t.name) {
+            None => {},
+            Some(xx) => {
+                for (a,b) in xx {
+                    if use_query(a, extended) {
+                        after.push(
+                            match prfx {
+                                Some(prfx) => b.clone().replace("%ZZ%", &prfx),
+                                None => b.clone()
+                            }
+                        );
+                    }
+                }
+            }
+        }
+        
     }
     
-    Ok(format!("CREATE TABLE {}{} ({})", prfx, spec.name, cols.join(", ")))
+    Ok((before,copy,after))
 }
+        
+        
+#[derive(Debug,Deserialize)]
+enum TableQueryType {
+    All,
+    Option,
+    Osm2pgsql,
+    Extended
+}
+
+fn use_query(t: &TableQueryType, e: bool) -> bool {
+    match t {
+        TableQueryType::All => true,
+        TableQueryType::Option => true,
+        TableQueryType::Extended => e,
+        TableQueryType::Osm2pgsql => !e,
+    }
+}
+
+
+const TABLE_QUERIES: &str = r#"
+{
+    "point": [
+        ["All","CREATE INDEX %ZZ%point_way ON %ZZ%point USING gist(way)"],
+        ["Option","CREATE INDEX %ZZ%point_name ON %ZZ%point USING gin(name gin_trgm_ops)"],
+        ["Option","CREATE INDEX %ZZ%point_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%point"],
+        ["All","ALTER TABLE %ZZ%point SET (autovacuum_enabled=true)"],
+        ["All", "CREATE VIEW %ZZ%json_point AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%point pp"]
+    ],
+    "line": [
+        ["All","CREATE INDEX %ZZ%line_way ON %ZZ%line USING gist(way)"],
+        ["Osm2pgsql","CREATE INDEX %ZZ%line_way_roadslz ON %ZZ%line USING gist(way) WHERE (\n    highway in ('motorway','motorway_link','trunk','trunk_link','primary','primary_link','secondary')\n    or (railway in ('rail','light_rail','narrow_gauge','funicular') and (service IS NULL OR service NOT IN ('spur', 'siding', 'yard')))\n)"],
+        ["Option","CREATE INDEX %ZZ%line_name ON %ZZ%line USING gin(name gin_trgm_ops)"],
+        ["Option","CREATE INDEX %ZZ%line_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%line"],
+        ["All","ALTER TABLE %ZZ%line SET (autovacuum_enabled=true)"],
+        ["All", "CREATE VIEW %ZZ%json_line AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%line pp"]
+    ],
+    "highway": [
+        ["All","CREATE INDEX %ZZ%highway_way ON %ZZ%highway USING gist(way)"],
+        ["Extended","CREATE INDEX %ZZ%highway_way_roadslz ON %ZZ%highway USING gist(way) WHERE (\n    highway in ('motorway','motorway_link','trunk','trunk_link','primary','primary_link','secondary')\n    or (railway in ('rail','light_rail','narrow_gauge','funicular') and (service IS NULL OR service NOT IN ('spur', 'siding', 'yard')))\n)"],
+        ["Option","CREATE INDEX %ZZ%highway_name ON %ZZ%highway USING gin(name gin_trgm_ops)"],
+        ["Option","CREATE INDEX %ZZ%highway_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%highway"],
+        ["All","ALTER TABLE %ZZ%highway SET (autovacuum_enabled=true)"],
+        ["All", "CREATE VIEW %ZZ%json_highway AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%polygon pp"]
+    ],
+    "polygon": [
+        ["All","CREATE INDEX %ZZ%polygon_way ON %ZZ%polygon USING gist(way)"],
+        ["Extended","CREATE INDEX %ZZ%polygon_way_point ON %ZZ%polygon USING gist(way_point)"],
+        ["Option","CREATE INDEX %ZZ%polygon_name ON %ZZ%polygon USING gin(name gin_trgm_ops)"],
+        ["Option","CREATE INDEX %ZZ%polygon_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%polygon"],
+        ["All","ALTER TABLE %ZZ%polygon SET (autovacuum_enabled=true)"],
+        ["Osm2pgsql", "CREATE VIEW %ZZ%json_polygon AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%polygon pp"],
+        ["Extended", "CREATE VIEW %ZZ%json_polygon AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way' - 'way_point') AS properties,way,way_point FROM %ZZ%polygon pp"]
+    ],
+    "building": [
+        ["All","CREATE INDEX %ZZ%building_way ON %ZZ%building USING gist(way)"],
+        ["All","CREATE INDEX %ZZ%building_way_point ON %ZZ%building USING gist(way_point)"],
+        ["Option","CREATE INDEX %ZZ%building_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%building"],
+        ["All","ALTER TABLE %ZZ%building SET (autovacuum_enabled=true)"],
+        ["Osm2pgsql", "CREATE VIEW %ZZ%json_building AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%building pp"],
+        ["Extended", "CREATE VIEW %ZZ%json_building AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way' - 'way_point') AS properties,way,way_point FROM %ZZ%building pp"]
+    ],
+    "boundary": [
+        ["All","CREATE INDEX %ZZ%boundary_way ON %ZZ%boundary USING gist(way)"],
+        ["All","CREATE INDEX %ZZ%boundary_way_exterior ON %ZZ%boundary USING gist(way_exterior)"],
+        ["All","CREATE INDEX %ZZ%boundary_way_point ON %ZZ%boundary USING gist(way_point)"],
+        ["Option","CREATE INDEX %ZZ%boundary_name ON %ZZ%boundary USING gin(name gin_trgm_ops)"],
+        ["Option","CREATE INDEX %ZZ%boundary_id ON %ZZ%point USING btree(osm_id)"],
+        ["All","VACUUM ANALYZE %ZZ%boundary"],
+        ["All","ALTER TABLE %ZZ%boundary SET (autovacuum_enabled=true)"],
+        ["Osm2pgsql", "CREATE VIEW %ZZ%json_boundary AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%boundary pp"],
+        ["Extended", "CREATE VIEW %ZZ%json_boundary AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way' - 'way_point' - 'way_exterior') AS properties,way,way_point,way_exterior FROM %ZZ%boundary pp"]
+    ]
+}
+"#;
+
+
+
+pub fn make_createtable(spec: &TableSpec, prfx: Option<&str>) -> std::io::Result<String> {
+    
+    let mut cols = Vec::new();
+    for (n,_,t) in &spec.columns {
+        cols.push(format!("\"{}\" {}", n, type_str(t)));
+    }
+    
+    let p = match prfx {
+        None => "%ZZ%",
+        Some(p) => p
+    };
+    Ok(format!("CREATE TABLE {}{} ({})", p, spec.name, cols.join(", ")))
+}
+
+
 
   
 

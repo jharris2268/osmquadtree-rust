@@ -1,6 +1,6 @@
-use std::io::{Result,Write,ErrorKind,Error};
+use std::io::{Result,Write/*,ErrorKind,Error*/};
 use crate::geometry::XY;
-use geos::Geom;
+//use geos::Geom;
 
 pub fn write_uint16<W: Write>(w: &mut W, i: usize) -> Result<()>  {
     
@@ -160,7 +160,7 @@ impl AsWkb for geo::MultiPolygon<f64> {
         
     }
 }
-
+/*
 fn geos_to_wkb<'a>(geom: &geos::Geometry<'a>) -> Result<Vec<u8>> {
     match geom.to_wkb() {
         Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e))),
@@ -183,7 +183,7 @@ impl<'a> AsWkb for geos::Geometry<'a> {
         }
         
     }
-}
+}*/
 /*
 impl From<geos::Error> for std::io::Error {
     fn from(err: geos::Error) -> Self {

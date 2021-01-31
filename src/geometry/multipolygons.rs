@@ -89,7 +89,7 @@ fn is_multipolygon_rel(rel: &Relation) -> bool {
     false
 }
 
-const MAX_ERR_COUNT: usize = 1000;
+const MAX_ERR_COUNT: usize = 0;//1000;
 
 struct MultiPolygons {
     style: Arc<GeometryStyle>,
@@ -373,7 +373,7 @@ impl MultiPolygons {
 }                
 
 pub struct ProcessMultiPolygons<T: ?Sized> {
-    multipolygons: MultiPolygons,
+    multipolygons: Option<MultiPolygons>,
     out: Box<T>,
     tm: f64,
     counts: (usize,usize,usize,usize)
@@ -382,7 +382,7 @@ impl<T> ProcessMultiPolygons<T>
     where T: CallFinish<CallType=WorkingBlock,ReturnType=Timings> + ?Sized
 {
     pub fn new(style: Arc<GeometryStyle>, out: Box<T>) -> ProcessMultiPolygons<T> {
-        ProcessMultiPolygons{multipolygons: MultiPolygons::new(style,false), out: out, tm: 0.0,counts:(0,0,0,0)}
+        ProcessMultiPolygons{multipolygons: Some(MultiPolygons::new(style,false)), out: out, tm: 0.0,counts:(0,0,0,0)}
     }
 }
 
@@ -394,7 +394,7 @@ impl<T> CallFinish for ProcessMultiPolygons<T>
     
     fn call(&mut self, wb: WorkingBlock) {
         let tx= ThreadTimer::new();
-        let (ans,c) = self.multipolygons.process(wb);
+        let (ans,c) = self.multipolygons.as_mut().unwrap().process(wb);
         self.tm += tx.since();
         self.out.call(ans);
         self.counts.0 += c.0;
@@ -405,7 +405,11 @@ impl<T> CallFinish for ProcessMultiPolygons<T>
     
     fn finish(&mut self) -> Result<Timings> {
         let tx= ThreadTimer::new();
-        let (ans,errs,mut msgs) = self.multipolygons.finish();
+        
+        let (ans,errs,mut msgs) = {
+            let mut multis = self.multipolygons.take().unwrap();
+            multis.finish()
+        };
         
         msgs.push(format!("finished {} rels & {} ways at end", ans.geometry_block.complicated_polygons.len(), ans.pending_ways.len()));
         

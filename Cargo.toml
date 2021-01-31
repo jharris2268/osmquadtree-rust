@@ -22,9 +22,13 @@ clap="2"
 regex="1.4"
 geo= { version = "0.16", features = ["use-proj", "use-serde"] }
 geojson = { version = "0.21", features = ["geo-types"] }
-postgis = "0.7"
-postgres = { version = "0.19", features = ["with-serde_json-1"]}
-geos = { version="7", features = ["v3_8_0", "dox"]}
+
+#postgres = { version = "0.19", features = ["with-serde_json-1"]}
+pq-sys = "0.4"
+
+#geos = { version="7", features = ["v3_8_0", "dox"]} //leaks memory
+geos-sys = { version="2", features = ["v3_8_0"]}
+
 [profile.release]
 #debug = true
 

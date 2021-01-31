@@ -296,7 +296,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
-                .arg(Arg::with_name("EXTENDED").short("-e").long("--exteded").help("extended table spec"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -308,10 +308,23 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
-                .arg(Arg::with_name("EXTENDED").short("-e").long("--exteded").help("extended table spec"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
-        
+        .subcommand(
+            SubCommand::with_name("process_geometry_postgresql")   
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("CONNECTION").short("-c").long("--connection").required(true).takes_value(true).help("connection string"))
+                .arg(Arg::with_name("TABLE_PREFIX").short("-p").long("--tableprefix").required(true).takes_value(true).help("table prfx"))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
+                .arg(Arg::with_name("EXEC_INDICES").short("-I").long("--exec_inidices").help("execute indices [can be very slow for planet imports]"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
         .subcommand(
             SubCommand::with_name("dump_geometry_style")
                 .arg(Arg::with_name("OUTPUT").required(true))
@@ -524,6 +537,27 @@ fn main() {
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
+        ("process_geometry_postgresql", Some(geom)) => {
+            let pc = PostgresqlConnection::Connection((
+                String::from(geom.value_of("CONNECTION").unwrap()),
+                String::from(geom.value_of("TABLE_PREFIX").unwrap()),
+                geom.is_present("EXEC_INDICES")
+            ));
+            let po = if geom.is_present("EXTENDED") {
+                PostgresqlOptions::extended(pc, &GeometryStyle::default())
+            } else {
+                PostgresqlOptions::osm2pgsql(pc, &GeometryStyle::default())
+            };
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                OutputType::Postgresql(po),
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+            )
+        }
         ("dump_geometry_style", Some(geom)) => {
             dump_geometry_style(geom.value_of("OUTPUT"))
         },

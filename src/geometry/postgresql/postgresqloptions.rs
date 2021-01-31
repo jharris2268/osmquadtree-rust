@@ -5,7 +5,7 @@ use crate::elements::Tag;
 use std::sync::Arc;
 pub enum PostgresqlConnection {
     Null,
-    Connection(String),
+    Connection((String,String,bool)),
     CopyFilePrfx(String),
     CopyFileBlob(String)
 }
@@ -18,6 +18,7 @@ pub struct PostgresqlOptions {
     pub connection: PostgresqlConnection,
     pub table_alloc: AllocFunc,
     pub table_spec: Vec<TableSpec>,
+    pub extended: bool
 }
 
 impl PostgresqlOptions {
@@ -25,7 +26,8 @@ impl PostgresqlOptions {
         PostgresqlOptions{
             connection: conn,
             table_alloc: Arc::new(osm2pgsql_alloc),
-            table_spec: make_table_spec(style, false)
+            table_spec: make_table_spec(style, false),
+            extended: false,
         }
     }
     
@@ -33,7 +35,8 @@ impl PostgresqlOptions {
         PostgresqlOptions{
             connection: conn,
             table_alloc: Arc::new(extended_alloc),
-            table_spec: make_table_spec(style, true)
+            table_spec: make_table_spec(style, true),
+            extended: true,
         }
     }
     
@@ -41,7 +44,8 @@ impl PostgresqlOptions {
         PostgresqlOptions {
             connection: conn,
             table_alloc: alloc_func,
-            table_spec: table_spec
+            table_spec: table_spec,
+            extended: false,
         }
     }
     
