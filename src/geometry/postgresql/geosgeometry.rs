@@ -120,10 +120,14 @@ impl GeosGeometry {
     
         
     pub fn from_complicatedpolygon(cp: &ComplicatedPolygonGeometry) -> Result<GeosGeometry> {
+        if cp.parts.is_empty() {
+            return Err(Error::new(ErrorKind::Other, "empty complicatedpolygongeometry!"));
+        }
         unsafe {
             let handle = GEOS_init_r();
             
             let geometry = if cp.parts.len() == 0 {   
+                //can't happen
                 let mut v = Vec::new();         
                 GEOSGeom_createCollection_r(handle, 7 as i32, v.as_mut_ptr(), 0)
             } else if cp.parts.len()==1 {
@@ -140,16 +144,20 @@ impl GeosGeometry {
                     match from_complicatedpolygon_part(handle, p) {
                         Ok(poly) => {parts.push(poly); },
                         Err(e) => {
-                            for p in parts {
+                            println!("\npart {} / {} failed {:?}\n", parts.len(), cp.parts.len(),e);
+                            /*for p in parts {
                                 GEOSGeom_destroy_r(handle, p);
-                                GEOS_finish_r(handle);
                             }
-                            return Err(e);
+                            GEOS_finish_r(handle);
+                            return Err(e);*/
                         }
                     }
                     
                 }
-                
+                if parts.is_empty() {
+                    GEOS_finish_r(handle);
+                    return Err(Error::new(ErrorKind::Other, "complicatedpolygongeometry with no valid parts"));
+                }
                 GEOSGeom_createCollection_r(handle, 6 as i32, parts.as_mut_ptr(), parts.len() as u32)
             };
             
