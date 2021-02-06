@@ -14,13 +14,13 @@ mod minzoom;
 pub mod postgresql;
 mod wkb;
 
-use crate::elements::{Quadtree,Node,Way,Relation};
+use crate::elements::{Quadtree,Node,Way,Relation,Element};
 pub use crate::geometry::waywithnodes::{CollectWayNodes};
 pub use crate::geometry::position::{LonLat,XY,get_srid};
 
 pub use crate::geometry::process_geometry::{process_geometry,OutputType};
 pub use crate::geometry::style::GeometryStyle;
-pub use crate::geometry::geometry_block::{GeometryBlock,Object,};
+pub use crate::geometry::geometry_block::{GeometryBlock};
 pub use crate::geometry::elements::{PointGeometry,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,LinestringGeometry,SimplePolygonGeometry};
 
 use std::collections::BTreeMap;
@@ -46,7 +46,7 @@ impl WorkingBlock {
 
 
 pub enum OtherData {
-    Errors(Vec<(Object, String)>),
+    Errors(Vec<(Element, String)>),
     Messages(Vec<String>),
     GeometryBlocks(BTreeMap<Quadtree,GeometryBlock>)
 }

@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 
 use crate::callback::CallFinish;
-use crate::elements::{PrimitiveBlock, Quadtree,Bbox};
+use crate::elements::{PrimitiveBlock, Quadtree,Bbox, Block};
 use crate::pbfformat::header_block::{make_header_block_stored_locs, HeaderType};
 use crate::pbfformat::read_file_block::pack_file_block;
 use crate::pbfformat::writefile;

@@ -1,5 +1,5 @@
-use crate::elements::{Node,PrimitiveBlock,Quadtree};
-use crate::geometry::{WorkingBlock,Timings,OtherData,Object,GeometryStyle,LonLat};
+use crate::elements::{Node,PrimitiveBlock,Quadtree,Block,Element};
+use crate::geometry::{WorkingBlock,Timings,OtherData,GeometryStyle,LonLat};
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
 
@@ -105,7 +105,7 @@ pub struct CollectWayNodes<T: ?Sized> {
     
     out: Box<T>,
     locs: Locations,
-    errs: Vec<(Object,String)>,
+    errs: Vec<(Element,String)>,
     
     tm: f64
 }
@@ -119,7 +119,7 @@ impl<T> CollectWayNodes<T>
 
     pub fn process_tile(&mut self, pb: PrimitiveBlock) -> Result<WorkingBlock> {
         
-        let mut res = WorkingBlock::new(pb.index, pb.quadtree.clone(), pb.end_date);
+        let mut res = WorkingBlock::new(pb.get_index(), pb.get_quadtree().clone(), pb.get_end_date());
         
         self.locs.remove_finished_tiles(&pb.quadtree);
         res.pending_nodes = self.locs.add_tile(pb.quadtree, pb.nodes);
@@ -127,7 +127,7 @@ impl<T> CollectWayNodes<T>
         for w in pb.ways {
             match self.locs.get_locs(&w.refs) {
                 Ok(rr) => { res.pending_ways.push((w, rr)); },
-                Err(e) => { self.errs.push((Object::Way(w), e.to_string())); }
+                Err(e) => { self.errs.push((Element::Way(w), e.to_string())); }
             }
         }
         

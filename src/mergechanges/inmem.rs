@@ -1,4 +1,4 @@
-use crate::elements::{PrimitiveBlock,IdSet, Bbox};
+use crate::elements::{PrimitiveBlock,IdSet, Bbox, Block};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::header_block::HeaderType;

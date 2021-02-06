@@ -17,11 +17,16 @@ pub use combine_block::{
     merge_changes_minimal, merge_changes_primitive,
 };
 
+
+
 pub use idset::{IdSet,IdSetSet,IdSetBool,IdSetAll};
 pub use minimal_block::{MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, QuadtreeBlock};
 pub use primitive_block::{
-    Info, Member, Node, PrimitiveBlock, Relation, Tag, Way,
+    Info, Member, Node, PrimitiveBlock, Relation, Tag, Way, Block
 };
+
+
+
 pub use quadtree::{Bbox, Quadtree};
 pub use traits::*;
 

@@ -143,9 +143,11 @@ impl GeosGeometry {
                 for p in &cp.parts {
                     match from_complicatedpolygon_part(handle, p) {
                         Ok(poly) => {parts.push(poly); },
-                        Err(e) => {
-                            println!("\npart {} / {} failed {:?}\n", parts.len(), cp.parts.len(),e);
-                            /*for p in parts {
+                        Err(_) => {
+                            // just skip this part
+                            
+                            /*println!("\npart {} / {} failed {:?}\n", parts.len(), cp.parts.len(),e);
+                            for p in parts {
                                 GEOSGeom_destroy_r(handle, p);
                             }
                             GEOS_finish_r(handle);

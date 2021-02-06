@@ -1,5 +1,5 @@
-use crate::elements::{Relation,ElementType,Quadtree};
-use crate::geometry::{WorkingBlock,GeometryStyle,Object,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
+use crate::elements::{Relation,ElementType,Quadtree,Element};
+use crate::geometry::{WorkingBlock,GeometryStyle,ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,Timings,OtherData};
 use crate::geometry::position::{point_in_poly_xy};
 use crate::geometry::elements::collect_rings;
 use crate::callback::CallFinish;
@@ -97,7 +97,7 @@ struct MultiPolygons {
     pending_relations: BTreeMap<i64, (Quadtree, Relation, BTreeSet<i64>)>,
     pending_ways: PendingWays,
     
-    errs: Vec<(Object,String)>,
+    errs: Vec<(Element,String)>,
     pass_rels:bool,
     tma: f64,
     tmb: f64,
@@ -219,7 +219,7 @@ impl MultiPolygons {
             Err(e) => {
                 self.err_count += 1;
                 if self.errs.len() < MAX_ERR_COUNT {
-                    self.errs.push((Object::Relation(rel), e.to_string()));
+                    self.errs.push((Element::Relation(rel), e.to_string()));
                 }
                 None
             },
@@ -339,7 +339,7 @@ impl MultiPolygons {
         (outblocks,(rels_taken,ways_taken,rels_finished,ways_finished))
     }
     
-    pub fn finish(&mut self) -> (BTreeMap<Quadtree,WorkingBlock>, Vec<(Object,String)>, Vec<String>) {
+    pub fn finish(&mut self) -> (BTreeMap<Quadtree,WorkingBlock>, Vec<(Element,String)>, Vec<String>) {
         let mut tm=ThreadTimer::new();
         //let mut res = WorkingBlock::new(-1, Quadtree::empty(), 0);
         

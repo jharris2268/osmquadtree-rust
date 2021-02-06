@@ -46,8 +46,10 @@ fn find_from_tags(vals: &BTreeMap<Tag,(i64,String)>, tgs: &[Tag]) -> Option<i64>
     ans
 }
 
+const MAX_MINZOOM: i64 = 18;
+
 fn area_minzoom(area: f64, min_area: f64) -> i64 {
-    res_zoom(f64::sqrt(area / min_area)).floor() as i64
+    i64::min(MAX_MINZOOM, res_zoom(f64::sqrt(area / min_area)).floor() as i64)
 }
 
 fn res_zoom(res: f64) -> f64 {
@@ -59,18 +61,19 @@ fn res_zoom(res: f64) -> f64 {
 
 pub struct MinZoomSpec {
     pub min_area: f64,
+    pub max_minzoom: Option<i64>,
     pub points: BTreeMap<Tag,(i64,String)>,
     pub lines: BTreeMap<Tag,(i64,String)>,
     pub polygons: BTreeMap<Tag,(i64,String)>,
 }
 
 impl MinZoomSpec {
-    pub fn new(min_area: f64) -> MinZoomSpec {
-        MinZoomSpec{min_area: min_area, points: BTreeMap::new(), lines: BTreeMap::new(), polygons: BTreeMap::new()}
+    pub fn new(min_area: f64, max_minzoom: Option<i64>) -> MinZoomSpec {
+        MinZoomSpec{min_area: min_area, max_minzoom: max_minzoom, points: BTreeMap::new(), lines: BTreeMap::new(), polygons: BTreeMap::new()}
     }
     
-    pub fn from_reader<R: Read>(min_area: f64, reader: R) -> Result<MinZoomSpec> {
-        let mut res = MinZoomSpec::new(min_area);
+    pub fn from_reader<R: Read>(min_area: f64, max_minzoom: Option<i64>, reader: R) -> Result<MinZoomSpec> {
+        let mut res = MinZoomSpec::new(min_area, max_minzoom);
         
         for (line,row) in csv::Reader::from_reader(reader).records().enumerate() {
             match row {
@@ -106,68 +109,105 @@ impl MinZoomSpec {
         Ok(res)
     }
     
-    pub fn default() -> MinZoomSpec {
-        MinZoomSpec::from_reader(5.0, DEFAULT_MINZOOM_VALUES.as_bytes()).expect("!!")
+    pub fn default(min_area: f64, max_minzoom: Option<i64>) -> MinZoomSpec {
+        MinZoomSpec::from_reader(min_area, max_minzoom, DEFAULT_MINZOOM_VALUES.as_bytes()).expect("!!")
+    }
+    
+    fn check_max_minzoom(&self, v: Option<i64>) -> Option<i64> {
+        match self.max_minzoom {
+            None => v,
+            Some(mx) => match v {
+                None => None,
+                Some(m) => {
+                    if m > mx {
+                        None
+                    } else {
+                        Some(m)
+                    }
+                }
+            }
+        }
     }
     
     fn find_point(&self, tgs: &[Tag]) -> Option<i64> {
-        find_from_tags(&self.points, tgs)
+        self.check_max_minzoom(find_from_tags(&self.points, tgs))
     }
     
     fn find_line(&self, tgs: &[Tag]) -> Option<i64> {
-        find_from_tags(&self.lines, tgs)
+        self.check_max_minzoom(find_from_tags(&self.lines, tgs))
     }
     
     fn find_polygon(&self, tgs: &[Tag], a: f64) -> Option<i64> {
         match find_from_tags(&self.polygons, tgs) {
             None => None,
             Some(p) => {
-                Some(i64::max(p, area_minzoom(a, self.min_area)))
+                self.check_max_minzoom(Some(i64::max(p, area_minzoom(a, self.min_area))))
             }
         }
     }
     
     fn find_all(&self, gb: &mut GeometryBlock) -> usize {
         let mut na=0;
-        for p in gb.points.iter_mut() {
+        
+        for mut p in std::mem::take(&mut gb.points) {
             match self.find_point(&p.tags) {
-                None => {},
+                None => {
+                    if self.max_minzoom.is_none() {
+                        gb.points.push(p);
+                    }
+                },
                 Some(v) => {
                     p.minzoom = Some(v);
                     p.quadtree = p.quadtree.round(v as usize);
                     na+=1;
+                    gb.points.push(p);
                 }
             }
         }
         
-        for p in gb.linestrings.iter_mut() {
+        for mut p in std::mem::take(&mut gb.linestrings) {
             match self.find_line(&p.tags) {
-                None => {},
+                None => {
+                    if self.max_minzoom.is_none() {
+                        gb.linestrings.push(p);
+                    }
+                },
                 Some(v) => {
                     p.minzoom = Some(v);
                     p.quadtree = p.quadtree.round(v as usize);
                     na+=1;
+                    gb.linestrings.push(p);
                 }
             }
         }
         
-        for p in gb.simple_polygons.iter_mut() {
+        for mut p in std::mem::take(&mut gb.simple_polygons) {
             match self.find_polygon(&p.tags, p.area) {
-                None => {},
+                None => {
+                    if self.max_minzoom.is_none() {
+                        gb.simple_polygons.push(p);
+                    }
+                },
                 Some(v) => {
                     p.minzoom = Some(v);
                     p.quadtree = p.quadtree.round(v as usize);
                     na+=1;
+                    gb.simple_polygons.push(p);
                 }
             }
         }
-        for p in gb.complicated_polygons.iter_mut() {
+        for mut p in std::mem::take(&mut gb.complicated_polygons) {
             match self.find_polygon(&p.tags, p.area) {
-                None => {},
+                None => {
+                    if self.max_minzoom.is_none() {
+                        gb.complicated_polygons.push(p);
+                    }
+                },
                 Some(v) => {
                     p.minzoom = Some(v);
                     p.quadtree = p.quadtree.round(v as usize);
                     na+=1;
+                    gb.complicated_polygons.push(p);
                 }
             }
         }

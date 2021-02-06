@@ -13,9 +13,24 @@ pub use crate::elements::way::Way;
 
 use crate::elements::common::{PackStringTable};
 use crate::elements::dense::Dense;
-use crate::elements::traits::{WithChangetype,Changetype,ElementType};
+use crate::elements::traits::{WithChangetype,Changetype,ElementType,Element};
 
 use std::io::{Error, ErrorKind, Result};
+
+
+
+pub trait Block {
+    fn get_index(&self) -> i64;
+    fn get_quadtree<'a>(&'a self) -> &'a quadtree::Quadtree;
+    fn get_end_date(&self) -> i64;
+    
+    
+    fn len(&self) -> usize;
+    fn weight(&self) -> usize;
+    
+    fn add_object(&mut self, ele: Element) -> Result<()>;
+}
+
 
 #[derive(Debug)]
 pub struct PrimitiveBlock {
@@ -83,6 +98,70 @@ fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype, usize, usiz
     res
 }
 
+
+
+
+impl Block for PrimitiveBlock {
+    fn get_index(&self) -> i64 { self.index }
+    fn get_quadtree<'a>(&'a self) -> &'a quadtree::Quadtree { &self.quadtree }
+    fn get_end_date(&self) -> i64 { self.end_date }
+    
+    
+    fn len(&self) -> usize {
+        self.nodes.len() + self.ways.len() + self.relations.len()
+    }
+    fn weight(&self) -> usize {
+        self.nodes.len() + 8 * self.ways.len() + 20 * self.relations.len()
+    }
+    
+    fn add_object(&mut self, ele: Element) -> Result<()> {
+        match ele {
+            Element::Node(n) => { self.nodes.push(n); Ok(()) },
+            Element::Way(w) => { self.ways.push(w); Ok(()) },
+            Element::Relation(r) => { self.relations.push(r); Ok(()) },
+            _ => Err(Error::new(ErrorKind::Other, format!("wrong element type {:?}", ele)))
+        }
+    }
+    
+}
+
+impl From<Node> for Element {
+    fn from(n: Node) -> Element {
+        Element::Node(n)
+    }
+}
+impl From<Way> for Element {
+    fn from(n: Way) -> Element {
+        Element::Way(n)
+    }
+}
+impl From<Relation> for Element {
+    fn from(n: Relation) -> Element {
+        Element::Relation(n)
+    }
+}
+    
+
+
+impl IntoIterator for PrimitiveBlock {
+    type Item = Element;
+    type IntoIter = Box<dyn Iterator<Item = Element>>;
+    fn into_iter(self: Self) -> Self::IntoIter {
+        
+        Box::new(self.nodes.into_iter().map(Element::from)
+            .chain(
+                self.ways.into_iter().map(Element::from)
+            )
+            .chain(
+                self.relations.into_iter().map(Element::from)
+            ))
+        
+    }
+}
+
+    
+    
+
 impl PrimitiveBlock {
     pub fn new(index: i64, location: u64) -> PrimitiveBlock {
         PrimitiveBlock {
@@ -109,9 +188,7 @@ impl PrimitiveBlock {
         self.relations.extend(std::mem::take(&mut other.relations));
     }
     
-    pub fn len(&self) -> usize {
-        self.nodes.len() + self.ways.len() + self.relations.len()
-    }
+    
 
     pub fn read(
         index: i64,

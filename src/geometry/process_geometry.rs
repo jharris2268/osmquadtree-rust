@@ -17,7 +17,7 @@ use crate::update::get_file_locs;
 use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock,pack_file_block};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all;
 use crate::mergechanges::inmem::read_filter;
-use crate::elements::Quadtree;
+use crate::elements::{Quadtree,Block};
 use std::io::{Result,/*Error,ErrorKind*/};
 use std::sync::Arc;
 use std::collections::BTreeMap;
@@ -291,7 +291,7 @@ pub enum OutputType {
 }
 
 
-pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, style_name: Option<&str>, numchan: usize) -> Result<()> {
+pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, timestamp: Option<&str>, find_minzoom: bool, style_name: Option<&str>, max_minzoom: Option<i64>, numchan: usize) -> Result<()> {
 
 
     let mut tx=LogTimes::new();
@@ -314,7 +314,12 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
     };
     tx.add("load_style");
     
-    let minzoom: Option<MinZoomSpec> = if find_minzoom { Some(MinZoomSpec::default()) } else { None };
+    let minzoom: Option<MinZoomSpec> = if find_minzoom {
+        println!("MinZoomSpec::default({}, {:?})", 5.0, max_minzoom);
+        Some(MinZoomSpec::default(5.0, max_minzoom))
+    } else {
+        None
+    };
     tx.add("load_minzoom");
     
     let out: Option<Box<dyn CallFinish<CallType=GeometryBlock,ReturnType=Timings>>> = match &outfn {
@@ -345,11 +350,32 @@ pub fn process_geometry(prfx: &str, outfn: OutputType, filter: Option<&str>, tim
     type CallFinishWorkingBlock = Box<dyn CallFinish<CallType=WorkingBlock,ReturnType=Timings>>;
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>> = if numchan == 0 {
-        let fm = Box::new(FindMinZoom::new(cf, minzoom));
+        let fm: CallFinishWorkingBlock = if find_minzoom {
+            Box::new(FindMinZoom::new(cf, minzoom))
+        } else {
+            cf
+        };
+        
         let mg = Box::new(MakeGeometries::new(fm, style.clone(),true));
-        let mm = Box::new(ProcessMultiPolygons::new(style.clone(), mg));
-        let rt = Box::new(AddRelationTags::new(mm, style.clone()));
-        let ap = Box::new(AddParentTag::new(rt, style.clone()));
+        
+        let mm: CallFinishWorkingBlock = if style.multipolygons || style.boundary_relations { 
+            Box::new(ProcessMultiPolygons::new(style.clone(), mg))
+        } else {
+            mg
+        };
+        
+        let rt: CallFinishWorkingBlock = if !style.relation_tag_spec.is_empty() {
+            Box::new(AddRelationTags::new(mm, style.clone()))
+        } else {
+            mm
+        };
+        
+        let ap: CallFinishWorkingBlock = if !style.parent_tags.is_empty() {
+            Box::new(AddParentTag::new(rt, style.clone()))
+        } else {
+            rt
+        };
+        
         let ww = Box::new(CollectWayNodes::new(ap, style.clone()));
         make_read_primitive_blocks_combine_call_all(ww)
     } else {

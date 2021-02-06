@@ -426,30 +426,7 @@ where
             }
         }
         mm
-        /*
-        for n in bl.nodes {
-            self.get_block(n.quadtree).nodes.push(n);
-            self.count+=1;
-        }
-        for w in bl.ways {
-            self.get_block(w.quadtree).ways.push(w);
-            self.count+=5;
-        }
         
-        for r in bl.relations {
-            self.get_block(r.quadtree).relations.push(r);
-            self.count+=10;
-        }
-        
-        if self.count > self.write_at {
-            for (_,v) in std::mem::take(&mut self.pending) {
-                mm.push(v);
-            }
-            self.count=0;
-        }
-        mm
-          */      
-            
         
     }
 
@@ -507,29 +484,36 @@ where
         let tx = Timer::new();
         let mm = self.add_all(bl);
         self.tm += tx.since();
-        /*for m in mm {
-            self.out.call(m);
-        }*/
+        
         self.out.call(mm);
     }
 
     fn finish(&mut self) -> io::Result<Timings> {
         let mut mm = Vec::new();
         for (_, b) in std::mem::take(&mut self.pending) {
-            //self.out.call(b);
             mm.push(b);
         }
         self.out.call(mm);
         
         let mut r = self.out.finish()?;
-        /*r.add_other(
-            "quadtreetree",
-            OtherData::QuadtreeTree(self.groups.take().unwrap()),
-        );*/
         r.add("collect temp", self.tm);
         Ok(r)
     }
 }
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
 
 fn write_temp_blocks(
     infn: &str,
@@ -567,30 +551,17 @@ fn write_temp_blocks(
         
         let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
             Vec::new();
-        //let mut i=50-numchan;
-        //let ww = write_at / numchan;
-        //let mut wwi = ww * 17 / 20;
         
         for wt in wts { 
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
             let pp = make_packprimblock_many(wt2, true);
             pcs.push(Box::new(Callback::new(Box::new(CollectTemp::new(pp, limit/numchan, splitat, groups.clone())))));
-            //wwi +=ww / 10;
+        
         }
         let ccw = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
         
         
-        /*let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
-            Vec::new();
-        for wt in wts {
-            let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-            pcs.push(Box::new(Callback::new(make_packprimblock(wt2, true))));
-        }
-        let pc = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
         
-        let ccw = Box::new(Callback::new(Box::new(CollectTemp::new(
-            pc, limit, splitat, groups,
-        ))));*/
         
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, ccw)), numchan);
         let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
@@ -728,10 +699,7 @@ where
         let mut r = self.out.finish()?;
         r.add("resortblocks", self.tm);
         r.add("packblocks", self.tm2);
-        /*r.add_other(
-            "quadtreetree",
-            OtherData::QuadtreeTree(self.groups.take().unwrap()),
-        );*/
+        
         Ok(r)
     }
 }

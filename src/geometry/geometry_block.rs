@@ -1,26 +1,15 @@
 use crate::geometry::{PointGeometry,ComplicatedPolygonGeometry,LinestringGeometry,SimplePolygonGeometry};
-use crate::elements::{Quadtree,Node,Way,Relation};
+use crate::elements::{Quadtree,Block,Element};
 use crate::geometry::pack_geometry::{pack_geometry_block, unpack_geometry_block};
 use crate::geometry::elements::GeoJsonable;
 
 use crate::utils::timestamp_string;
-use std::io::Result;
+use std::io::{Error,ErrorKind,Result};
 use std::fmt;
 use serde::Serialize;
 use serde_json::{json,Value,Map};
 
 
-
-pub enum Object {
-    Node(Node),
-    Way(Way),
-    Relation(Relation),
-    
-    PointGeometry(PointGeometry),
-    LinestringGeometry(LinestringGeometry),
-    SimplePolygonGeometry(SimplePolygonGeometry),
-    ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),
-}
 
 #[derive(Serialize)]
 pub struct GeometryBlock {
@@ -35,6 +24,32 @@ pub struct GeometryBlock {
     
 }
 
+impl Block for GeometryBlock {
+    fn get_index(&self) -> i64 { self.index }
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.quadtree }
+    fn get_end_date(&self) -> i64 { self.end_date }
+    
+    
+    fn len(&self) -> usize {
+        self.points.len() + self.linestrings.len() + self.simple_polygons.len() + self.complicated_polygons.len()
+    }
+    fn weight(&self) -> usize {
+        self.points.len() + 8 * self.linestrings.len() + 8 * self.simple_polygons.len() + 20 * self.complicated_polygons.len()
+    }
+    
+    fn add_object(&mut self, ele: Element) -> Result<()> {
+        match ele {
+            Element::PointGeometry(p) => { self.points.push(p); Ok(()) },
+            Element::LinestringGeometry(l) => { self.linestrings.push(l); Ok(()) },
+            Element::SimplePolygonGeometry(sp) => { self.simple_polygons.push(sp); Ok(()) },
+            Element::ComplicatedPolygonGeometry(cp) => { self.complicated_polygons.push(cp); Ok(()) },
+            _ => Err(Error::new(ErrorKind::Other, format!("wrong element type {:?}", ele)))
+        }
+    }
+    
+}
+
+
 impl GeometryBlock {
     pub fn new(index: i64, quadtree: Quadtree, end_date: i64) -> GeometryBlock {
         GeometryBlock{index: index,quadtree: quadtree,end_date: end_date, points:Vec::new(), linestrings:Vec::new(), simple_polygons:Vec::new(), complicated_polygons:Vec::new()}
@@ -48,9 +63,6 @@ impl GeometryBlock {
         pack_geometry_block(self)
     }
     
-    pub fn len(&self) -> usize {
-        self.points.len()+self.linestrings.len()+self.simple_polygons.len()+self.complicated_polygons.len()
-    }
     
     pub fn extend(&mut self, other: GeometryBlock) {
         self.points.extend(other.points);

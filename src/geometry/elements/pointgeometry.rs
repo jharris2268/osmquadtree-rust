@@ -19,7 +19,7 @@ pub fn pack_tags(tgs: &[Tag]) -> std::io::Result<Value> {
 }
 
 
-#[derive(Serialize)]
+#[derive(Debug,Serialize)]
 pub struct PointGeometry {
     pub id: i64,
     pub info: Option<Info>,

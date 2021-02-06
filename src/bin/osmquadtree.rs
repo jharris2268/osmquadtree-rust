@@ -105,7 +105,13 @@ fn dump_geometry_style(outfn: Option<&str>) -> Result<()> {
     serde_json::to_writer_pretty(&mut f, &GeometryStyle::default())?;
     Ok(())
 }
-    
+
+fn get_i64(x: Option<&str>) -> Option<i64> {
+    match x {
+        None=>None,
+        Some(t) => Some(t.parse().expect("expected integer argument"))
+    }
+}
 
 const NUMCHAN_DEFAULT: usize = 4;
 
@@ -263,6 +269,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -274,6 +281,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -285,6 +293,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -296,6 +305,7 @@ fn main() {
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -308,6 +318,7 @@ fn main() {
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -320,6 +331,7 @@ fn main() {
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -334,6 +346,7 @@ fn main() {
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
                 .arg(Arg::with_name("EXEC_INDICES").short("-I").long("--exec_inidices").help("execute indices [can be very slow for planet imports]"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -478,6 +491,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -489,6 +503,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -500,6 +515,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -511,6 +527,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -528,6 +545,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -545,6 +563,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -562,6 +581,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         },
@@ -583,6 +603,7 @@ fn main() {
                 geom.value_of("TIMESTAMP"),
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
                 value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
             )
         }

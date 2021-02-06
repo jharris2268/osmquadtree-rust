@@ -1,5 +1,16 @@
 use crate::elements::{Tag,Quadtree,Info};
-
+use crate::elements::{Node,Way,Relation};
+use crate::geometry::{PointGeometry,LinestringGeometry,SimplePolygonGeometry,ComplicatedPolygonGeometry};
+#[derive(Debug)]
+pub enum Element {
+    Node(Node),
+    Way(Way),
+    Relation(Relation),
+    PointGeometry(PointGeometry),
+    LinestringGeometry(LinestringGeometry),
+    SimplePolygonGeometry(SimplePolygonGeometry),
+    ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),
+}
 
 
 #[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
