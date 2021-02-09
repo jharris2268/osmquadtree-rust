@@ -109,6 +109,7 @@ impl CallFinish for WriteFileInternalLocs {
 pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized>(
     out: Box<T>,
     includeqts: bool,
+    use_index_as_key: bool
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
     let conv = Box::new(move |bl: PrimitiveBlock| {
         if bl.len() == 0 {
@@ -116,7 +117,8 @@ pub fn make_packprimblock<T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnTy
         }
         let xx = bl.pack(includeqts, false).expect("failed to pack");
         let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
-        let i = if includeqts { bl.quadtree.as_int() } else { bl.index as i64};
+        let i = if use_index_as_key { bl.index } else { bl.quadtree.as_int() };
+        
         vec![(i, ob)]
     });
     return Box::new(CallAll::new(out, "pack", conv));
@@ -127,6 +129,7 @@ pub fn make_packprimblock_many<
 >(
     out: Box<T>,
     includeqts: bool,
+    use_index_as_key: bool
 ) -> Box<impl CallFinish<CallType = Vec<PrimitiveBlock>, ReturnType = Timings>> {
     let conv = Box::new(move |bls: Vec<PrimitiveBlock>| {
         let mut res = Vec::new();
@@ -134,7 +137,7 @@ pub fn make_packprimblock_many<
             if bl.len() > 0 {
                 let xx = bl.pack(includeqts, false).expect("failed to pack");
                 let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
-                let i = if includeqts { bl.quadtree.as_int() } else { bl.index as i64};
+                let i = if use_index_as_key { bl.index } else { bl.quadtree.as_int() };
                 res.push((i, ob));
             }
         }

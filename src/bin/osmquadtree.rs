@@ -64,7 +64,7 @@ fn run_sortblocks(
     let groups: Arc<QuadtreeTree> = Arc::from(find_groups(&qtsfn, numchan, maxdepth, target, mintarget)?);
     println!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
-        limit = 40000000usize / (groups.len() / (splitat as usize));
+        limit = 30000000usize / (groups.len() / (splitat as usize));
         if tempinmem {
             limit = usize::max(1000, limit / 10);
         }
@@ -228,6 +228,7 @@ fn main() {
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
@@ -460,6 +461,7 @@ fn main() {
                 filter.value_of("OUTFN").unwrap(),
                 filter.value_of("TEMPFN"),
                 filter.value_of("FILTER"),
+                filter.is_present("FILTEROBJS"),
                 filter.value_of("TIMESTAMP"),
                 filter.is_present("KEEPTEMPS"),
                 value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)

@@ -25,6 +25,8 @@ pub struct GeometryBlock {
 }
 
 impl Block for GeometryBlock {
+    fn with_quadtree(q: Quadtree) -> Self { GeometryBlock::new(0,q,0) }
+        
     fn get_index(&self) -> i64 { self.index }
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.quadtree }
     fn get_end_date(&self) -> i64 { self.end_date }
@@ -47,6 +49,12 @@ impl Block for GeometryBlock {
         }
     }
     
+    fn sort(&mut self) {
+        self.points.sort_by_key(|p| { p.id });
+        self.linestrings.sort_by_key(|p| { p.id });
+        self.simple_polygons.sort_by_key(|p| { p.id });
+        self.complicated_polygons.sort_by_key(|p| { p.id });
+    }
 }
 
 
@@ -69,13 +77,6 @@ impl GeometryBlock {
         self.linestrings.extend(other.linestrings);
         self.simple_polygons.extend(other.simple_polygons);
         self.complicated_polygons.extend(other.complicated_polygons);
-    }
-    
-    pub fn sort(&mut self) {
-        self.points.sort_by_key(|p| { p.id });
-        self.linestrings.sort_by_key(|p| { p.id });
-        self.simple_polygons.sort_by_key(|p| { p.id });
-        self.complicated_polygons.sort_by_key(|p| { p.id });
     }
     
     pub fn to_geojson(&self) -> Result<Value> {

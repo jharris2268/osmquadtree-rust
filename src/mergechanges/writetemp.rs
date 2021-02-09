@@ -1,4 +1,4 @@
-use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree,Bbox};
+use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree,Bbox,Block};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::header_block::HeaderType;
@@ -9,7 +9,7 @@ use crate::mergechanges::filter_elements::prep_bbox_filter;
 use crate::sortblocks::{Timings,OtherData,TempData,WriteFile};
 use crate::sortblocks::writepbf::{make_packprimblock_many,make_packprimblock};
 use crate::update::{ParallelFileLocs,get_file_locs};
-use crate::sortblocks::sortblocks::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
+use crate::sortblocks::tempfile::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
         read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
         write_tempfilesplit_locs};
 
@@ -113,7 +113,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
             None => None,
             Some((q,ww)) => {
                 let mut pb = PrimitiveBlock::new(q + self.way_off,0);
-                pb.quadtree=Quadtree::new(q);
+                pb.quadtree=Quadtree::new(q + self.way_off);
                 pb.ways.extend(ww);
                 Some(pb)
             }
@@ -125,7 +125,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
             None => None,
             Some((q,rr)) => {
                 let mut pb = PrimitiveBlock::new(q + self.rel_off,0);
-                pb.quadtree=Quadtree::new(q);
+                pb.quadtree=Quadtree::new(q + self.rel_off);
                 pb.relations.extend(rr);
                 Some(pb)
             }
@@ -176,7 +176,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
         for (q,mut ww) in self.curr_way.get_all() {
             if ww.len() > 0 {
                 let mut pb = PrimitiveBlock::new(q + self.way_off,0);
-                pb.quadtree=Quadtree::new(q);
+                pb.quadtree=Quadtree::new(q + self.way_off);
                 pb.ways.append(&mut ww);
                 pb.sort();
                 res.push(pb);
@@ -185,7 +185,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
         for (q,mut rr) in self.curr_relation.get_all() {
             if rr.len() > 0 {
                 let mut pb = PrimitiveBlock::new(q + self.rel_off,0);
-                pb.quadtree=Quadtree::new(q);
+                pb.quadtree=Quadtree::new(q + self.rel_off);
                 pb.relations.append(&mut rr);
                 pb.sort();
                 res.push(pb);
@@ -254,7 +254,7 @@ pub fn write_temp_blocks(
     ));
     
     let (mut res, d) = if numchan == 0 {
-        let pc = make_packprimblock_many(wt, true);
+        let pc = make_packprimblock_many(wt, true, true);
         let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at));
         let pp = make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true);
 
@@ -265,7 +265,7 @@ pub fn write_temp_blocks(
             Vec::new();
         for wt in wts {
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-            let pc = make_packprimblock_many(wt2, true);
+            let pc = make_packprimblock_many(wt2, true, true);
             let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at/numchan));
             pcs.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true))));
         }
@@ -299,7 +299,7 @@ fn collect_blocks((k, fbs): (i64, Vec<FileBlock>)) -> PrimitiveBlock {
     
 
 
-pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter: Option<&str>, timestamp: Option<&str>, keep_temps: bool, numchan: usize) -> Result<()> {
+pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, filter: Option<&str>, filter_objs: bool, timestamp: Option<&str>, keep_temps: bool, numchan: usize) -> Result<()> {
     let mut tx=LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
     
@@ -316,10 +316,14 @@ pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, fi
     
     let ids:Arc<dyn IdSet> = match filter {
         Some(_) => {
-            let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
-            tx.add("prep_bbox_filter");
-            println!("have: {}", ids);
-            Arc::from(ids)
+            if filter_objs {
+                let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+                tx.add("prep_bbox_filter");
+                println!("have: {}", ids);
+                Arc::from(ids)
+            } else {
+                Arc::new(IdSetAll())
+            }
         },
         None => { Arc::new(IdSetAll()) }
     };
@@ -446,14 +450,14 @@ pub fn run_mergechanges(inprfx: &str, outfn: &str, filter: Option<&str>, filter_
     let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = if numchan == 0 {
-        let pc = make_packprimblock(wf, true);
+        let pc = make_packprimblock(wf, true, true);
         make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true)
     } else {
         let wfs = CallbackSync::new(wf, numchan);
         let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>>> = Vec::new();
         for w in wfs {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            let pc = make_packprimblock(w2, true);
+            let pc = make_packprimblock(w2, true, true);
             pps.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true))))
         }
         Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))

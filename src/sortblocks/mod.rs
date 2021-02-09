@@ -3,6 +3,8 @@ pub mod prepgraph;
 pub mod quadtreetree;
 pub mod sortblocks;
 pub mod writepbf;
+pub mod inmem;
+pub mod tempfile;
 
 use crate::elements::PrimitiveBlock;
 
@@ -25,5 +27,6 @@ pub type Timings = crate::utils::Timings<OtherData>;
 
 pub use prepgraph::find_groups;
 pub use quadtreetree::{QuadtreeTree, QuadtreeTreeItem};
-pub use sortblocks::{sort_blocks, sort_blocks_inmem};
+pub use tempfile::sort_blocks;
+pub use inmem::sort_blocks_inmem;
 pub use writepbf::{WriteFile, WriteFileInternalLocs};

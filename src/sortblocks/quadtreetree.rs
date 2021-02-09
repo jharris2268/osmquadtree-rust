@@ -101,7 +101,7 @@ impl<'a> QuadtreeTree {
         self.count
     }
 
-    fn find_int(&'a self, qt: Quadtree) -> (usize, &'a QuadtreeTreeItem) {
+    fn find_int(&'a self, qt: &Quadtree) -> (usize, &'a QuadtreeTreeItem) {
         if qt.as_int() < 0 {
             panic!("can't find neg qt");
         }
@@ -120,7 +120,7 @@ impl<'a> QuadtreeTree {
         (i, t)
     }
 
-    pub fn find(&'a self, qt: Quadtree) -> (usize, &'a QuadtreeTreeItem) {
+    pub fn find(&'a self, qt: &Quadtree) -> (usize, &'a QuadtreeTreeItem) {
         let (mut i, mut t) = self.find_int(qt);
 
         loop {
@@ -135,7 +135,7 @@ impl<'a> QuadtreeTree {
         }
     }
 
-    pub fn remove(&mut self, qt: Quadtree) -> i64 {
+    pub fn remove(&mut self, qt: &Quadtree) -> i64 {
         let (i, tx) = self.find_int(qt);
         let w = tx.total;
 
@@ -169,7 +169,7 @@ impl<'a> QuadtreeTree {
         w
     }
 
-    pub fn add(&'a mut self, qt: Quadtree, w: u32) -> &'a QuadtreeTreeItem {
+    pub fn add(&'a mut self, qt: &Quadtree, w: u32) -> &'a QuadtreeTreeItem {
         if qt.as_int() < 0 {
             panic!("can't find neg qt");
         }
@@ -375,7 +375,7 @@ pub fn find_tree_groups(
         } else {
             
             for (a, _) in vv {
-                let b = tree.remove(a.clone());
+                let b = tree.remove(&a);
 
                 all.push((a, b));
                 //res.add(a,b);
@@ -389,7 +389,7 @@ pub fn find_tree_groups(
         if b >= (u32::MAX as i64) {
             println!("add {} {}??", a, b);
         }
-        res.add(a, b as u32);
+        res.add(&a, b as u32);
     }
 
     Ok(res)

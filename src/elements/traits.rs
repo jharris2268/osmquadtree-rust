@@ -149,6 +149,19 @@ pub trait WithQuadtree {
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree;
 }
 
+impl WithQuadtree for Element {
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        match self {
+            Element::Node(n) => n.get_quadtree(),
+            Element::Way(n) => n.get_quadtree(),
+            Element::Relation(n) => n.get_quadtree(),
+            Element::PointGeometry(n) => n.get_quadtree(),
+            Element::LinestringGeometry(n) => n.get_quadtree(),
+            Element::SimplePolygonGeometry(n) => n.get_quadtree(),
+            Element::ComplicatedPolygonGeometry(n) => n.get_quadtree(),
+        }
+    }
+}
 
 
 pub trait SetCommon {

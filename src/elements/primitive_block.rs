@@ -1,7 +1,7 @@
 use crate::pbfformat::read_pbf;
 use crate::pbfformat::write_pbf;
 
-use crate::elements::quadtree;
+use crate::elements::Quadtree;
 
 
 pub use crate::elements::idset::IdSet;
@@ -20,8 +20,9 @@ use std::io::{Error, ErrorKind, Result};
 
 
 pub trait Block {
+    fn with_quadtree(q: Quadtree) -> Self;
     fn get_index(&self) -> i64;
-    fn get_quadtree<'a>(&'a self) -> &'a quadtree::Quadtree;
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree;
     fn get_end_date(&self) -> i64;
     
     
@@ -29,14 +30,22 @@ pub trait Block {
     fn weight(&self) -> usize;
     
     fn add_object(&mut self, ele: Element) -> Result<()>;
+    fn sort(&mut self);
 }
+
+pub trait PackableBlock: Block {
+    fn pack(&self) -> Result<Vec<u8>>;
+    fn unpack(index: i64, data: &[u8]) -> Result<Self> where Self: Sized;
+}
+    
+
 
 
 #[derive(Debug)]
 pub struct PrimitiveBlock {
     pub index: i64,
     pub location: u64,
-    pub quadtree: quadtree::Quadtree,
+    pub quadtree: Quadtree,
     pub start_date: i64,
     pub end_date: i64,
     pub nodes: Vec<Node>,
@@ -102,8 +111,13 @@ fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype, usize, usiz
 
 
 impl Block for PrimitiveBlock {
+    fn with_quadtree(q: Quadtree) -> Self {
+        let mut b = PrimitiveBlock::new(0,0);
+        b.quadtree = q;
+        b
+    }
     fn get_index(&self) -> i64 { self.index }
-    fn get_quadtree<'a>(&'a self) -> &'a quadtree::Quadtree { &self.quadtree }
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.quadtree }
     fn get_end_date(&self) -> i64 { self.end_date }
     
     
@@ -122,7 +136,12 @@ impl Block for PrimitiveBlock {
             _ => Err(Error::new(ErrorKind::Other, format!("wrong element type {:?}", ele)))
         }
     }
-    
+    fn sort(&mut self) {
+        self.nodes.sort();
+        self.ways.sort();
+        self.relations.sort();
+    }
+     
 }
 
 impl From<Node> for Element {
@@ -159,6 +178,37 @@ impl IntoIterator for PrimitiveBlock {
     }
 }
 
+pub struct SortablePrimitiveBlock(PrimitiveBlock);
+impl Block for SortablePrimitiveBlock {
+    fn with_quadtree(q: Quadtree) -> Self { SortablePrimitiveBlock(PrimitiveBlock::with_quadtree(q)) }
+    fn get_index(&self) -> i64 { self.0.get_index() }
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.0.get_quadtree() }
+    fn get_end_date(&self) -> i64 { self.0.get_end_date() }
+    
+    
+    fn len(&self) -> usize { self.0.len() }
+    fn weight(&self) -> usize { self.0.weight() }
+    
+    fn add_object(&mut self, ele: Element) -> Result<()> { self.0.add_object(ele) }
+    
+    fn sort(&mut self) {
+        self.0.sort();
+    }
+    
+}
+impl PackableBlock for SortablePrimitiveBlock {
+    
+    
+    fn pack(&self) -> Result<Vec<u8>> {
+        self.0.pack(true, true)
+    }
+    
+    fn unpack(index: i64, data: &[u8]) -> Result<Self> {
+        Ok(SortablePrimitiveBlock(PrimitiveBlock::read(index, 0, data, false, false)?))
+    }
+}
+        
+
     
     
 
@@ -167,7 +217,7 @@ impl PrimitiveBlock {
         PrimitiveBlock {
             index: index,
             location: location,
-            quadtree: quadtree::Quadtree::new(0),
+            quadtree: Quadtree::new(0),
             start_date: 0,
             end_date: 0,
             nodes: Vec::new(),
@@ -176,12 +226,7 @@ impl PrimitiveBlock {
         }
     }
 
-    pub fn sort(&mut self) {
-        self.nodes.sort();
-        self.ways.sort();
-        self.relations.sort();
-    }
-        
+       
     pub fn extend(&mut self, mut other: PrimitiveBlock) {
         self.nodes.extend(std::mem::take(&mut other.nodes));
         self.ways.extend(std::mem::take(&mut other.ways));
@@ -222,7 +267,7 @@ impl PrimitiveBlock {
                 read_pbf::PbfTag::Data(2, d) => groups.push(d),
 
                 read_pbf::PbfTag::Value(32, qt) => {
-                    res.quadtree = quadtree::Quadtree::new(read_pbf::un_zig_zag(qt))
+                    res.quadtree = Quadtree::new(read_pbf::un_zig_zag(qt))
                 }
                 read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,

@@ -341,7 +341,7 @@ fn find_tile(tree: &QuadtreeTree, q: Option<Quadtree>) -> Option<Quadtree> {
     match q {
         None => None,
         Some(q) => {
-            let (_, t) = tree.find(q);
+            let (_, t) = tree.find(&q);
             Some(t.qt)
         }
     }
@@ -677,7 +677,7 @@ fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<Quadt
 
     let mut tree = QuadtreeTree::new();
     for ii in &head.index {
-        tree.add(ii.quadtree, 1);
+        tree.add(&ii.quadtree, 1);
     }
 
     Ok(tree)

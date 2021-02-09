@@ -176,14 +176,14 @@ pub fn make_write_file(outfn: &str, bbox: Bbox, block_size: usize, numchan: usiz
     let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(&bbox)));
     
     let pack: Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=crate::sortblocks::Timings>> = if numchan == 0 {
-        make_packprimblock(wf, false)
+        make_packprimblock(wf, false, false)
     } else {
         
         let wff = CallbackSync::new(wf, 4);
         let mut packs: Vec<Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=crate::sortblocks::Timings>>> = Vec::new();
         for w in wff {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            packs.push(Box::new(Callback::new(make_packprimblock(w2, false))));
+            packs.push(Box::new(Callback::new(make_packprimblock(w2, false, false))));
         }
         
         Box::new(CallbackMerge::new(packs, Box::new(MergeTimings::new())))

@@ -35,7 +35,7 @@ impl CallFinish for AddAll {
         let tx = Timer::new();
         let groups = self.groups.as_mut().unwrap();
         for (q, w) in mb.2 {
-            groups.add(q, w);
+            groups.add(&q, w);
         
         }
 
