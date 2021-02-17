@@ -2,7 +2,7 @@ use crate::elements::Quadtree;
 use std::collections::BTreeMap;
 use std::fmt;
 
-pub const WAY_SPLIT_SHIFT: i64 = 20;
+pub const WAY_SPLIT_SHIFT: i64 = 25;
 
 pub const WAY_SPLIT_VAL: usize = (1 << WAY_SPLIT_SHIFT) as usize;
 pub const WAY_SPLIT_MASK: i64 = (1 << WAY_SPLIT_SHIFT) - 1;

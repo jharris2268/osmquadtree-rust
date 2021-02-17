@@ -4,7 +4,7 @@ use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
 
-use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem};
+use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem,run_calcqts_prelim,run_calcqts_load_existing};
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem,QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::{parse_timestamp};
@@ -134,9 +134,27 @@ fn main() {
                 .about("calculates quadtrees for each element of a planet or extract pbf file")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
-                .arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
+                //.arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("SIMPLE").short("-s").long("--simple").help("simplier implementation, suitable for files <8gb"))
+                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
+                .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
+        )
+        .subcommand(
+            SubCommand::with_name("calcqts_prelim")
+                .about("calculates quadtrees for each element of a planet or extract pbf file")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
+                .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
+                .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
+        )
+        .subcommand(
+            SubCommand::with_name("calcqts_load_existing")
+                .about("calculates quadtrees for each element of a planet or extract pbf file")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
+                .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
+                //.arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("STOP_AT").short("-s").long("--stop_at").takes_value(true).help("location of first file block without nodes"))
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
         )
@@ -227,7 +245,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
@@ -374,11 +392,33 @@ fn main() {
                 value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
                 value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
                 calcqts.is_present("SIMPLE"),
-                !calcqts.is_present("COMBINED"), //seperate
-                true,                            //resort_waynodes
+                /* !calcqts.is_present("COMBINED"), //seperate
+                true,                            //resort_waynodes*/
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
+        ("calcqts_prelim", Some(calcqts)) => {
+            run_calcqts_prelim(
+                calcqts.value_of("INPUT").unwrap(),
+                calcqts.value_of("QTSFN"),
+                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            )
+            
+            
+        },
+        ("calcqts_load_existing", Some(calcqts)) => {
+            run_calcqts_load_existing(
+                calcqts.value_of("INPUT").unwrap(),
+                calcqts.value_of("QTSFN"),
+                value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
+                value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+                match value_t!(calcqts, "STOP_AT", u64) {
+                    Ok(s) => Some(s),
+                    Err(_) => None
+                },
+                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            )
+        },
         ("calcqts_inmem", Some(calcqts)) => run_calcqts_inmem(
             calcqts.value_of("INPUT").unwrap(),
             calcqts.value_of("QTSFN"),

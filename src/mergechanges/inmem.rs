@@ -6,7 +6,7 @@ use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_pro
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,LogTimes};
 use crate::mergechanges::filter_elements::{prep_bbox_filter,Poly};
 use crate::sortblocks::{WriteFile};
-use crate::sortblocks::writepbf::make_packprimblock;
+use crate::sortblocks::writepbf::make_packprimblock_zeroindex;
 use crate::update::{get_file_locs,ParallelFileLocs};
 
 use std::sync::Arc;
@@ -176,14 +176,14 @@ pub fn make_write_file(outfn: &str, bbox: Bbox, block_size: usize, numchan: usiz
     let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(&bbox)));
     
     let pack: Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=crate::sortblocks::Timings>> = if numchan == 0 {
-        make_packprimblock(wf, false, false)
+        make_packprimblock_zeroindex(wf, false)
     } else {
         
         let wff = CallbackSync::new(wf, 4);
         let mut packs: Vec<Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=crate::sortblocks::Timings>>> = Vec::new();
         for w in wff {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            packs.push(Box::new(Callback::new(make_packprimblock(w2, false, false))));
+            packs.push(Box::new(Callback::new(make_packprimblock_zeroindex(w2, false))));
         }
         
         Box::new(CallbackMerge::new(packs, Box::new(MergeTimings::new())))

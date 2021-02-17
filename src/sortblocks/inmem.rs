@@ -11,8 +11,8 @@ use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{
     read_all_blocks_with_progbar,FileBlock
 };
-pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
-pub use crate::sortblocks::writepbf::{make_packprimblock, make_packprimblock_many, WriteFile};
+use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
+use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
 use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer};
@@ -105,33 +105,27 @@ fn write_blocks(
     numchan: usize,
     timestamp: i64,
 ) -> io::Result<()> {
-    let wf = Box::new(WriteFile::new(&outfn, HeaderType::NoLocs));
+    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
 
-    let t = if numchan == 0 {
-        let mut wq = make_packprimblock(wf, true, false);
-        for mut b in blocks {
-            b.end_date = timestamp;
-            wq.call(b);
-        }
-        wq.finish()?
+    let mut wq: Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>> = if numchan == 0 {
+        make_packprimblock_qtindex(wf, true)
     } else {
-        let wfs = CallbackSync::new(wf, 4);
+        
+        let wfs = CallbackSync::new(wf, numchan);
         let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
             Vec::new();
         for w in wfs {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            wqs.push(Box::new(Callback::new(make_packprimblock(w2, true, false))));
+            wqs.push(Box::new(Callback::new(make_packprimblock_qtindex(w2, true))));
         }
-        let mut wq = Box::new(CallbackMerge::new(wqs, Box::new(MergeTimings::new())));
-
-        for mut b in blocks {
-            b.end_date = timestamp;
-            wq.call(b);
-        }
-        wq.finish()?
+        Box::new(CallbackMerge::new(wqs, Box::new(MergeTimings::new())))
     };
-
-    println!("{}", t);
+    
+    for mut b in blocks {
+        b.end_date = timestamp;
+        wq.call(b);
+    }
+    println!("{}", wq.finish()?);
     Ok(())
 }
 

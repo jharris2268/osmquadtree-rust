@@ -2,12 +2,12 @@ use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Qua
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_prog,FileBlock};
+use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,LogTimes,parse_timestamp,CallAll};
 use crate::mergechanges::inmem::{read_filter,make_write_file};
 use crate::mergechanges::filter_elements::prep_bbox_filter;
 use crate::sortblocks::{Timings,OtherData,TempData,WriteFile};
-use crate::sortblocks::writepbf::{make_packprimblock_many,make_packprimblock};
+use crate::sortblocks::writepbf::{make_packprimblock_many,make_packprimblock_qtindex};
 use crate::update::{ParallelFileLocs,get_file_locs};
 use crate::sortblocks::tempfile::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
         read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
@@ -77,7 +77,7 @@ const MAX_NODE_ID:i64 = 16<<30;
 const MAX_WAY_ID:i64 = 2<<30;
 
 impl<T> CollectTemp<T>
-where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
+where T: CallFinish<CallType=Vec<(i64,PrimitiveBlock)>, ReturnType=Timings> {
     pub fn new(out: Box<T>, limit: usize, splitat: (i64,i64,i64), write_at: usize) -> CollectTemp<T> {
         let way_off = MAX_NODE_ID/splitat.0;
         let rel_off = way_off + MAX_WAY_ID/splitat.1;
@@ -132,26 +132,26 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
         }
     }
     
-    fn add_all(&mut self, pb: PrimitiveBlock) -> Vec<PrimitiveBlock> {
+    fn add_all(&mut self, pb: PrimitiveBlock) -> Vec<(i64,PrimitiveBlock)> {
         let mut res = Vec::new();
         for n in pb.nodes {
             match self.add_node(n) {
                 None => {},
-                Some(pb) => { res.push(pb); }
+                Some(pb) => { res.push((pb.index,pb)); }
             }
             self.count+=1;
         }
         for w in pb.ways {
             match self.add_way(w) {
                 None => {},
-                Some(pb) => { res.push(pb); }
+                Some(pb) => { res.push((pb.index,pb)); }
             }
             self.count+=5;
         }
         for r in pb.relations {
             match self.add_relation(r) {
                 None => {},
-                Some(pb) => { res.push(pb); }
+                Some(pb) => { res.push((pb.index,pb)); }
             }
             self.count+=10;
         }
@@ -162,7 +162,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
         res
     }
     
-    fn finish_all(&mut self) -> Vec<PrimitiveBlock> {
+    fn finish_all(&mut self) -> Vec<(i64,PrimitiveBlock)> {
         let mut res=Vec::new();
         for (q,mut nn) in self.curr_node.get_all() {
             if nn.len() > 0 {
@@ -170,7 +170,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
                 pb.quadtree=Quadtree::new(q);
                 pb.nodes.append(&mut nn);
                 pb.sort();
-                res.push(pb);
+                res.push((pb.index,pb));
             }
         }
         for (q,mut ww) in self.curr_way.get_all() {
@@ -179,7 +179,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
                 pb.quadtree=Quadtree::new(q + self.way_off);
                 pb.ways.append(&mut ww);
                 pb.sort();
-                res.push(pb);
+                res.push((pb.index,pb));
             }
         }
         for (q,mut rr) in self.curr_relation.get_all() {
@@ -188,7 +188,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
                 pb.quadtree=Quadtree::new(q + self.rel_off);
                 pb.relations.append(&mut rr);
                 pb.sort();
-                res.push(pb);
+                res.push((pb.index,pb));
             }
         }
         self.count=0;
@@ -197,7 +197,7 @@ where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
 }
 
 impl<T> CallFinish for CollectTemp<T>
-where T: CallFinish<CallType=Vec<PrimitiveBlock>, ReturnType=Timings> {
+where T: CallFinish<CallType=Vec<(i64,PrimitiveBlock)>, ReturnType=Timings> {
     
     type CallType=PrimitiveBlock;
     type ReturnType = Timings;
@@ -246,34 +246,42 @@ pub fn write_temp_blocks(
         }
     };
 
-    let mut prog = ProgBarWrap::new(100);
+    /*let mut prog = ProgBarWrap::new(100);
     prog.set_range(100);
     prog.set_message(&format!(
         "write_temp_blocks to {}, numchan={}",
         tempfn, numchan
-    ));
+    ));*/
     
-    let (mut res, d) = if numchan == 0 {
-        let pc = make_packprimblock_many(wt, true, true);
+    let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = if numchan == 0 {
+    //let (mut res, d) = if numchan == 0 {
+        let pc = make_packprimblock_many(wt, true);
         let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at));
-        let pp = make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true);
+        /*let pp =*/ make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true)
 
-        read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pp, &prog)
+        //read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pp, &prog)
     } else {
         let wts = CallbackSync::new(wt, numchan);
         let mut pcs: Vec<Box<dyn CallFinish<CallType = (usize,Vec<FileBlock>), ReturnType = Timings>>> =
             Vec::new();
         for wt in wts {
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-            let pc = make_packprimblock_many(wt2, true, true);
+            let pc = make_packprimblock_many(wt2, true);
             let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at/numchan));
             pcs.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true))));
         }
-        let pc = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
-        read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pc, &prog)
+        Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())))
+        //read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pc, &prog)
     };
-    prog.finish();
-    println!("write_temp_blocks {} {}", res, d);
+    //prog.finish();
+    //println!("write_temp_blocks {} {}", res, d);
+    
+    let msg = format!(
+        "write_temp_blocks to {}, numchan={}",
+        tempfn, numchan
+    );
+    let mut res = read_all_blocks_parallel_with_progbar(&mut pfilelocs.0, &pfilelocs.1, pp, &msg, pfilelocs.2);
+    
     
     for (_,b) in std::mem::take(&mut res.others) {
         match b {
@@ -450,25 +458,28 @@ pub fn run_mergechanges(inprfx: &str, outfn: &str, filter: Option<&str>, filter_
     let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
     
     let pp: Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>> = if numchan == 0 {
-        let pc = make_packprimblock(wf, true, true);
+        let pc = make_packprimblock_qtindex(wf, true);
         make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true)
     } else {
         let wfs = CallbackSync::new(wf, numchan);
         let mut pps: Vec<Box<dyn CallFinish<CallType=(usize,Vec<FileBlock>), ReturnType=Timings>>> = Vec::new();
         for w in wfs {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            let pc = make_packprimblock(w2, true, true);
+            let pc = make_packprimblock_qtindex(w2, true);
             pps.push(Box::new(Callback::new(make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true))))
         }
         Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
     };
     
-    let mut prog = ProgBarWrap::new(100);
+    let msg = format!("write merged blocks, numchan={}", numchan);
+    let tm = read_all_blocks_parallel_with_progbar(&mut pfilelocs.0, &pfilelocs.1, pp, &msg, pfilelocs.2);
+    
+    /*let mut prog = ProgBarWrap::new(100);
     prog.set_range(100);
-    prog.set_message(&format!("write merged blocks, numchan={}", numchan));
+    prog.set_message(&);
        
     let (tm,_) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pp, &prog);
-    prog.finish();
+    prog.finish();*/
     tx.add("write merged blocks");
     
     println!("{}\n{}", tm,tx);

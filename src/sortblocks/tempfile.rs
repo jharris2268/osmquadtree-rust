@@ -13,7 +13,7 @@ use crate::pbfformat::read_file_block::{
     unpack_file_block, FileBlock, ProgBarWrap, read_file_block_with_pos
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
-pub use crate::sortblocks::writepbf::{make_packprimblock, make_packprimblock_many, WriteFile};
+pub use crate::sortblocks::writepbf::{make_packprimblock_qtindex, make_packprimblock_many, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings,TempData,FileLocs};
 use crate::stringutils::StringUtils;
 use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer,ThreadTimer};
@@ -193,7 +193,7 @@ struct CollectTemp<T> {
 
 impl<'a, T> CollectTemp<T>
 where
-    T: CallFinish<CallType = Vec<PrimitiveBlock>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64,PrimitiveBlock)>, ReturnType = Timings>,
 {
     pub fn new(
         out: Box<T>,
@@ -220,23 +220,23 @@ where
         }
     }
 
-    fn add_all(&mut self, bl: PrimitiveBlock) -> Vec<PrimitiveBlock> {
+    fn add_all(&mut self, bl: PrimitiveBlock) -> Vec<(i64,PrimitiveBlock)> {
         let mut mm = Vec::new();
         for n in bl.nodes {
             match self.add_node(n) {
-                Some(m) => mm.push(m),
+                Some(m) => mm.push((m.index,m)),
                 None => {}
             }
         }
         for w in bl.ways {
             match self.add_way(w) {
-                Some(m) => mm.push(m),
+                Some(m) => mm.push((m.index,m)),
                 None => {}
             }
         }
         for r in bl.relations {
             match self.add_relation(r) {
-                Some(m) => mm.push(m),
+                Some(m) => mm.push((m.index,m)),
                 None => {}
             }
         }
@@ -290,7 +290,7 @@ where
 
 impl<T> CallFinish for CollectTemp<T>
 where
-    T: CallFinish<CallType = Vec<PrimitiveBlock>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64,PrimitiveBlock)>, ReturnType = Timings>,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
@@ -306,7 +306,7 @@ where
     fn finish(&mut self) -> io::Result<Timings> {
         let mut mm = Vec::new();
         for (_, b) in std::mem::take(&mut self.pending) {
-            mm.push(b);
+            mm.push((b.index,b));
         }
         self.out.call(mm);
         
@@ -357,7 +357,7 @@ fn write_temp_blocks(
     
 
     let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan == 0 {
-        let pc = make_packprimblock_many(wt, true, true);
+        let pc = make_packprimblock_many(wt, true);
         let cc = Box::new(CollectTemp::new(pc, limit, splitat, groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
         make_unpackprimblock(aq)
@@ -369,7 +369,7 @@ fn write_temp_blocks(
         
         for wt in wts { 
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-            let pp = make_packprimblock_many(wt2, true, true);
+            let pp = make_packprimblock_many(wt2, true);
             pcs.push(Box::new(Callback::new(Box::new(CollectTemp::new(pp, limit/numchan, splitat, groups.clone())))));
         
         }

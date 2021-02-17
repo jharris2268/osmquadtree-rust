@@ -2,7 +2,7 @@ use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{MinimalBlock, MinimalNode};
 use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
 use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop, FileBlock};
+use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop, read_all_blocks_parallel_with_progbar, FileBlock, file_length};
 use crate::pbfformat::writefile::WriteFile;
 use crate::pbfformat::{read_file_block, read_pbf, write_pbf};
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
@@ -14,9 +14,9 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use crate::calcqts::packwaynodes::WayNodeTile;
-use crate::calcqts::write_quadtrees::{WrapWriteFile, WrapWriteFileVec};
+use crate::calcqts::write_quadtrees::{/*WrapWriteFile,*/ WrapWriteFileVec};
 use crate::calcqts::{
-    CallFinishFileBlocks, FileLocs, NodeWayNodes, OtherData, Timings, WayNodeVals,
+    CallFinishFileBlocks, FileLocs, NodeWayNodes, /*OtherData,*/ Timings, WayNodeVals,
 };
 
 pub struct NodeWayNodeComb {
@@ -171,11 +171,12 @@ pub fn make_packwaynodescomb<T: CallFinish<CallType = Vec<u8>, ReturnType = Timi
     Box::new(CallAll::new(out, "packnodewaycomb", conv))
 }
 
-fn resort_waynodes((i, dd): (i64, Vec<Vec<u8>>)) -> Vec<(i64, Vec<u8>)> {
+fn resort_waynodes((i, dd): (usize,Vec<FileBlock>)) -> Vec<(i64, Vec<u8>)> {
     let mut pos: u64 = 0;
-    let wnt = read_way_node_tiles_vals(&mut pos, i, &dd, 0, 0).expect("?");
+    let wnt = read_way_node_tiles_vals_fb(&mut pos, i as u64, &dd, 0, 0).expect("?");
+    
     let mut res = Vec::new();
-    for vv in wnt.pack_chunks(4096) {
+    for vv in wnt.pack_chunks(256*1024) {
         res.push((
             0,
             read_file_block::pack_file_block("WayNodes", &vv, true).expect("!"),
@@ -194,7 +195,7 @@ pub fn write_waynode_sorted_resort(waynodevals: WayNodeVals, outfn: &str) -> Str
         ))),
         4,
     );
-    let mut vv: Vec<Box<dyn CallFinish<CallType = (i64, Vec<Vec<u8>>), ReturnType = Timings>>> =
+    let mut vv: Vec<Box<dyn CallFinish<CallType = (usize,Vec<FileBlock>), ReturnType = Timings>>> =
         Vec::new();
     for w in wv {
         let w2 = Box::new(ReplaceNoneWithTimings::new(w));
@@ -206,26 +207,70 @@ pub fn write_waynode_sorted_resort(waynodevals: WayNodeVals, outfn: &str) -> Str
         )))));
     }
 
-    let mut vvm = Box::new(CallbackMerge::new(vv, Box::new(MergeTimings::new())));
+    let vvm = Box::new(CallbackMerge::new(vv, Box::new(MergeTimings::new())));
 
-    let ww = Arc::try_unwrap(waynodevals).unwrap();
-    let mut pg = read_file_block::ProgBarWrap::new(100);
-    pg.set_range(100);
-    pg.set_message("write_waynode_sorted_resort");
+    let t = read_waynodevals(waynodevals, vvm).expect("?");
 
-    let pf = 100.0 / (ww.len() as f64);
-    let mut i = 0.0;
-    for (a, b) in ww {
-        pg.prog(pf * i);
-        vvm.call((a, b));
-        i += 1.0;
-    }
-    pg.finish();
-    let t = vvm.finish().expect("?");
     println!("{}", t);
     waynodesfn
 }
 
+fn read_waynodevals<T: CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Timings>>(waynodevals: WayNodeVals, mut vvm: Box<T>) -> Result<Timings> {
+
+    match waynodevals {
+        WayNodeVals::PackedInMem(ww) => {
+            let mut pg = read_file_block::ProgBarWrap::new(100);
+            pg.set_range(100);
+            pg.set_message("write_waynode_sorted_resort");
+
+            let pf = 100.0 / (ww.len() as f64);
+            let mut i = 0.0;
+            
+            
+            
+            let mut curr = 0;
+            let mut xx = Vec::new();
+            for (a, b) in ww {
+                
+                pg.prog(pf * i);
+                if a != curr {
+                    if !xx.is_empty() {
+                        vvm.call((curr as usize, xx));
+                    }
+                    curr=a;
+                    xx = Vec::new();
+                }
+                let fb = read_file_block::unpack_file_block(0, &b)?;
+                xx.push(fb);
+                i += 1.0;
+            }
+            if !xx.is_empty() {
+                vvm.call((curr as usize,xx));
+            }
+            pg.finish();
+            vvm.finish()
+        },
+        WayNodeVals::TempFile(fname, locs) => {
+            let fobj = File::open(&fname)?;
+            let mut fbuf = vec![BufReader::new(fobj)];
+            
+            let mut ll = Vec::new();
+            
+            for (a,b) in locs {
+                let mut xx = Vec::new();
+                for (c,_) in b {
+                    xx.push((0usize,c));
+                }
+                
+                ll.push((a,xx))
+            };
+            
+            Ok(read_all_blocks_parallel_with_progbar(&mut fbuf, &ll, vvm, "read waynodevals", file_length(&fname)))
+        }
+    }
+}
+
+/*
 pub fn write_waynode_sorted(waynodevals: WayNodeVals, outfn: &str) -> (String, FileLocs) {
     let waynodesfn = format!("{}-waynodes", outfn);
 
@@ -276,20 +321,105 @@ fn read_way_node_tiles_vals(
     res.sort();
     Ok(res)
 }
+*/
+fn read_way_node_tiles_vals_fb(
+    _pos: &mut u64,
+    tile: u64,
+    vals: &Vec<FileBlock>,
+    minw: i64,
+    maxw: i64,
+) -> Result<WayNodeTile> {
+    let mut res = WayNodeTile::new(tile as i64, 0);
+
+    if vals.is_empty() {
+        return Ok(res);
+    }
+    let nv = vals.len();
+    for (i, fb) in vals.iter().enumerate() {
+        //let fb = read_file_block::unpack_file_block(*pos, &v)?;
+        if fb.block_type != "WayNodes" {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("wrong block type {}", fb.block_type),
+            ));
+        }
+
+        res.unpack(&fb.data(), minw, maxw)?;
+        if i == 0 && minw == 0 && maxw == 0 {
+            res.vals.reserve(res.vals.len() * nv);
+        }
+        
+    }
+    res.sort();
+    Ok(res)
+}
+
+fn read_way_node_tiles_vals_rf(
+    pos: &mut u64,
+    tile: i64,
+    vals: &Vec<&[u8]>,
+    minw: i64,
+    maxw: i64,
+) -> Result<WayNodeTile> {
+    let mut res = WayNodeTile::new(tile, 0);
+
+    if vals.is_empty() {
+        return Ok(res);
+    }
+    let nv = vals.len();
+    for (i, v) in vals.iter().enumerate() {
+        let fb = read_file_block::unpack_file_block(*pos, v)?;
+        if fb.block_type != "WayNodes" {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("wrong block type {}", fb.block_type),
+            ));
+        }
+
+        res.unpack(&fb.data(), minw, maxw)?;
+        if i == 0 && minw == 0 && maxw == 0 {
+            res.vals.reserve(res.vals.len() * nv);
+        }
+        *pos += v.len() as u64;
+        //drop(v);
+    }
+    res.sort();
+    Ok(res)
+}
 
 fn read_way_node_tiles_vals_send(
-    vals: WayNodeVals,
+    vals: Arc<WayNodeVals>,
     send: mpsc::SyncSender<WayNodeTile>,
     minw: i64,
     maxw: i64,
 ) {
-    let mut pos: u64 = 0;
-    for (k, vv) in vals.iter() {
-        let wnt = read_way_node_tiles_vals(&mut pos, *k, vv, minw, maxw).unwrap();
-
-        send.send(wnt).expect("send failed");
+    
+    match &*vals {
+        WayNodeVals::PackedInMem(vals) => {
+    
+    
+            let mut pos: u64 = 0;
+            let mut curr = -1;
+            let mut xx = Vec::new();
+            for (k, vv) in vals.iter() {
+                if *k != curr {
+                    if !xx.is_empty() {
+                
+                        let wnt = read_way_node_tiles_vals_rf(&mut pos, curr, &xx, minw, maxw).unwrap();
+                        send.send(wnt).expect("send failed");
+                    }
+                    xx.clear();
+                    curr = *k;
+                }
+                xx.push(&vv);
+            }
+            drop(send);
+        },
+        WayNodeVals::TempFile(fname,locs) => {
+            read_way_node_tiles_file_send(fname.clone(), locs.clone(), send, minw, maxw);
+        }
     }
-    drop(send);
+        
 }
 
 struct SendAll<T: Sync + Send + 'static> {
@@ -338,10 +468,17 @@ fn read_way_node_tiles_file_send(
             "unpack and merge",
             Box::new(move |(k, pp): (i64, Vec<FileBlock>)| {
                 let mut wnt = WayNodeTile::new(k, 0);
+                if pp.len()==1 {
+                    wnt.unpack(&pp[0].data(), minw, maxw)
+                        .expect(&format!("failed to unpack"));
+                    return wnt;
+                }
+                
                 let np = pp.len();
                 for (i, p) in pp.iter().enumerate() {
                     wnt.unpack(&p.data(), minw, maxw)
                         .expect(&format!("failed to unpack"));
+                        
                     if i == 0 {
                         wnt.vals.reserve(wnt.vals.len() * np)
                     }
@@ -397,7 +534,7 @@ struct ChannelReadWayNodeFlatIter {
 
 impl ChannelReadWayNodeFlatIter {
     pub fn filter_vals(
-        waynodevals: WayNodeVals,
+        waynodevals: Arc<WayNodeVals>,
         minw: i64,
         maxw: i64,
     ) -> ChannelReadWayNodeFlatIter {
@@ -575,7 +712,7 @@ where
         Ok(t)
     }
 }
-
+/*
 pub fn write_nodewaynode_file(nodewaynodes: NodeWayNodes, outfn: &str) -> NodeWayNodes {
     let waynodesfn = format!("{}-nodewaynodes", outfn);
 
@@ -607,7 +744,7 @@ pub fn write_nodewaynode_file(nodewaynodes: NodeWayNodes, outfn: &str) -> NodeWa
     }
     println!("write_nodewaynodevals: {}, {} bytes", t, nt);
     NodeWayNodes::Combined(waynodesfn)
-}
+}*/
 
 struct UnpackNodeWayNodeCombTile<T> {
     out: Box<T>,
@@ -687,7 +824,7 @@ fn read_waynodeways_combined<
 fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>>(
     infn: &str,
     stop_after: u64,
-    waynodevals: WayNodeVals,
+    waynodevals: Arc<WayNodeVals>,
     eqt: Box<T>,
     minw: i64,
     maxw: i64,

@@ -6,14 +6,15 @@ use crate::elements::{MinimalBlock, Quadtree};
 use crate::pbfformat::read_file_block::{
     pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock,
 };
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::pbfformat::{header_block::HeaderType,writefile::WriteFile,writefile::FileLocs};
+use crate::utils::{MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
 
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
 use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings, WayNodeVals};
 
 use std::fmt;
 use std::io::{Error, ErrorKind, Result};
-use std::sync::Arc;
+//use std::sync::Arc;
 
 pub struct WayNodeTile {
     key: i64,
@@ -162,7 +163,8 @@ impl fmt::Display for WayNodeTile {
 
 pub struct CollectTilesStore {
     //filename: String,
-    vals: Vec<(i64, Vec<Vec<u8>>)>,
+    //vals: Vec<(i64, Vec<Vec<u8>>)>,
+    vals: Vec<(i64,Vec<u8>)>,
     
     tm: f64,
 }
@@ -182,9 +184,9 @@ impl CallFinish for CollectTilesStore /*<'_>*/ {
 
     fn call(&mut self, p: Self::CallType) {
         //let vals = self.vals.as_mut().unwrap();
-        let tt = Timer::new();
+        let tt = ThreadTimer::new();
         //let vals = Arc::get_mut(&mut self.vals).unwrap();
-        for (qi, qd) in p {
+        /*for (qi, qd) in p {
             let qv = qi as usize;
 
             if qv >= self.vals.len() {
@@ -193,18 +195,78 @@ impl CallFinish for CollectTilesStore /*<'_>*/ {
                 }
             }
             self.vals[qv].1.push(qd);
-        }
+        }*/
+        
+        self.vals.extend(p);
+        
         self.tm += tt.since();
     }
 
     fn finish(&mut self) -> Result<Self::ReturnType> {
         let mut tt = Timings::new();
+        self.vals.sort();
         tt.add("collecttilestore", self.tm);
         tt.add_other(
             "waynodes",
-            OtherData::PackedWayNodes(Arc::new(std::mem::take(&mut self.vals))),
+            OtherData::PackedWayNodes(WayNodeVals::PackedInMem(std::mem::take(&mut self.vals))),
         );
         Ok(tt)
+    }
+}
+
+struct WriteWayNodeTemp<T: ?Sized> {
+    ww: Box<T>,
+    pending: Vec<(i64,Vec<u8>)>,
+    pending_size: usize,
+    fname: String
+}
+
+impl<T> WriteWayNodeTemp<T>
+    where T: CallFinish<CallType=Vec<(i64,Vec<u8>)>,ReturnType=(f64,FileLocs)> + ?Sized
+{
+    pub fn new(ww: Box<T>, fname: String, pending_size: usize) -> WriteWayNodeTemp<T> {
+        
+        WriteWayNodeTemp{ ww: ww,
+            pending: Vec::with_capacity(pending_size),
+            pending_size: pending_size,
+            fname: fname }
+    }
+}
+
+impl<T> CallFinish for WriteWayNodeTemp<T>
+    where T: CallFinish<CallType=Vec<(i64,Vec<u8>)>,ReturnType=(f64,FileLocs)> + ?Sized
+{
+    type CallType = Vec<(i64, Vec<u8>)>;
+    type ReturnType = Timings;
+    
+    fn call(&mut self, bls: Self::CallType) {
+        if self.pending_size == 0 {
+            self.ww.call(bls);
+            return;
+        }
+        
+        if self.pending.len()+bls.len() > self.pending_size {
+            let mut tt = std::mem::replace(&mut self.pending, Vec::with_capacity(self.pending_size));
+            tt.sort();
+            self.ww.call(tt);
+        }
+        self.pending.extend(bls);
+        
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        if !self.pending.is_empty() {
+            let mut tt = std::mem::take(&mut self.pending);
+            tt.sort();
+            self.ww.call(tt);
+        }
+        let (a,mut b) = self.ww.finish()?;
+        b.sort();
+        let mut tm = Timings::new();
+        
+        tm.add("WriteWayNodeTemp", a);
+        tm.add_other("waynodes", OtherData::PackedWayNodes(WayNodeVals::TempFile(std::mem::take(&mut self.fname), b)));
+        Ok(tm)
     }
 }
 
@@ -394,6 +456,225 @@ impl fmt::Display for RelMems {
         )
     }
 }
+/*
+pub struct PackWayNodesAltPacker<T> {
+    outcall: Box<T>,
+    split: i64,
+    tm: f64,
+}
+
+impl<T> PackWayNodesAltPacker<T>
+    where T: CallFinish<CallType=Vec<(i64,Vec<u8>)>, ReturnType=Timings>
+{
+    pub fn new(split: i64, outcall: Box<T>) -> PackWayNodesAltPacker<T> {
+        PackWayNodesAltPacker{split:split, outcall: outcall, tm:0.0}
+    }
+        
+    fn pack_pending(&self, k: i64, pending: &[(i64,i64)]) -> Vec<u8> {
+        
+        let nn = write_pbf::pack_delta_int_ref(pending.iter().map(|(n, _w)| n));
+        let ww = write_pbf::pack_delta_int_ref(pending.iter().map(|(_n, w)| w));
+
+        let l = 20 + nn.len() + ww.len();
+
+        let mut res = Vec::with_capacity(l);
+
+        write_pbf::pack_value(&mut res, 1, write_pbf::zig_zag(k));
+        write_pbf::pack_data(&mut res, 2, &nn);
+        write_pbf::pack_data(&mut res, 3, &ww);
+        write_pbf::pack_value(&mut res, 4, pending.len() as u64);
+
+        pack_file_block("WayNodes", &res, true).expect("!")
+
+    }
+        
+
+
+    fn pack_tiles(&self, mut pending: Vec<(i64,i64)>) -> Vec<(i64, Vec<u8>)> {
+        pending.sort();
+        
+        let mut res = Vec::new();
+        let mut last = 0;
+        let mut curr = -1;
+        
+        for (i,(a,_)) in pending.iter().enumerate() {
+            let k = a/self.split;
+            if k != curr {
+                if i > last {
+                    res.push((curr, self.pack_pending(curr, &pending[last..i])));
+                }
+                curr = k;
+                last = i;
+            }
+        }
+        if pending.len() > last {
+            res.push((curr, self.pack_pending(curr, &pending[last..])));
+        }
+        
+        res
+    }
+}
+impl<T> CallFinish for PackWayNodesAltPacker<T>
+    where T: CallFinish<CallType=Vec<(i64,Vec<u8>)>, ReturnType=Timings>
+{
+    type CallType = Option<Vec<(i64,i64)>>;
+    type ReturnType=Timings;
+    
+    fn call(&mut self, pending: Option<Vec<(i64,i64)>>) {
+        match pending {
+            None => self.outcall.call(vec![]),
+            Some(pp) => {
+                let tx = ThreadTimer::new();
+
+                let rr = self.pack_tiles(pp);
+                self.outcall.call(rr);
+                self.tm += tx.since();
+            }
+        }
+    }
+    
+    fn finish(&mut self) -> Result<Timings> {
+        let mut tm = self.outcall.finish()?;
+        tm.add("PackWayNodesAltPacker", self.tm);
+        Ok(tm)
+    }
+    
+}
+
+
+
+
+
+pub struct PackWayNodesAlt<T> {
+    pending: Vec<(i64,i64)>,
+    
+    limit: usize,
+    outcall: Box<T>,
+    first_waytile_pos: Option<u64>,
+    relmems: Option<RelMems>,
+    pack_rels: bool,
+    tm: f64
+}
+
+impl<T> PackWayNodesAlt<T>
+    where T: CallFinish<CallType=Option<Vec<(i64,i64)>>, ReturnType=Timings>
+{
+    pub fn new(limit: usize, outcall: Box<T>, pack_rels: bool) -> PackWayNodesAlt<T> {
+        PackWayNodesAlt {
+            pending: Vec::with_capacity(limit),
+            limit: limit,
+            outcall: outcall,
+            first_waytile_pos: None,
+            relmems: Some(RelMems::new()),
+            pack_rels: pack_rels,
+            tm: 0.0,
+        }
+    }
+
+    
+    
+    fn add_all(&mut self, idx: usize, fb: FileBlock) -> Option<Vec<(i64, i64)>> {
+        let mut res: Option<Vec<(i64,i64)>> = None;
+
+        let fbd = fb.data();
+
+        if fb.block_type == "OSMData" {let mb = MinimalBlock::read_parts(
+                idx as i64,
+                fb.pos,
+                &fbd,
+                false,
+                false,
+                true,
+                true,
+            )
+            .expect("failed to read block");
+            
+            if !mb.ways.is_empty() && self.first_waytile_pos.is_none() {
+                
+                self.first_waytile_pos = Some(fb.pos)
+            }
+            
+            for w in mb.ways {
+                for n in read_pbf::DeltaPackedInt::new(&w.refs_data) {
+                    
+                    self.pending.push((n,w.id));
+                    if self.pending.len() == self.limit {
+                        match res.as_mut() {
+                            None => { res = Some(std::mem::replace(&mut self.pending, Vec::with_capacity(self.limit))); },
+                            Some(xx) => { xx.extend(std::mem::replace(&mut self.pending, Vec::with_capacity(self.limit))); }
+                        }
+                        
+                    }
+                }
+            }
+            let rm = self.relmems.as_mut().unwrap();
+            for r in mb.relations {
+                if r.refs_data.is_empty() {
+                    rm.empty_rels.push(r.id);
+                } else {
+                    for (rf, ty) in read_pbf::DeltaPackedInt::new(&r.refs_data)
+                        .zip(read_pbf::PackedInt::new(&r.types_data))
+                    {
+                        match ty {
+                            0 => {
+                                rm.nodes.push((r.id, rf));
+                            }
+                            1 => {
+                                rm.ways.push((r.id, rf));
+                            }
+                            2 => {
+                                rm.relations.push((r.id, rf));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if self.pack_rels && rm.len() > 10000000 {
+                    rm.pack_and_store();
+                }
+            }
+        }
+        res
+    }
+    
+}
+
+impl<T> CallFinish for PackWayNodesAlt<T>
+where
+    T: CallFinish<CallType = Option<Vec<(i64, i64)>>, ReturnType = Timings>,
+{
+    type CallType = (usize, FileBlock);
+    //type ReturnType=(RelMems,T::ReturnType);
+    type ReturnType = Timings;
+
+    fn call(&mut self, fb: Self::CallType) {
+        let tt = ThreadTimer::new();
+        let pp = self.add_all(fb.0, fb.1);
+        self.tm += tt.since();
+        self.outcall.call(pp);
+    }
+
+    fn finish(&mut self) -> Result<Self::ReturnType> {
+        let tt = ThreadTimer::new();
+        let qq = std::mem::take(&mut self.pending);
+        self.outcall.call(Some(qq));
+        let x = tt.since();
+        
+        let mut timings = self.outcall.finish()?;
+        timings.add("packwaynodes", self.tm);
+        timings.add("packwaynodes final", x);
+
+        let r = self.relmems.take().unwrap();
+        timings.add_other("relmems", OtherData::RelMems(r));
+        match self.first_waytile_pos {
+            None => {},
+            Some(p) => { timings.add_other("first_waytile_pos", OtherData::FirstWayTile(p)); }
+        }
+        Ok(timings)
+    }
+}
+
+*/    
 
 pub struct PackWayNodes<T> {
     pending: Vec<Box<WayNodeTile>>,
@@ -547,14 +828,14 @@ where
     type ReturnType = Timings;
 
     fn call(&mut self, fb: Self::CallType) {
-        let tt = Timer::new();
+        let tt = ThreadTimer::new();
         let pp = self.add_all(fb.0, fb.1);
         self.tm += tt.since();
         self.outcall.call(pp);
     }
 
     fn finish(&mut self) -> Result<Self::ReturnType> {
-        let tt = Timer::new();
+        let tt = ThreadTimer::new();
         let pp = self.add_remaining();
         let x = tt.since();
 
@@ -576,19 +857,23 @@ where
 
 fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals,u64) {
     let mut r = RelMems::new();
-    let mut w = Vec::new();
+    let mut w: Option<WayNodeVals> = None;
     let mut first_waytile_pos = u64::MAX;
     for (_, b) in std::mem::take(&mut tt.others) {
         match b {
             OtherData::RelMems(rx) => r.extend(rx),
             OtherData::PackedWayNodes(wx) => {
-                let a = Arc::try_unwrap(wx);
+                if !w.is_none() {
+                    panic!("!!!");
+                }
+                w = Some(wx);
+                /*let a = Arc::try_unwrap(wx);
                 match a {
                     Ok(wxx) => w.extend(wxx),
                     Err(_) => {
                         panic!("!!");
                     }
-                }
+                }*/
             },
             OtherData::FirstWayTile(p) => {
                 if p < first_waytile_pos {
@@ -598,7 +883,7 @@ fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals,u64) {
             _ => {}
         }
     }
-    return (r, Arc::new(w),first_waytile_pos);
+    return (r, w.unwrap(),first_waytile_pos);
 }
 
 pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals,u64)> {
@@ -607,15 +892,55 @@ pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVal
     let (split, limit) = (1 << 22, 1 << 14);
 
     let progmsg = format!("prep_way_nodes for {}, numchan={}", infn, numchan);
-
+    let ct = Box::new(CollectTilesStore::new());
     let pwn: CallFinishFileBlocks = match numchan {
         0 => {
-            let ct = Box::new(CollectTilesStore::new());
+            
             Box::new(PackWayNodes::new(split, limit, ct, true))
         }
 
         numchan => {
-            let ct = Box::new(CollectTilesStore::new());
+            let ct_par = CallbackSync::new(ct, numchan);
+
+            let mut pwn_par: Vec<CallFinishFileBlocks> = Vec::new();
+
+            for ctx in ct_par {
+                let ctm = Box::new(ReplaceNoneWithTimings::new(ctx));
+                let pwn = Box::new(PackWayNodes::new(split, limit, ctm, true));
+                pwn_par.push(Box::new(Callback::new(pwn)));
+            }
+
+            Box::new(CallbackMerge::new(pwn_par, Box::new(MergeTimings::new())))
+        }
+    };
+    let (tt, _) = read_all_blocks_with_progbar(infn, pwn, &progmsg);
+    println!("{}", tt);
+    Ok(get_relmems_waynodes(tt))
+}
+pub fn prep_way_nodes_tempfile(infn: &str, outfn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals,u64)> {
+    println!("prep_way_nodes_tempfile({},{},{})", infn, outfn,numchan);
+
+    let (split, limit) = (1 << 24, 1 << 16);
+    
+
+    let progmsg = format!("prep_way_nodes_tempfile for {}, numchan={}", infn, numchan);
+    let tempfn = format!("{}-waynodestemp", outfn);
+    
+    
+    let ww: Box<dyn CallFinish<CallType=Vec<(i64,Vec<u8>)>,ReturnType=(f64,FileLocs)>> = //if numchan == 0 {
+        Box::new(WriteFile::new(&tempfn, HeaderType::None));
+    //} else {
+    //    Box::new(Callback::new(Box::new(WriteFile::new(&tempfn, HeaderType::None))))
+    //};
+    
+    let ct = Box::new(WriteWayNodeTemp::new(ww, tempfn, 16*1024));
+    let pwn: CallFinishFileBlocks = match numchan {
+        0 => {
+            
+            Box::new(PackWayNodes::new(split, limit, ct, true))
+        }
+
+        numchan => {
             let ct_par = CallbackSync::new(ct, numchan);
 
             let mut pwn_par: Vec<CallFinishFileBlocks> = Vec::new();
