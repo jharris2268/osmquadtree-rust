@@ -29,6 +29,8 @@ pq-sys = "0.4"
 #geos = { version="7", features = ["v3_8_0", "dox"]} //leaks memory
 geos-sys = { version="2", features = ["v3_8_0"]}
 
+ureq="1.0"
+
 [profile.release]
 #debug = true
 

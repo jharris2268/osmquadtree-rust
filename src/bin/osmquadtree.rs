@@ -80,13 +80,17 @@ fn run_sortblocks(
     Ok(())
 }
 
-fn run_update_w(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Result<()> {
-    let t = run_update(prfx, limit, as_demo, numchan)?;
-    for (a, b) in t {
-        println!("{:-50}: {:0.1}s", a, b);
+fn run_update_droplast(prfx: &str) -> Result<()> {
+    
+    let mut fl = osmquadtree::update::read_filelist(prfx);
+    if fl.len()<2 {
+        return Err(Error::new(ErrorKind::Other, format!("{}filelist.json only has {} entries",prfx,fl.len())));
     }
+    fl.pop();
+    osmquadtree::update::write_filelist(prfx, &fl);
     Ok(())
 }
+   
 
 fn write_index_file_w(prfx: &str, outfn: Option<&str>, numchan: usize) -> Result<()> {
     match outfn {
@@ -219,6 +223,13 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
+        )
+        .subcommand(
+            SubCommand::with_name("update_droplast")   
+                .about("calculate update")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                
                 
         )
         .subcommand(
@@ -463,7 +474,7 @@ fn main() {
             value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
         ("update", Some(update)) => {
-            run_update_w(
+            run_update(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 false, //as_demo
@@ -471,7 +482,7 @@ fn main() {
             )
         },
         ("update_demo", Some(update)) => {
-            run_update_w(
+            run_update(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 true, //as_demo
@@ -479,6 +490,9 @@ fn main() {
             )
             
         },
+        ("update_droplast", Some(update)) => {
+            run_update_droplast(update.value_of("INPUT").unwrap())
+        },  
         ("write_index_file", Some(write)) => {
             write_index_file_w(
                 write.value_of("INPUT").unwrap(),

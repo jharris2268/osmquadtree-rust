@@ -970,6 +970,7 @@ pub fn run_calcqts(
         let (rl,wn,fw) = prep_way_nodes_tempfile(fname, outfn, numchan)?;
         write_relmems(rl, &relmfn)?;
         (None, wn, fw)
+        
     } else {
         let (rl,wn,fw) = prep_way_nodes(fname, numchan)?;
         (Some(rl), wn, fw)

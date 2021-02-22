@@ -344,6 +344,10 @@ impl RelMems {
     }
 
     pub fn pack_and_store(&mut self) {
+        if self.nodes.is_empty() && self.ways.is_empty() && self.relations.is_empty() && self.empty_rels.is_empty() {
+            return;
+        }
+        
         let p = self.pack();
         self.packed
             .push(pack_file_block("RelMems", &p, true).expect("?"));
@@ -351,10 +355,11 @@ impl RelMems {
     }
 
     pub fn clear(&mut self) {
-        self.nodes.clear();
-        self.ways.clear();
-        self.relations.clear();
-        self.empty_rels.clear();
+
+        self.nodes = Vec::new();
+        self.ways = Vec::new();
+        self.relations = Vec::new();
+        self.empty_rels = Vec::new();
     }
 
     pub fn unpack_stored(&mut self, load_nodes: bool, load_others: bool) {

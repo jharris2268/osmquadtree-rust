@@ -1,9 +1,10 @@
 use crate::update::{find_update, read_filelist, write_filelist, write_index_file, FilelistEntry};
-use crate::utils::{date_string, parse_timestamp, timestamp_string, ThreadTimer};
+use crate::utils::{date_string, parse_timestamp, timestamp_string, LogTimes};
 
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Result;
+use std::fs::{File,OpenOptions};
+use std::io::{Error,ErrorKind,Result,Write};
+//use crate::stringutils::StringUtils;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -37,15 +38,111 @@ impl Settings {
     }
 }
 
+
+fn fetch_new_diffs(source_prfx: &str, diffs_location: &str, current_state: i64) -> Result<LogTimes> {
+    
+    let (state, timestamp) = get_state(source_prfx,None)?;
+    let mut tms = LogTimes::new();
+    println!("lastest state {} {}, current diff {}, add {}", state,timestamp,current_state,state-current_state);
+    
+    if state > current_state {
+        
+        for st in (current_state+1)..(state+1) {
+            
+            let f = fetch_diff(source_prfx, diffs_location, st)?;
+            tms.add(&format!("fetch {}", f));
+        }
+    }
+    Ok(tms)
+}
+
+fn fetch_diff(source_prfx: &str, diffs_location: &str, state_in: i64) -> Result<String> {
+    let (state,ts) = get_state(source_prfx, Some(state_in))?;
+    let diff_url = get_diff_url(source_prfx, state);
+    let outfn = format!("{}{}.osc.gz", diffs_location, state);
+    
+    let output = std::process::Command::new("wget")
+        .arg("-O")
+        .arg(&outfn)
+        .arg(&diff_url)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .output()?;
+    
+    if !output.status.success() {
+        return Err(Error::new(ErrorKind::Other, format!("wget -O {} {} failed", outfn, diff_url)));
+    }
+    
+    OpenOptions::new().append(true).open(format!("{}state.csv", diffs_location))?
+        .write_all(format!("{},{}\n",state,ts).as_bytes())?;
+    
+    return Ok(diff_url)
+}
+
+fn get_diff_state_url(source_prfx: &str, state: Option<i64>) -> String {
+    
+    match state {
+        None => format!("{}state.txt", source_prfx),
+        Some(state) => {    
+            let a = state/1000000;
+            let b = (state%1000000) / 1000;
+            let c = state % 1000;
+            
+            format!("{}{:03}/{:03}/{:03}.state.txt", source_prfx, a, b, c)
+        }
+    }
+}   
+fn get_diff_url(source_prfx: &str, state: i64) -> String {
+    let a = state/1000000;
+    let b = (state%1000000) / 1000;
+    let c = state % 1000;
+    
+    format!("{}{:03}/{:03}/{:03}.osc.gz", source_prfx, a, b, c)
+}
+    
+fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, String)> {
+    
+    let state_url = get_diff_state_url(source_prfx, state);
+    
+    let state_response = ureq::get(&state_url).call().into_string()?;
+    
+    let mut seq_num: Option<i64> = None;
+    let mut timestamp: Option<String> = None;
+    
+    for l in state_response.lines() {
+        if l.starts_with("sequenceNumber=") {
+            match l[15..].parse() {
+                Ok(s) => { seq_num = Some(s); },
+                Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); }
+            }
+        } else if l.starts_with("timestamp=") {
+            timestamp = Some(String::from(&l[10..l.len()-1].replace("\\:", "-")));
+        }
+    }
+    
+    if seq_num.is_none() {
+        return Err(Error::new(ErrorKind::Other, format!("{} missing sequenceNumber?", state_url)));
+    }
+    if timestamp.is_none() {
+        return Err(Error::new(ErrorKind::Other, format!("{} missing timestamp?", state_url)));
+    }
+    Ok((seq_num.unwrap(), timestamp.unwrap()))
+}
+    
+    
+
 fn check_state(
     settings: &Settings,
     filelist: &Vec<FilelistEntry>,
-) -> (Vec<(String, i64, i64)>, i64) {
+) -> (LogTimes, Vec<(String, i64, i64)>, i64) {
     let mut res = Vec::new();
     if filelist.is_empty() {
         panic!("empty filelist");
     }
     let last_state = filelist.last().unwrap().state;
+    
+    let mut logtimes = fetch_new_diffs(&settings.source_prfx, &settings.diffs_location, last_state).expect("!!");
+    
     let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
     let state_ff = File::open(format!("{}state.csv", settings.diffs_location))
         .expect("failed to open state.csv file");
@@ -67,7 +164,8 @@ fn check_state(
             }
         }
     }
-    (res, prev_ts)
+    logtimes.add("found filelist");
+    (logtimes, res, prev_ts)
 }
 
 pub fn run_update_initial(
@@ -105,7 +203,7 @@ pub fn run_update(
     limit: usize,
     as_demo: bool,
     numchan: usize,
-) -> Result<Vec<(String, f64)>> {
+) -> Result<()> {
     let settings = Settings::from_file(prfx);
     let mut filelist = read_filelist(prfx);
     let mut suffix = String::new();
@@ -119,7 +217,7 @@ pub fn run_update(
         suffix = String::from("-rust");
     }
 
-    let (mut to_update, mut prev_ts) = check_state(&settings, &filelist);
+    let (mut logtimes, mut to_update, mut prev_ts) = check_state(&settings, &filelist);
     if limit > 0 && to_update.len() > limit {
         to_update = to_update[..limit].to_vec();
     }
@@ -128,7 +226,7 @@ pub fn run_update(
         filelist.len(),
         to_update.len()
     );
-    let mut tm = Vec::new();
+    
     if !to_update.is_empty() {
         for (chgfn, state, ts) in to_update {
             let fname = format!("{}{}.pbfc", date_string(ts), suffix);
@@ -143,13 +241,13 @@ pub fn run_update(
                 numchan
             );
 
-            let (tx, nt) = find_update(prfx, &filelist, &chgfn, prev_ts, ts, &fname, numchan)?;
-            tm.push((fname.clone(), tx));
+            let (_tx, nt) = find_update(prfx, &filelist, &chgfn, prev_ts, ts, &fname, numchan)?;
+            logtimes.add(&fname);
 
             let idxfn = format!("{}{}-index.pbf", prfx, fname);
-            let txx = ThreadTimer::new();
+            //let txx = ThreadTimer::new();
             write_index_file(&format!("{}{}", prfx, fname), &idxfn, numchan);
-            tm.push((format!("{}-index.pbf", fname), txx.since()));
+            logtimes.add(&format!("{}-index.pbf", fname));
 
             filelist.push(FilelistEntry::new(fname, timestamp_string(ts), nt, state));
             prev_ts = ts;
@@ -158,6 +256,6 @@ pub fn run_update(
             write_filelist(prfx, &filelist);
         }
     }
-
-    Ok(tm)
+    println!("{}", logtimes);
+    Ok(())
 }
