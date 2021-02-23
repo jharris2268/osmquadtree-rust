@@ -12,7 +12,7 @@ use crate::callback::CallFinish;
 use crate::elements::minimal_block::QuadtreeBlock;
 use crate::elements::ElementType;
 use crate::elements::Quadtree;
-use crate::utils::{CallAll, Checktime};
+use crate::utils::{CallAll, ThreadTimer};
 
 use crate::sortblocks::Timings;
 
@@ -136,7 +136,7 @@ where
     type ReturnType = Timings;
 
     fn call(&mut self, mut bl: PrimitiveBlock) {
-        let ct = Checktime::new();
+        let ct = ThreadTimer::new();
         for n in bl.nodes.iter_mut() {
             match &self.curr {
                 None => {
@@ -188,7 +188,7 @@ where
                 }
             }
         }
-        self.tot += ct.gettime();
+        self.tot += ct.since();
         self.out.call(bl);
     }
 

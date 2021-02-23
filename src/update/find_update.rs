@@ -5,7 +5,7 @@ use crate::elements::{
 use crate::pbfformat::header_block;
 use crate::pbfformat::read_file_block;
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
-use crate::stringutils::StringUtils;
+
 use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
 use crate::utils::{MergeTimings, ThreadTimer, Timer, Timings};
 
@@ -432,7 +432,7 @@ fn calc_qts(
                                 "[{}] missing node deleted {:?} from {}",
                                 missing_nodes,
                                 n,
-                                format!("{:?}", w).substr(0, 100)
+                                &format!("{:?}", w)[0..100]
                             );
                             missing_nodes += 1;
                             if missing_nodes > MISSING_NODES_LIMIT {

@@ -1,6 +1,5 @@
 pub mod callback;
 pub mod count;
-pub mod stringutils;
 pub mod utils;
 
 pub mod calcqts;

@@ -413,6 +413,12 @@ fn read_way_node_tiles_vals_send(
                 }
                 xx.push(&vv);
             }
+            if !xx.is_empty() {
+                
+                let wnt = read_way_node_tiles_vals_rf(&mut pos, curr, &xx, minw, maxw).unwrap();
+                send.send(wnt).expect("send failed");
+            }
+            
             drop(send);
         },
         WayNodeVals::TempFile(fname,locs) => {

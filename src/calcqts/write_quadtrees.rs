@@ -2,7 +2,7 @@ use crate::callback::{CallFinish, Callback, CallbackSync};
 use crate::elements::{Quadtree, QuadtreeBlock};
 use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::writefile::WriteFile;
-use crate::utils::{Checktime, ReplaceNoneWithTimings};
+use crate::utils::ReplaceNoneWithTimings;
 
 use crate::calcqts::{OtherData, Timings};
 use crate::pbfformat::read_file_block;
@@ -90,11 +90,9 @@ where
 }
 
 pub struct WriteQuadTree {
-    //out: Box<WriteFile>,
     packs: Vec<Box<Callback<Box<QuadtreeBlock>, Timings>>>,
     numwritten: usize,
-    //    byteswritten: usize,
-    ct: Checktime,
+    
 }
 
 impl WriteQuadTree {
@@ -115,11 +113,10 @@ impl WriteQuadTree {
 
         let numwritten = 0;
         //let byteswritten = 0;
-        let ct = Checktime::new();
+        
         WriteQuadTree {
             packs,
             numwritten,
-            ct,
         }
     }
 }
@@ -129,22 +126,10 @@ impl CallFinish for WriteQuadTree {
     type ReturnType = Timings;
 
     fn call(&mut self, t: Self::CallType) {
-        /*let mut t=t;
-        let p = t.pack().expect("failed to pack");
-        let b = read_file_block::pack_file_block("OSMData", &p, true).expect("failed to pack");*/
-
+        
         let i = self.numwritten % 4;
         self.numwritten += 1;
-        //self.byteswritten += b.len();
-        /*
-        match self.ct.checktime() {
-            None => {},
-            Some(d) => {
-                println!("{:6.1}s: {} written [{}]", d, self.numwritten,&t);
-                //println!("{:6.1}s: {} written, [{} bytes] [{} => {} bytes, {} compressed]", d, self.numwritten, self.byteswritten, &t, p.len(), b.len());
-            }
-        }
-        */
+        
         self.packs[i].call(t);
     }
     fn finish(&mut self) -> Result<Timings> {
@@ -162,8 +147,7 @@ impl CallFinish for WriteQuadTree {
 
         //let x = self.out.finish()?;
         println!(
-            "{:6.1}s: {} written, [{} bytes]",
-            self.ct.gettime(),
+            "{} written, [{} bytes]",
             self.numwritten,
             byteswritten
         );

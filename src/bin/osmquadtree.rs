@@ -4,10 +4,10 @@ use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
 
-use osmquadtree::calcqts::{run_calcqts, run_calcqts_inmem,run_calcqts_prelim,run_calcqts_load_existing};
+use osmquadtree::calcqts::{run_calcqts, run_calcqts_prelim,run_calcqts_load_existing};
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem,QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
-use osmquadtree::utils::{parse_timestamp};
+use osmquadtree::utils::{parse_timestamp, LogTimes};
 use osmquadtree::pbfformat::read_file_block::file_length;
 
 use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
@@ -30,6 +30,9 @@ fn run_sortblocks(
     numchan: usize,
     keep_temps: bool,
 ) -> Result<()> {
+    
+    let mut lt = LogTimes::new();
+    
     let mut splitat = 0i64;
     let tempinmem = file_length(infn) < 512*1024*1024;
     let mut limit = 0usize;
@@ -61,7 +64,8 @@ fn run_sortblocks(
         mintarget = target / 2;
     }
 
-    let groups: Arc<QuadtreeTree> = Arc::from(find_groups(&qtsfn, numchan, maxdepth, target, mintarget)?);
+    let groups: Arc<QuadtreeTree> = Arc::from(find_groups(&qtsfn, numchan, maxdepth, target, mintarget, &mut lt)?);
+    
     println!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
         limit = 30000000usize / (groups.len() / (splitat as usize));
@@ -70,13 +74,13 @@ fn run_sortblocks(
         }
     }
     if use_inmem {
-        sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp)?;
+        sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp, &mut lt)?;
     } else {
         sort_blocks(
-            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit/*write_at*/, timestamp, keep_temps
+            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit/*write_at*/, timestamp, keep_temps, &mut lt
         )?;
     }
-
+    println!("{}", lt);
     Ok(())
 }
 
@@ -140,7 +144,7 @@ fn main() {
                 .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
                 //.arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                .arg(Arg::with_name("SIMPLE").short("-s").long("--simple").help("simplier implementation, suitable for files <8gb"))
+                .arg(Arg::with_name("MODE").short("-m").long("--mode").takes_value(true).help("simplier implementation, suitable for files <8gb"))
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
         )
@@ -162,15 +166,7 @@ fn main() {
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
         )
-        .subcommand(
-            SubCommand::with_name("calcqts_inmem")
-                .about("calculates quadtrees for each element of an extract pbf file (maximum size 1gb)")
-                .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
-                .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
-                .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
-        )
+        
         .subcommand(
             SubCommand::with_name("sortblocks")
                 .about("sorts osmquadtree data into blocks")
@@ -402,7 +398,7 @@ fn main() {
                 calcqts.value_of("QTSFN"),
                 value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
                 value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
-                calcqts.is_present("SIMPLE"),
+                calcqts.value_of("MODE"),
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
@@ -430,13 +426,6 @@ fn main() {
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         },
-        ("calcqts_inmem", Some(calcqts)) => run_calcqts_inmem(
-            calcqts.value_of("INPUT").unwrap(),
-            calcqts.value_of("QTSFN"),
-            value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
-            value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
-            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-        ),
         ("sortblocks", Some(sortblocks)) => {
             run_sortblocks(
                 sortblocks.value_of("INPUT").unwrap(),

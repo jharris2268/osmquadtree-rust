@@ -4,7 +4,7 @@ use crate::utils::{date_string, parse_timestamp, timestamp_string, LogTimes};
 use serde::{Deserialize, Serialize};
 use std::fs::{File,OpenOptions};
 use std::io::{Error,ErrorKind,Result,Write};
-//use crate::stringutils::StringUtils;
+
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -39,10 +39,10 @@ impl Settings {
 }
 
 
-fn fetch_new_diffs(source_prfx: &str, diffs_location: &str, current_state: i64) -> Result<LogTimes> {
+fn fetch_new_diffs(source_prfx: &str, diffs_location: &str, current_state: i64, csv_rec: &mut Vec<(String,i64,i64)>, tms: &mut LogTimes ) -> Result<()> {
     
     let (state, timestamp) = get_state(source_prfx,None)?;
-    let mut tms = LogTimes::new();
+    
     println!("lastest state {} {}, current diff {}, add {}", state,timestamp,current_state,state-current_state);
     
     if state > current_state {
@@ -50,13 +50,15 @@ fn fetch_new_diffs(source_prfx: &str, diffs_location: &str, current_state: i64) 
         for st in (current_state+1)..(state+1) {
             
             let f = fetch_diff(source_prfx, diffs_location, st)?;
-            tms.add(&format!("fetch {}", f));
+            
+            tms.add(&format!("fetch {}", f.0));
+            csv_rec.push(f);
         }
     }
-    Ok(tms)
+    Ok(())
 }
 
-fn fetch_diff(source_prfx: &str, diffs_location: &str, state_in: i64) -> Result<String> {
+fn fetch_diff(source_prfx: &str, diffs_location: &str, state_in: i64) -> Result<(String,i64,i64)> {
     let (state,ts) = get_state(source_prfx, Some(state_in))?;
     let diff_url = get_diff_url(source_prfx, state);
     let outfn = format!("{}{}.osc.gz", diffs_location, state);
@@ -76,7 +78,7 @@ fn fetch_diff(source_prfx: &str, diffs_location: &str, state_in: i64) -> Result<
     OpenOptions::new().append(true).open(format!("{}state.csv", diffs_location))?
         .write_all(format!("{},{}\n",state,ts).as_bytes())?;
     
-    return Ok(diff_url)
+    return Ok((outfn, state,ts))
 }
 
 fn get_diff_state_url(source_prfx: &str, state: Option<i64>) -> String {
@@ -100,14 +102,14 @@ fn get_diff_url(source_prfx: &str, state: i64) -> String {
     format!("{}{:03}/{:03}/{:03}.osc.gz", source_prfx, a, b, c)
 }
     
-fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, String)> {
+fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
     
     let state_url = get_diff_state_url(source_prfx, state);
     
     let state_response = ureq::get(&state_url).call().into_string()?;
     
     let mut seq_num: Option<i64> = None;
-    let mut timestamp: Option<String> = None;
+    let mut timestamp: Option<i64> = None;
     
     for l in state_response.lines() {
         if l.starts_with("sequenceNumber=") {
@@ -116,7 +118,9 @@ fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, String)> {
                 Err(e) => { return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); }
             }
         } else if l.starts_with("timestamp=") {
-            timestamp = Some(String::from(&l[10..l.len()-1].replace("\\:", "-")));
+            let tss = String::from(&l[10..l.len()-1].replace("\\:", "-"));
+            let ts = parse_timestamp(&tss)?;
+            timestamp = Some(ts);
         }
     }
     
@@ -129,24 +133,14 @@ fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, String)> {
     Ok((seq_num.unwrap(), timestamp.unwrap()))
 }
     
+fn read_csv_list(diffs_location: &str, last_state: i64) -> Vec<(String,i64,i64)> {
     
-
-fn check_state(
-    settings: &Settings,
-    filelist: &Vec<FilelistEntry>,
-) -> (LogTimes, Vec<(String, i64, i64)>, i64) {
     let mut res = Vec::new();
-    if filelist.is_empty() {
-        panic!("empty filelist");
-    }
-    let last_state = filelist.last().unwrap().state;
     
-    let mut logtimes = fetch_new_diffs(&settings.source_prfx, &settings.diffs_location, last_state).expect("!!");
-    
-    let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
-    let state_ff = File::open(format!("{}state.csv", settings.diffs_location))
+    let state_ff = File::open(format!("{}state.csv", diffs_location))
         .expect("failed to open state.csv file");
-        
+    
+    
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(state_ff);
@@ -159,13 +153,33 @@ fn check_state(
 
             if state > last_state {
                 let timestamp = parse_timestamp(&row[1]).expect("?");
-                let fname = format!("{}{}.osc.gz", settings.diffs_location, state);
+                let fname = format!("{}{}.osc.gz", diffs_location, state);
                 res.push((fname, state, timestamp));
             }
         }
     }
-    logtimes.add("found filelist");
-    (logtimes, res, prev_ts)
+    res
+}
+
+fn check_state(
+    settings: &Settings,
+    filelist: &Vec<FilelistEntry>,
+) -> (LogTimes, Vec<(String, i64, i64)>, i64) {
+    let mut tms = LogTimes::new();
+    if filelist.is_empty() {
+        panic!("empty filelist");
+    }
+    let last_state = filelist.last().unwrap().state;
+    let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
+    let mut csv_rec = read_csv_list(&settings.diffs_location, last_state);
+    let last_state_available = csv_rec.last().unwrap().1;
+    
+    tms.add("found filelist");
+    fetch_new_diffs(&settings.source_prfx, &settings.diffs_location, last_state_available, &mut csv_rec, &mut tms).expect("!!");
+    
+    
+    
+    (tms, csv_rec, prev_ts)
 }
 
 pub fn run_update_initial(

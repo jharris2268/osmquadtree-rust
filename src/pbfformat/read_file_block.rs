@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom, Write, Error};
 
 //extern crate flate2;
 use flate2::read::ZlibDecoder;
@@ -54,8 +54,12 @@ pub fn file_position<F: Seek>(file: &mut F) -> io::Result<u64> {
 }
 pub fn read_file_block<F: Seek + Read>(file: &mut F) -> io::Result<FileBlock> {
     let pos = file_position(file)?;
-    let (_, y) = read_file_block_with_pos(file, pos)?;
-    Ok(y)
+    match read_file_block_with_pos(file, pos) {
+        Ok((_,y)) => Ok(y),
+        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?} at {}", e, pos)))
+    }
+    /*let (_, y) = read_file_block_with_pos(file, pos)?;
+    Ok(y)*/
 }
 
 pub fn read_file_block_with_pos<F: Read>(
@@ -74,7 +78,7 @@ pub fn read_file_block_with_pos<F: Read>(
 
     let (l, _) = read_pbf::read_uint32(&a, 0)?;
 
-    let b = read_file_data(file, l).unwrap();
+    let b = read_file_data(file, l)?;
     pos += l;
 
     let bb = read_pbf::IterTags::new(&b);

@@ -8,7 +8,7 @@ use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::read_file_block::{FileBlock, read_all_blocks_with_progbar};
 use crate::sortblocks::quadtreetree::{find_tree_groups, QuadtreeTree};
-use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer, LogTimes};
 
 use crate::sortblocks::{OtherData, Timings};
 
@@ -112,6 +112,7 @@ pub fn find_groups(
     maxdepth: usize,
     target: i64,
     mintarget: i64,
+    lt: &mut LogTimes,
 ) -> Result<Box<QuadtreeTree>> {
     
     let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> =
@@ -147,7 +148,9 @@ pub fn find_groups(
 
     let tree = tree.unwrap();
     println!("{}", tree);
-
-    find_tree_groups(tree, target, mintarget)
-
+    lt.add("prep tree");
+    let res = find_tree_groups(tree, target, mintarget)?;
+    lt.add("find groups");
+    Ok(res)
+    
 }

@@ -15,8 +15,8 @@ use crate::pbfformat::read_file_block::{
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{make_packprimblock_qtindex, make_packprimblock_many, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings,TempData,FileLocs};
-use crate::stringutils::StringUtils;
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer,ThreadTimer};
+
+use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer,ThreadTimer, LogTimes};
 
 use serde_json;
 use serde::{Serialize,Deserialize};
@@ -712,7 +712,8 @@ pub fn sort_blocks(
     tempinmem: bool,
     limit/*write_at*/: usize,
     timestamp: i64,
-    keep_temps: bool
+    keep_temps: bool,
+    lt: &mut LogTimes,
 ) -> io::Result<()> {
     println!(
         "sort_blocks({},{},{},{},{},{},{},{},{},{})",
@@ -727,17 +728,21 @@ pub fn sort_blocks(
         timestamp,
         keep_temps
     );
-
+    
+    
+    
+    
     let mut tempfn = String::from("NONE");
     if !tempinmem {
         tempfn = format!(
             "{}-temp.pbf",
-            String::from(outfn).substr(0, outfn.len() - 4)
+            String::from(&outfn[0..outfn.len() - 4])
         );
     }
 
     let xx = write_temp_blocks(infn, qtsfn, &tempfn, groups.clone(), numchan, splitat, limit/*write_at*/)?;
-
+        
+    
     match &xx {
         TempData::TempFile((fname, locs)) => {
             let nl: usize = locs.iter().map(|(_, y)| y.len()).sum();
@@ -781,9 +786,9 @@ pub fn sort_blocks(
             }
         },
     }
-
+    lt.add("write temp files");
     write_blocks_from_temp(xx, outfn, groups, numchan, timestamp, keep_temps)?;
-
+    lt.add("write blocks");
     Ok(())
     //Err(io::Error::new(io::ErrorKind::Other,"not impl"))
 }

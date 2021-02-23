@@ -28,7 +28,7 @@ use crate::calcqts::quadtree_store::{
     QuadtreeGetSet, QuadtreeSimple, QuadtreeSplit, QuadtreeTileInt, WAY_SPLIT_VAL,
 };
 use crate::calcqts::write_quadtrees::{PackQuadtrees, WrapWriteFile, WriteQuadTree};
-use crate::calcqts::{NodeWayNodes, OtherData, Timings};
+use crate::calcqts::{NodeWayNodes, OtherData, Timings,run_calcqts_inmem};
 
 fn calc_way_quadtrees_simple(
     nodewaynodes: NodeWayNodes,
@@ -941,11 +941,35 @@ pub fn run_calcqts(
     outfn: Option<&str>,
     qt_level: usize,
     qt_buffer: f64,
-    use_simple: bool,
+    mode: Option<&str>,
     //seperate: bool,
     //resort_waynodes: bool,
     numchan: usize,
 ) -> Result<()> {
+    
+    let mut use_simple = false;
+    let fl = file_length(fname) / 1024 / 1024;
+    match mode {
+        None => {
+            if fl < 512 {
+                return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
+            } else if fl < 4096 {
+                use_simple = true;
+            }
+        },
+        Some("INMEM") => { 
+            return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
+        },
+        
+        Some("SIMPLE") => { use_simple = true; },
+        Some("FLATVEC") => { },
+        Some(x) => {
+            return Err(Error::new(ErrorKind::Other, format!("unexpected mode {}", x)));
+        }
+    }
+    
+    
+        
     
     let mut lt = LogTimes::new();
     
@@ -956,17 +980,22 @@ pub fn run_calcqts(
     };
     let outfn = &outfn_;
 
-    let fl = file_length(fname);
-    if use_simple && fl > 8 * 1024 * 1024 * 1024 {
+    
+    if use_simple && fl > 8192 {
         return Err(Error::new(
             ErrorKind::Other,
             "run_calcqts use_simple=true only suitable for pbf files smaller than 8gb",
         ));
     }
-    
+    if !use_simple && fl < 2048 {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "run_calcqts use_simple=false has no advantages for pbf files larger than 2gb",
+        ));
+    }
     let relmfn = format!("{}-relmems", &outfn);
     
-    let (relmems, waynodevals, first_waytile_pos) = if fl > 20*1024*1024*1024 {
+    let (relmems, waynodevals, first_waytile_pos) = if fl > 20480 {
         let (rl,wn,fw) = prep_way_nodes_tempfile(fname, outfn, numchan)?;
         write_relmems(rl, &relmfn)?;
         (None, wn, fw)

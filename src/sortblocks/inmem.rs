@@ -15,7 +15,7 @@ use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer, LogTimes};
 
 
 use crate::sortblocks::sortblocks::SortBlocks;
@@ -137,6 +137,7 @@ pub fn sort_blocks_inmem(
     groups: Arc<QuadtreeTree>,
     numchan: usize,
     timestamp: i64,
+    lt: &mut LogTimes,
 ) -> io::Result<()> {
     let groupsfn = format!("{}-groups.txt", outfn);
     let outf = File::create(&groupsfn)?;
@@ -149,7 +150,7 @@ pub fn sort_blocks_inmem(
         infn, qtsfn, groups, numchan
     );
     let blocks = get_blocks(infn, qtsfn, groups, numchan)?;
-
+    lt.add("read data");
     println!(
         "call write_blocks({}, {}, {}, {})",
         outfn,
@@ -158,5 +159,7 @@ pub fn sort_blocks_inmem(
         timestamp
     );
     //Err(io::Error::new(io::ErrorKind::Other,"not impl"))
-    write_blocks(outfn, blocks, numchan, timestamp)
+    write_blocks(outfn, blocks, numchan, timestamp)?;
+    lt.add("write blocks");
+    Ok(())
 }
