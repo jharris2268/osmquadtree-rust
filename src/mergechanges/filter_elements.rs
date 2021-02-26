@@ -1,7 +1,7 @@
 use crate::elements::{Bbox, MinimalBlock, IdSet, IdSetBool, ElementType, MinimalNode, MinimalRelation, MinimalWay};
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,as_int};
-use crate::pbfformat::read_file_block::{read_all_blocks_parallel_prog, FileBlock,ProgBarWrap};
+use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar, FileBlock};
 use crate::pbfformat::read_pbf::{DeltaPackedInt,PackedInt};
 use crate::pbfformat::convertblocks::make_read_minimal_blocks_combine_call_all;
 use crate::update::{ParallelFileLocs};
@@ -285,9 +285,9 @@ pub fn prep_bbox_filter(pfilelocs: &mut ParallelFileLocs, bbox: Bbox, poly: Opti
     
     
     
-    let mut pb = ProgBarWrap::new(100);
+    /*let mut pb = ProgBarWrap::new(100);
     pb.set_range(100);
-    pb.set_message("prep_bbox_filter");
+    pb.set_message("prep_bbox_filter");*/
     
     let fb = Box::new(FilterObjs::new(bbox, poly));
     
@@ -304,8 +304,9 @@ pub fn prep_bbox_filter(pfilelocs: &mut ParallelFileLocs, bbox: Bbox, poly: Opti
         Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())))
     };
     
-    let (mut tm,_) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, conv, &pb);
-    pb.finish();
+    //let (mut tm,_) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, conv, &pb);
+    let mut tm = read_all_blocks_parallel_with_progbar(&mut pfilelocs.0, &pfilelocs.1, conv, "prep_bbox_filter", pfilelocs.2);
+    //pb.finish();
     Ok(tm.others.pop().unwrap().1)
 }
     

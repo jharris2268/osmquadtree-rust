@@ -337,6 +337,10 @@ pub fn timestamp_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format(TIMEFORMAT).to_string()
 }
+pub fn timestamp_string_alt(ts: i64) -> String {
+    let dt = NaiveDateTime::from_timestamp(ts, 0);
+    dt.format(TIMEFORMAT_ALT).to_string()
+}
 pub fn date_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format("%Y%m%d").to_string()

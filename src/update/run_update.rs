@@ -1,5 +1,5 @@
 use crate::update::{find_update, read_filelist, write_filelist, write_index_file, FilelistEntry};
-use crate::utils::{date_string, parse_timestamp, timestamp_string, LogTimes};
+use crate::utils::{date_string, parse_timestamp, timestamp_string, timestamp_string_alt, LogTimes};
 
 use serde::{Deserialize, Serialize};
 use std::fs::{File,OpenOptions};
@@ -76,7 +76,7 @@ fn fetch_diff(source_prfx: &str, diffs_location: &str, state_in: i64) -> Result<
     }
     
     OpenOptions::new().append(true).open(format!("{}state.csv", diffs_location))?
-        .write_all(format!("{},{}\n",state,ts).as_bytes())?;
+        .write_all(format!("{},{}\n",state,timestamp_string_alt(ts)).as_bytes())?;
     
     return Ok((outfn, state,ts))
 }
@@ -172,7 +172,7 @@ fn check_state(
     let last_state = filelist.last().unwrap().state;
     let prev_ts = parse_timestamp(&filelist.last().unwrap().end_date).expect("?");
     let mut csv_rec = read_csv_list(&settings.diffs_location, last_state);
-    let last_state_available = csv_rec.last().unwrap().1;
+    let last_state_available = if csv_rec.is_empty() { last_state } else { csv_rec.last().unwrap().1 };
     
     tms.add("found filelist");
     fetch_new_diffs(&settings.source_prfx, &settings.diffs_location, last_state_available, &mut csv_rec, &mut tms).expect("!!");

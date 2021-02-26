@@ -321,6 +321,7 @@ pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, fi
     
     let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()), timestamp)?;
     tx.add("get_file_locs");
+  
     
     let ids:Arc<dyn IdSet> = match filter {
         Some(_) => {
@@ -345,7 +346,7 @@ pub fn run_mergechanges_sort(inprfx: &str, outfn: &str, tempfn: Option<&str>, fi
     if tempfn == "NONE" {
         limit=200;
     }
-    let fsplit = if filter.is_none() {
+    let fsplit = if filter.is_none() || pfilelocs.2 > 4*1024*1024*1024 {
         128
     } else {
         0
