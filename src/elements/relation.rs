@@ -1,5 +1,6 @@
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+use simple_protocolbuffers::{
+        read_packed_int, PbfTag, read_delta_packed_int,
+        pack_data, pack_int, pack_delta_int};
 
 use crate::elements::common::{
     common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
@@ -66,14 +67,14 @@ impl Relation {
 
         for t in rem {
             match t {
-                read_pbf::PbfTag::Data(8, d) => {
+                PbfTag::Data(8, d) => {
                     if !minimal {
-                        roles = read_pbf::read_packed_int(&d)
+                        roles = read_packed_int(&d)
                     }
                 }
 
-                read_pbf::PbfTag::Data(9, d) => refs = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(10, d) => types = read_pbf::read_packed_int(&d),
+                PbfTag::Data(9, d) => refs = read_delta_packed_int(&d),
+                PbfTag::Data(10, d) => types = read_packed_int(&d),
                 _ => {}
             }
         }
@@ -113,14 +114,14 @@ impl Relation {
 
         if !self.members.is_empty() {
             let roles =
-                write_pbf::pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
-            let refs = write_pbf::pack_delta_int(self.members.iter().map(|m| m.mem_ref));
+                pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
+            let refs = pack_delta_int(self.members.iter().map(|m| m.mem_ref));
             let types =
-                write_pbf::pack_int(self.members.iter().map(|m| m.mem_type.as_int()));
+                pack_int(self.members.iter().map(|m| m.mem_type.as_int()));
 
-            write_pbf::pack_data(&mut res, 8, &roles);
-            write_pbf::pack_data(&mut res, 9, &refs);
-            write_pbf::pack_data(&mut res, 10, &types);
+            pack_data(&mut res, 8, &roles);
+            pack_data(&mut res, 9, &refs);
+            pack_data(&mut res, 10, &types);
         }
         pack_tail(&self.quadtree, &mut res, include_qts)?;
         Ok(res)

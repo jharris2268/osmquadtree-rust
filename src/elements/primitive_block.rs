@@ -1,5 +1,6 @@
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+use simple_protocolbuffers::{
+        PbfTag, IterTags, read_tag, un_zig_zag,
+        pack_value, pack_data, data_length, value_length, zig_zag};
 
 use crate::elements::Quadtree;
 
@@ -55,9 +56,9 @@ pub struct PrimitiveBlock {
 
 fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     let mut res = Vec::new();
-    for x in read_pbf::IterTags::new(&data) {
+    for x in IterTags::new(&data) {
         match x {
-            read_pbf::PbfTag::Data(1, d) => {
+            PbfTag::Data(1, d) => {
                 let s = std::str::from_utf8(d).unwrap().to_string();
                 res.push(s);
             }
@@ -257,20 +258,20 @@ impl PrimitiveBlock {
 
         let mut strings = Vec::new();
         let mut groups = Vec::new();
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => {
+                PbfTag::Data(1, d) => {
                     if !minimal {
                         strings = read_stringtable(&d)?
                     }
                 }
-                read_pbf::PbfTag::Data(2, d) => groups.push(d),
+                PbfTag::Data(2, d) => groups.push(d),
 
-                read_pbf::PbfTag::Value(32, qt) => {
-                    res.quadtree = Quadtree::new(read_pbf::un_zig_zag(qt))
+                PbfTag::Value(32, qt) => {
+                    res.quadtree = Quadtree::new(un_zig_zag(qt))
                 }
-                read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
-                read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,
+                PbfTag::Value(33, sd) => res.start_date = sd as i64,
+                PbfTag::Value(34, ed) => res.end_date = ed as i64,
 
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
@@ -290,9 +291,9 @@ impl PrimitiveBlock {
         if !ischange {
             return Changetype::Normal;
         }
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(10, ct) => {
+                PbfTag::Value(10, ct) => {
                     return Changetype::from_int(ct);
                 }
                 _ => {}
@@ -310,21 +311,21 @@ impl PrimitiveBlock {
         idset: Option<&dyn IdSet>,
     ) -> Result<u64> {
         let mut count = 0;
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => {
+                PbfTag::Data(1, d) => {
                     count += self.read_node(strings, changetype, &d, minimal, idset)?
                 }
-                read_pbf::PbfTag::Data(2, d) => {
+                PbfTag::Data(2, d) => {
                     count += self.read_dense(strings, changetype, &d, minimal, idset)?
                 }
-                read_pbf::PbfTag::Data(3, d) => {
+                PbfTag::Data(3, d) => {
                     count += self.read_way(strings, changetype, &d, minimal, idset)?
                 }
-                read_pbf::PbfTag::Data(4, d) => {
+                PbfTag::Data(4, d) => {
                     count += self.read_relation(strings, changetype, &d, minimal, idset)?
                 }
-                read_pbf::PbfTag::Value(10, _) => {}
+                PbfTag::Value(10, _) => {}
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
         }
@@ -423,29 +424,29 @@ impl PrimitiveBlock {
         }
 
         let pp = pack_strings.pack();
-        let mut outl = write_pbf::data_length(1, pp.len());
+        let mut outl = data_length(1, pp.len());
         for g in &groups {
-            outl += write_pbf::data_length(2, g.len());
+            outl += data_length(2, g.len());
         }
 
         if include_qts {
-            outl += write_pbf::value_length(32, write_pbf::zig_zag(self.quadtree.as_int()));
-            outl += write_pbf::value_length(33, self.start_date as u64);
-            outl += write_pbf::value_length(34, self.end_date as u64);
+            outl += value_length(32, zig_zag(self.quadtree.as_int()));
+            outl += value_length(33, self.start_date as u64);
+            outl += value_length(34, self.end_date as u64);
         }
 
         let mut res = Vec::with_capacity(outl);
-        write_pbf::pack_data(&mut res, 1, &pp);
+        pack_data(&mut res, 1, &pp);
         for g in groups {
-            write_pbf::pack_data(&mut res, 2, &g);
+            pack_data(&mut res, 2, &g);
         }
         if include_qts {
-            write_pbf::pack_value(&mut res, 32, write_pbf::zig_zag(self.quadtree.as_int()));
+            pack_value(&mut res, 32, zig_zag(self.quadtree.as_int()));
             if self.start_date != 0 {
-                write_pbf::pack_value(&mut res, 33, self.start_date as u64);
+                pack_value(&mut res, 33, self.start_date as u64);
             }
             if self.end_date != 0 {
-                write_pbf::pack_value(&mut res, 34, self.end_date as u64);
+                pack_value(&mut res, 34, self.end_date as u64);
             }
         }
         Ok(res)
@@ -461,19 +462,19 @@ impl PrimitiveBlock {
             let mut pp = Vec::new();
             for (a, b, c) in find_splits(&self.nodes) {
                 let mut res = Vec::new();
-                write_pbf::pack_data(
+                pack_data(
                     &mut res,
                     2,
                     &Dense::pack(&self.nodes[b..c], prep_strings, include_qts)?,
                 );
-                write_pbf::pack_value(&mut res, 10, a.as_int());
+                pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);
         }
 
         let mut res = Vec::new();
-        write_pbf::pack_data(
+        pack_data(
             &mut res,
             2,
             &Dense::pack(&self.nodes, prep_strings, include_qts)?,
@@ -492,9 +493,9 @@ impl PrimitiveBlock {
             for (a, b, c) in find_splits(&self.ways) {
                 let mut res = Vec::new();
                 for w in &self.ways[b..c] {
-                    write_pbf::pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
+                    pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
                 }
-                write_pbf::pack_value(&mut res, 10, a.as_int());
+                pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);
@@ -502,7 +503,7 @@ impl PrimitiveBlock {
 
         let mut res = Vec::new();
         for w in &self.ways {
-            write_pbf::pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
+            pack_data(&mut res, 3, &w.pack(prep_strings, include_qts)?);
         }
         return Ok(vec![res]);
     }
@@ -518,24 +519,24 @@ impl PrimitiveBlock {
             for (a, b, c) in find_splits(&self.relations) {
                 let mut res = Vec::new();
                 for r in &self.relations[b..c] {
-                    write_pbf::pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
+                    pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
                 }
-                write_pbf::pack_value(&mut res, 10, a.as_int());
+                pack_value(&mut res, 10, a.as_int());
                 pp.push(res);
             }
             return Ok(pp);
         }
         let mut res = Vec::new();
         for r in &self.relations {
-            write_pbf::pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
+            pack_data(&mut res, 4, &r.pack(prep_strings, include_qts)?);
         }
         return Ok(vec![res]);
     }
 }
 
 fn get_id(data: &[u8]) -> i64 {
-    match read_pbf::read_tag(data, 0) {
-        (read_pbf::PbfTag::Value(1, i), _) => i as i64,
+    match read_tag(data, 0) {
+        (PbfTag::Value(1, i), _) => i as i64,
         _ => 0,
     }
 }

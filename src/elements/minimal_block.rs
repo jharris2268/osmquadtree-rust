@@ -1,10 +1,10 @@
 use crate::elements::traits::*;
 use crate::elements::quadtree;
 use crate::elements::quadtree::Quadtree;
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::read_pbf::{read_delta_packed_int, un_zig_zag, IterTags, PbfTag};
-use crate::pbfformat::write_pbf;
-//use std::error::Error;
+use simple_protocolbuffers::{
+        read_packed_int, PbfTag, IterTags, read_delta_packed_int, un_zig_zag,
+        pack_value, pack_data, pack_delta_int, pack_delta_int_ref, data_length, value_length, zig_zag};
+        
 use std::cmp::Ordering;
 use std::io;
 use std::io::{Error, ErrorKind};
@@ -305,16 +305,16 @@ impl MinimalBlock {
         res.location = location;
 
         let mut groups = Vec::new();
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, _) => {}
-                read_pbf::PbfTag::Data(2, d) => groups.push(d),
+                PbfTag::Data(1, _) => {}
+                PbfTag::Data(2, d) => groups.push(d),
 
-                read_pbf::PbfTag::Value(32, qt) => {
+                PbfTag::Value(32, qt) => {
                     res.quadtree = quadtree::Quadtree::new(un_zig_zag(qt))
                 }
-                read_pbf::PbfTag::Value(33, sd) => res.start_date = sd as i64,
-                read_pbf::PbfTag::Value(34, ed) => res.end_date = ed as i64,
+                PbfTag::Value(33, sd) => res.start_date = sd as i64,
+                PbfTag::Value(34, ed) => res.end_date = ed as i64,
 
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
@@ -333,9 +333,9 @@ impl MinimalBlock {
         if !ischange {
             return Changetype::Normal;
         }
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(10, ct) => return Changetype::from_int(ct),
+                PbfTag::Value(10, ct) => return Changetype::from_int(ct),
                 _ => {}
             }
         }
@@ -351,29 +351,29 @@ impl MinimalBlock {
         readrelations: bool,
     ) -> Result<u64, Error> {
         let mut count = 0;
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => {
+                PbfTag::Data(1, d) => {
                     if readnodes {
                         count += self.read_node(changetype, &d)?;
                     }
                 }
-                read_pbf::PbfTag::Data(2, d) => {
+                PbfTag::Data(2, d) => {
                     if readnodes {
                         count += self.read_dense(changetype, &d)?;
                     }
                 }
-                read_pbf::PbfTag::Data(3, d) => {
+                PbfTag::Data(3, d) => {
                     if readways {
                         count += self.read_way(changetype, &d)?;
                     }
                 }
-                read_pbf::PbfTag::Data(4, d) => {
+                PbfTag::Data(4, d) => {
                     if readrelations {
                         count += self.read_relation(changetype, &d)?;
                     }
                 }
-                read_pbf::PbfTag::Value(10, _) => {}
+                PbfTag::Value(10, _) => {}
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
         }
@@ -383,22 +383,22 @@ impl MinimalBlock {
     fn read_node(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut nd = MinimalNode::new();
         nd.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, i) => nd.id = i as i64,
-                read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data) {
+                PbfTag::Value(1, i) => nd.id = i as i64,
+                PbfTag::Data(4, info_data) => {
+                    for y in IterTags::new(&info_data) {
                         match y {
-                            read_pbf::PbfTag::Value(1, v) => nd.version = v as u32,
-                            read_pbf::PbfTag::Value(2, v) => nd.timestamp = v as i64,
+                            PbfTag::Value(1, v) => nd.version = v as u32,
+                            PbfTag::Value(2, v) => nd.timestamp = v as i64,
                             _ => {}
                         }
                     }
                 }
-                read_pbf::PbfTag::Value(7, i) => nd.lat = i as i32,
-                read_pbf::PbfTag::Value(8, i) => nd.lon = i as i32,
-                read_pbf::PbfTag::Value(20, i) => {
-                    nd.quadtree = Quadtree::new(read_pbf::un_zig_zag(i))
+                PbfTag::Value(7, i) => nd.lat = i as i32,
+                PbfTag::Value(8, i) => nd.lon = i as i32,
+                PbfTag::Value(20, i) => {
+                    nd.quadtree = Quadtree::new(un_zig_zag(i))
                 }
                 _ => {}
             }
@@ -410,21 +410,21 @@ impl MinimalBlock {
     fn read_way(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut wy = MinimalWay::new();
         wy.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, i) => wy.id = i as i64,
-                read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data) {
+                PbfTag::Value(1, i) => wy.id = i as i64,
+                PbfTag::Data(4, info_data) => {
+                    for y in IterTags::new(&info_data) {
                         match y {
-                            read_pbf::PbfTag::Value(1, v) => wy.version = v as u32,
-                            read_pbf::PbfTag::Value(2, v) => wy.timestamp = v as i64,
+                            PbfTag::Value(1, v) => wy.version = v as u32,
+                            PbfTag::Value(2, v) => wy.timestamp = v as i64,
                             _ => {}
                         }
                     }
                 }
-                read_pbf::PbfTag::Data(8, d) => wy.refs_data = d.to_vec(),
-                read_pbf::PbfTag::Value(20, i) => {
-                    wy.quadtree = Quadtree::new(read_pbf::un_zig_zag(i))
+                PbfTag::Data(8, d) => wy.refs_data = d.to_vec(),
+                PbfTag::Value(20, i) => {
+                    wy.quadtree = Quadtree::new(un_zig_zag(i))
                 }
                 _ => {}
             }
@@ -436,22 +436,22 @@ impl MinimalBlock {
     fn read_relation(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
         let mut rl = MinimalRelation::new();
         rl.changetype = changetype;
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, i) => rl.id = i as i64,
-                read_pbf::PbfTag::Data(4, info_data) => {
-                    for y in read_pbf::IterTags::new(&info_data) {
+                PbfTag::Value(1, i) => rl.id = i as i64,
+                PbfTag::Data(4, info_data) => {
+                    for y in IterTags::new(&info_data) {
                         match y {
-                            read_pbf::PbfTag::Value(1, v) => rl.version = v as u32,
-                            read_pbf::PbfTag::Value(2, v) => rl.timestamp = v as i64,
+                            PbfTag::Value(1, v) => rl.version = v as u32,
+                            PbfTag::Value(2, v) => rl.timestamp = v as i64,
                             _ => {}
                         }
                     }
                 }
-                read_pbf::PbfTag::Data(9, d) => rl.refs_data = d.to_vec(),
-                read_pbf::PbfTag::Data(10, d) => rl.types_data = d.to_vec(),
-                read_pbf::PbfTag::Value(20, i) => {
-                    rl.quadtree = Quadtree::new(read_pbf::un_zig_zag(i))
+                PbfTag::Data(9, d) => rl.refs_data = d.to_vec(),
+                PbfTag::Data(10, d) => rl.types_data = d.to_vec(),
+                PbfTag::Value(20, i) => {
+                    rl.quadtree = Quadtree::new(un_zig_zag(i))
                 }
                 _ => {}
             }
@@ -469,25 +469,25 @@ impl MinimalBlock {
         let mut vs = Vec::new();
         let mut ts = Vec::new();
 
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => ids = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(5, d) => {
-                    for y in read_pbf::IterTags::new(&d) {
+                PbfTag::Data(1, d) => ids = read_delta_packed_int(&d),
+                PbfTag::Data(5, d) => {
+                    for y in IterTags::new(&d) {
                         match y {
-                            read_pbf::PbfTag::Data(1, d) => vs = read_pbf::read_packed_int(&d), //version NOT delta packed
-                            read_pbf::PbfTag::Data(2, d) => {
-                                ts = read_pbf::read_delta_packed_int(&d)
+                            PbfTag::Data(1, d) => vs = read_packed_int(&d), //version NOT delta packed
+                            PbfTag::Data(2, d) => {
+                                ts = read_delta_packed_int(&d)
                             }
 
                             _ => {}
                         }
                     }
                 }
-                read_pbf::PbfTag::Data(8, d) => lats = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(9, d) => lons = read_pbf::read_delta_packed_int(&d),
+                PbfTag::Data(8, d) => lats = read_delta_packed_int(&d),
+                PbfTag::Data(9, d) => lons = read_delta_packed_int(&d),
 
-                read_pbf::PbfTag::Data(20, d) => qts = read_pbf::read_delta_packed_int(&d),
+                PbfTag::Data(20, d) => qts = read_delta_packed_int(&d),
                 _ => {}
             }
         }
@@ -660,60 +660,60 @@ impl QuadtreeBlock {
         let mut res = Vec::new();
         if !self.nodes.is_empty() {
             self.nodes.sort_by_key(|(x, _)| *x);
-            write_pbf::pack_data(&mut res, 2, &self.pack_nodes());
+            pack_data(&mut res, 2, &self.pack_nodes());
         }
         if !self.ways.is_empty() {
             self.ways.sort_by_key(|(x, _)| *x);
-            write_pbf::pack_data(&mut res, 2, &self.pack_ways());
+            pack_data(&mut res, 2, &self.pack_ways());
         }
         if !self.relations.is_empty() {
             self.relations.sort_by_key(|(x, _)| *x);
-            write_pbf::pack_data(&mut res, 2, &self.pack_relations());
+            pack_data(&mut res, 2, &self.pack_relations());
         }
 
         Ok(res)
     }
 
     fn pack_nodes(&self) -> Vec<u8> {
-        let nn = write_pbf::pack_delta_int_ref(self.nodes.iter().map(|(x, _)| x));
-        let qq = write_pbf::pack_delta_int(self.nodes.iter().map(|(_, q)| q.as_int()));
-        let ll = write_pbf::pack_delta_int(self.nodes.iter().map(|_| 0));
+        let nn = pack_delta_int_ref(self.nodes.iter().map(|(x, _)| x));
+        let qq = pack_delta_int(self.nodes.iter().map(|(_, q)| q.as_int()));
+        let ll = pack_delta_int(self.nodes.iter().map(|_| 0));
 
-        let l = write_pbf::data_length(1, nn.len())
-            + write_pbf::data_length(8, ll.len())
-            + write_pbf::data_length(9, ll.len())
-            + write_pbf::data_length(20, qq.len());
+        let l = data_length(1, nn.len())
+            + data_length(8, ll.len())
+            + data_length(9, ll.len())
+            + data_length(20, qq.len());
         let mut r = Vec::with_capacity(l);
-        write_pbf::pack_data(&mut r, 1, &nn);
-        write_pbf::pack_data(&mut r, 8, &ll);
-        write_pbf::pack_data(&mut r, 9, &ll);
-        write_pbf::pack_data(&mut r, 20, &qq);
+        pack_data(&mut r, 1, &nn);
+        pack_data(&mut r, 8, &ll);
+        pack_data(&mut r, 9, &ll);
+        pack_data(&mut r, 20, &qq);
 
-        let mut r2 = Vec::with_capacity(write_pbf::data_length(2, l));
-        write_pbf::pack_data(&mut r2, 2, &r);
+        let mut r2 = Vec::with_capacity(data_length(2, l));
+        pack_data(&mut r2, 2, &r);
         r2
     }
 
     fn pack_ways(&self) -> Vec<u8> {
         let mut l = 0;
         for (w, q) in &self.ways {
-            l += write_pbf::data_length(
+            l += data_length(
                 2,
-                write_pbf::value_length(1, *w as u64)
-                    + write_pbf::value_length(20, write_pbf::zig_zag(q.as_int())),
+                value_length(1, *w as u64)
+                    + value_length(20, zig_zag(q.as_int())),
             );
         }
 
         let mut r2 = Vec::with_capacity(l);
         for (w, q) in &self.ways {
             let mut r = Vec::with_capacity(
-                write_pbf::value_length(1, *w as u64)
-                    + write_pbf::value_length(20, write_pbf::zig_zag(q.as_int())),
+                value_length(1, *w as u64)
+                    + value_length(20, zig_zag(q.as_int())),
             );
-            write_pbf::pack_value(&mut r, 1, *w as u64);
-            write_pbf::pack_value(&mut r, 20, write_pbf::zig_zag(q.as_int()));
+            pack_value(&mut r, 1, *w as u64);
+            pack_value(&mut r, 20, zig_zag(q.as_int()));
 
-            write_pbf::pack_data(&mut r2, 3, &r);
+            pack_data(&mut r2, 3, &r);
         }
         r2
     }
@@ -721,23 +721,23 @@ impl QuadtreeBlock {
     fn pack_relations(&self) -> Vec<u8> {
         let mut l = 0;
         for (w, q) in &self.ways {
-            l += write_pbf::data_length(
+            l += data_length(
                 2,
-                write_pbf::value_length(1, *w as u64)
-                    + write_pbf::value_length(20, write_pbf::zig_zag(q.as_int())),
+                value_length(1, *w as u64)
+                    + value_length(20, zig_zag(q.as_int())),
             );
         }
 
         let mut r2 = Vec::with_capacity(l);
         for (w, q) in &self.relations {
             let mut r = Vec::with_capacity(
-                write_pbf::value_length(1, *w as u64)
-                    + write_pbf::value_length(20, write_pbf::zig_zag(q.as_int())),
+                value_length(1, *w as u64)
+                    + value_length(20, zig_zag(q.as_int())),
             );
-            write_pbf::pack_value(&mut r, 1, *w as u64);
-            write_pbf::pack_value(&mut r, 20, write_pbf::zig_zag(q.as_int()));
+            pack_value(&mut r, 1, *w as u64);
+            pack_value(&mut r, 20, zig_zag(q.as_int()));
 
-            write_pbf::pack_data(&mut r2, 4, &r);
+            pack_data(&mut r2, 4, &r);
         }
         r2
     }

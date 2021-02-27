@@ -1,8 +1,8 @@
 use crate::elements::{PrimitiveBlock,IdSet,IdSetAll,Node,Way,Relation,WithId,Quadtree,Bbox,Block};
 use crate::callback::{Callback,CallFinish,CallbackMerge,CallbackSync};
-use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all_idset;
-use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock};
+use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
+use crate::pbfformat::HeaderType;
+use crate::pbfformat::{read_all_blocks_parallel_with_progbar,FileBlock};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,LogTimes,parse_timestamp,CallAll};
 use crate::mergechanges::{read_filter,make_write_file};
 use crate::mergechanges::filter_elements::prep_bbox_filter;

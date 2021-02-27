@@ -2,8 +2,9 @@ use crate::callback::{CallFinish, Callback, CallbackMerge};
 use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
-use crate::pbfformat::header_block;
-use crate::pbfformat::read_file_block;
+use crate::pbfformat::{
+        HeaderBlock, pack_file_block,ProgBarWrap,FileBlock,
+        read_file_block_with_pos, read_all_blocks_locs_prog};
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
@@ -209,10 +210,10 @@ impl ReadPB {
 }
 
 impl CallFinish for ReadPB {
-    type CallType = (usize, read_file_block::FileBlock);
+    type CallType = (usize, FileBlock);
     type ReturnType = Timings<OrigData>;
 
-    fn call(&mut self, idx_blocks: (usize, read_file_block::FileBlock)) {
+    fn call(&mut self, idx_blocks: (usize, FileBlock)) {
         let tx = ThreadTimer::new();
         let b = PrimitiveBlock::read_check_ids(
             idx_blocks.0 as i64,
@@ -241,15 +242,15 @@ fn read_change_tiles(
     tiles: &BTreeSet<Quadtree>,
     idset: Arc<IdSetSet>,
     numchan: usize,
-    pb: &read_file_block::ProgBarWrap,
+    pb: &ProgBarWrap,
 ) -> std::io::Result<(OrigData, f64)> {
     let ischange = fname.ends_with(".pbfc");
     let mut file = File::open(fname)?;
-    let (p, fb) = read_file_block::read_file_block_with_pos(&mut file, 0)?;
+    let (p, fb) = read_file_block_with_pos(&mut file, 0)?;
     if fb.block_type != "OSMHeader" {
         return Err(Error::new(ErrorKind::Other, "first block not an OSMHeader"));
     }
-    let head = header_block::HeaderBlock::read(p, &fb.data(), fname)?;
+    let head = HeaderBlock::read(p, &fb.data(), fname)?;
     if head.index.is_empty() {
         return Err(Error::new(ErrorKind::Other, "no locs in header"));
     }
@@ -262,13 +263,13 @@ fn read_change_tiles(
     }
     let (mut tm, b) = if numchan == 0 {
         let convert = Box::new(ReadPB::new(ischange, idset));
-        read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
+        read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
         
     } else {
         let mut convs: Vec<
             Box<
                 dyn CallFinish<
-                    CallType = (usize, read_file_block::FileBlock),
+                    CallType = (usize, FileBlock),
                     ReturnType = Timings<OrigData>,
                 >,
             >,
@@ -280,7 +281,7 @@ fn read_change_tiles(
             )))));
         }
         let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
-        read_file_block::read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
+        read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
         
     };
 
@@ -301,7 +302,7 @@ fn collect_existing(
     let mut total_scan = 0.0;
     let mut total_read = 0.0;
 
-    let mut pb = read_file_block::ProgBarWrap::new(147 + 388 + (filelist.len() as u64 - 1) * 2);
+    let mut pb = ProgBarWrap::new(147 + 388 + (filelist.len() as u64 - 1) * 2);
 
     for (i, fle) in filelist.iter().enumerate() {
         let nc = if i == 0 { numchan } else { 1 };
@@ -669,11 +670,11 @@ fn calc_qts(
 fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<QuadtreeTree> {
     let fname = format!("{}{}", prfx, filelist[0].filename);
     let mut fobj = File::open(&fname)?;
-    let (x, fb) = read_file_block::read_file_block_with_pos(&mut fobj, 0)?;
+    let (x, fb) = read_file_block_with_pos(&mut fobj, 0)?;
     if fb.block_type != "OSMHeader" {
         return Err(Error::new(ErrorKind::Other, "first block not an OSMHeader"));
     }
-    let head = header_block::HeaderBlock::read(x, &fb.data(), &fname)?;
+    let head = HeaderBlock::read(x, &fb.data(), &fname)?;
 
     let mut tree = QuadtreeTree::new();
     for ii in &head.index {
@@ -780,7 +781,7 @@ pub fn find_update(
     let mut wf = WriteFileInternalLocs::new(&format!("{}{}", prfx, fname), true);
     for (k, v) in tiles.iter() {
         let pp = v.pack(true, true)?;
-        let qq = read_file_block::pack_file_block("OSMData", &pp, true)?;
+        let qq = pack_file_block("OSMData", &pp, true)?;
         wf.call((*k, qq))
     }
     wf.finish()?;

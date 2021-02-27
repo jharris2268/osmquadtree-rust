@@ -1,5 +1,5 @@
-use crate::elements::{Info,Tag,Quadtree,Way,Bbox};
-use crate::elements::quadtree::coordinate_as_float;
+use crate::elements::{Info,Tag,Quadtree,Way,Bbox,coordinate_as_float};
+
 use crate::geometry::LonLat;
 use crate::geometry::elements::pointgeometry::pack_tags;
 use crate::geometry::elements::GeoJsonable;

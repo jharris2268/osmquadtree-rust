@@ -1,9 +1,9 @@
 use crate::elements::{Bbox, MinimalBlock, IdSet, IdSetBool, ElementType, MinimalNode, MinimalRelation, MinimalWay};
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,as_int};
-use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar, FileBlock};
-use crate::pbfformat::read_pbf::{DeltaPackedInt,PackedInt};
-use crate::pbfformat::convertblocks::make_read_minimal_blocks_combine_call_all;
+use crate::pbfformat::{read_all_blocks_parallel_with_progbar, FileBlock, make_read_minimal_blocks_combine_call_all};
+use simple_protocolbuffers::{PackedInt,DeltaPackedInt};
+
 use crate::update::{ParallelFileLocs};
 
 use std::sync::Arc;

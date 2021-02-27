@@ -1,13 +1,13 @@
 use std::fs::File;
 
-use crate::pbfformat::read_file_block::{
+use crate::pbfformat::{
     file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock, ProgBarWrap,
 };
 
 use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
 
 use crate::callback::{CallFinish, Callback, CallbackMerge};
-use crate::pbfformat::convertblocks::{
+use crate::pbfformat::{
     make_convert_minimal_block, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
 };
@@ -20,7 +20,8 @@ use crate::elements::{
 use std::io::BufReader;
 use std::io::{Error, ErrorKind, Result};
 
-use crate::pbfformat::read_pbf::read_delta_packed_int;
+use simple_protocolbuffers::{read_delta_packed_int};
+
 use crate::utils::timestamp_string;
 
 use std::collections::BTreeMap;

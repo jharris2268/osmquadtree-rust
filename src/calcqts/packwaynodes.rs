@@ -6,10 +6,11 @@ use simple_protocolbuffers::{
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{MinimalBlock, Quadtree};
-use crate::pbfformat::read_file_block::{
-    pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock,
+use crate::pbfformat::{
+        pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock,
+        HeaderType,WriteFile,FileLocs
 };
-use crate::pbfformat::{header_block::HeaderType,writefile::WriteFile,writefile::FileLocs};
+
 use crate::utils::{MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
 
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};

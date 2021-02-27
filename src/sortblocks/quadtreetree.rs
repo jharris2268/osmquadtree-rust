@@ -4,7 +4,7 @@ use std::io;
 use std::iter::Iterator;
 
 use crate::elements::Quadtree;
-use crate::pbfformat::read_file_block::ProgBarWrap;
+use crate::pbfformat::ProgBarWrap;
 
 #[derive(Copy, Clone)]
 pub struct QuadtreeTreeItem {

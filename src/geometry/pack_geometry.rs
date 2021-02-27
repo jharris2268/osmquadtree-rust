@@ -1,7 +1,7 @@
 use crate::geometry::{GeometryBlock,PointGeometry,LinestringGeometry, SimplePolygonGeometry, ComplicatedPolygonGeometry, PolygonPart, Ring, RingPart};
 
-use crate::elements::common::{pack_head,PackStringTable};
-use crate::pbfformat::write_pbf::{data_length, pack_value, pack_data, pack_delta_int, pack_delta_int_ref, zig_zag};
+use crate::elements::{pack_head,PackStringTable};
+use simple_protocolbuffers::{data_length, pack_value, pack_data, pack_delta_int, pack_delta_int_ref, zig_zag};
 use std::io::{Result,Error,ErrorKind};
 
 

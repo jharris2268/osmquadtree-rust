@@ -1,11 +1,16 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::{MinimalBlock, MinimalNode};
-use crate::pbfformat::convertblocks::make_convert_minimal_block_parts;
-use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop, read_all_blocks_parallel_with_progbar, FileBlock, file_length};
-use crate::pbfformat::writefile::WriteFile;
-use crate::pbfformat::{read_file_block, read_pbf, write_pbf};
+use crate::elements::MinimalBlock;
+use crate::pbfformat::{
+    make_convert_minimal_block_parts, HeaderType,
+    read_file_block_with_pos, ReadFileBlocks,
+    read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop,
+    read_all_blocks_parallel_with_progbar, FileBlock, file_length, pack_file_block,
+    ProgBarWrap, unpack_file_block,WriteFile};
+
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
+
+use simple_protocolbuffers::{
+        read_packed_int, PbfTag, IterTags, read_delta_packed_int, DeltaPackedInt};
 
 use std::fmt;
 use std::fs::File;
@@ -27,14 +32,14 @@ pub struct NodeWayNodeComb {
 }
 
 impl NodeWayNodeComb {
-    pub fn new(nd: MinimalNode, ways: Vec<i64>) -> NodeWayNodeComb {
+    /*pub fn new(nd: MinimalNode, ways: Vec<i64>) -> NodeWayNodeComb {
         NodeWayNodeComb {
             id: nd.id,
             lon: nd.lon,
             lat: nd.lat,
             ways: ways,
         }
-    }
+    }*/
     pub fn from_id(id: i64) -> NodeWayNodeComb {
         NodeWayNodeComb {
             id: id,
@@ -66,71 +71,73 @@ impl NodeWayNodeCombTile {
     pub fn new(vals: Vec<NodeWayNodeComb>) -> NodeWayNodeCombTile {
         NodeWayNodeCombTile { vals }
     }
-
+    
+    /*
     pub fn pack(&self) -> Vec<u8> {
         let mut res = Vec::new();
-        write_pbf::pack_value(&mut res, 1, self.vals.len() as u64);
-        write_pbf::pack_data(
+        pack_value(&mut res, 1, self.vals.len() as u64);
+        pack_data(
             &mut res,
             2,
-            &write_pbf::pack_delta_int(self.vals.iter().map(|x| x.id)),
+            &pack_delta_int(self.vals.iter().map(|x| x.id)),
         );
-        write_pbf::pack_data(
+        pack_data(
             &mut res,
             3,
-            &write_pbf::pack_delta_int(self.vals.iter().map(|x| x.lon as i64)),
+            &pack_delta_int(self.vals.iter().map(|x| x.lon as i64)),
         );
-        write_pbf::pack_data(
+        pack_data(
             &mut res,
             4,
-            &write_pbf::pack_delta_int(self.vals.iter().map(|x| x.lat as i64)),
+            &pack_delta_int(self.vals.iter().map(|x| x.lat as i64)),
         );
-        write_pbf::pack_data(
+        pack_data(
             &mut res,
             5,
-            &write_pbf::pack_int(self.vals.iter().map(|x| x.ways.len() as u64)),
+            &pack_int(self.vals.iter().map(|x| x.ways.len() as u64)),
         );
-        write_pbf::pack_data(
+        pack_data(
             &mut res,
             6,
-            &write_pbf::pack_delta_int_ref(self.vals.iter().flat_map(|x| x.ways.iter())),
+            &pack_delta_int_ref(self.vals.iter().flat_map(|x| x.ways.iter())),
         );
 
         res
     }
-
+    */
+    
     pub fn unpack(data: &[u8], minw: i64, maxw: i64) -> NodeWayNodeCombTile {
         let mut res = NodeWayNodeCombTile { vals: Vec::new() };
 
         let mut numw = Vec::new();
         let mut ww = Vec::new();
-        for t in read_pbf::IterTags::new(&data) {
+        for t in IterTags::new(&data) {
             match t {
-                read_pbf::PbfTag::Value(1, c) => {
+                PbfTag::Value(1, c) => {
                     res.vals.reserve(c as usize);
                 }
-                read_pbf::PbfTag::Data(2, x) => {
-                    //read_pbf::DeltaPackedInt::new(x).enumerate().map( |(_,x) | { res.vals.push(NodeWayNodeComb::from_id(x));}).collect(); },
-                    for i in read_pbf::DeltaPackedInt::new(x) {
+                PbfTag::Data(2, x) => {
+                    //DeltaPackedInt::new(x).enumerate().map( |(_,x) | { res.vals.push(NodeWayNodeComb::from_id(x));}).collect(); },
+                    for i in DeltaPackedInt::new(x) {
                         res.vals.push(NodeWayNodeComb::from_id(i));
                     }
                 }
-                read_pbf::PbfTag::Data(3, x) => {
-                    for (i, ln) in read_pbf::DeltaPackedInt::new(x).enumerate() {
+                PbfTag::Data(3, x) => {
+                    for (i, ln) in DeltaPackedInt::new(x).enumerate() {
                         res.vals[i].lon = ln as i32;
                     }
                 }
 
-                read_pbf::PbfTag::Data(4, x) => {
-                    for (i, lt) in read_pbf::DeltaPackedInt::new(x).enumerate() {
+                PbfTag::Data(4, x) => {
+                    for (i, lt) in DeltaPackedInt::new(x).enumerate() {
                         res.vals[i].lat = lt as i32;
                     }
                 }
-                read_pbf::PbfTag::Data(5, x) => {
-                    numw = read_pbf::read_packed_int(x);
+                PbfTag::Data(5, x) => {
+                    numw = read_packed_int(x);
                 }
-                read_pbf::PbfTag::Data(6, x) => {
-                    ww = read_pbf::read_delta_packed_int(x);
+                PbfTag::Data(6, x) => {
+                    ww = read_delta_packed_int(x);
                 }
                 _ => {}
             }
@@ -160,16 +167,17 @@ impl NodeWayNodeCombTile {
         res
     }
 }
-
+/*
 pub fn make_packwaynodescomb<T: CallFinish<CallType = Vec<u8>, ReturnType = Timings>>(
     out: Box<T>,
 ) -> Box<impl CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>> {
     let conv = Box::new(|n: NodeWayNodeCombTile| {
-        read_file_block::pack_file_block("NodeWayNodes", &n.pack(), true).expect("failed to pack")
+        pack_file_block("NodeWayNodes", &n.pack(), true).expect("failed to pack")
     });
 
     Box::new(CallAll::new(out, "packnodewaycomb", conv))
 }
+*/
 
 fn resort_waynodes((i, dd): (usize,Vec<FileBlock>)) -> Vec<(i64, Vec<u8>)> {
     let mut pos: u64 = 0;
@@ -179,7 +187,7 @@ fn resort_waynodes((i, dd): (usize,Vec<FileBlock>)) -> Vec<(i64, Vec<u8>)> {
     for vv in wnt.pack_chunks(256*1024) {
         res.push((
             0,
-            read_file_block::pack_file_block("WayNodes", &vv, true).expect("!"),
+            pack_file_block("WayNodes", &vv, true).expect("!"),
         ));
     }
     res
@@ -219,7 +227,7 @@ fn read_waynodevals<T: CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Tim
 
     match waynodevals {
         WayNodeVals::PackedInMem(ww) => {
-            let mut pg = read_file_block::ProgBarWrap::new(100);
+            let mut pg = ProgBarWrap::new(100);
             pg.set_range(100);
             pg.set_message("write_waynode_sorted_resort");
 
@@ -240,7 +248,7 @@ fn read_waynodevals<T: CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Tim
                     curr=a;
                     xx = Vec::new();
                 }
-                let fb = read_file_block::unpack_file_block(0, &b)?;
+                let fb = unpack_file_block(0, &b)?;
                 xx.push(fb);
                 i += 1.0;
             }
@@ -270,58 +278,7 @@ fn read_waynodevals<T: CallFinish<CallType=(usize,Vec<FileBlock>),ReturnType=Tim
     }
 }
 
-/*
-pub fn write_waynode_sorted(waynodevals: WayNodeVals, outfn: &str) -> (String, FileLocs) {
-    let waynodesfn = format!("{}-waynodes", outfn);
 
-    let mut wv = WriteFile::new(&waynodesfn, HeaderType::None);
-
-    let ww = Arc::try_unwrap(waynodevals).unwrap();
-
-    for (a, b) in ww {
-        for c in b {
-            wv.call(vec![(a, c)]);
-        }
-    }
-
-    let (_, locs) = wv.finish().expect("?");
-
-    (waynodesfn, locs)
-}
-
-fn read_way_node_tiles_vals(
-    pos: &mut u64,
-    tile: i64,
-    vals: &Vec<Vec<u8>>,
-    minw: i64,
-    maxw: i64,
-) -> Result<WayNodeTile> {
-    let mut res = WayNodeTile::new(tile, 0);
-
-    if vals.is_empty() {
-        return Ok(res);
-    }
-    let nv = vals.len();
-    for (i, v) in vals.iter().enumerate() {
-        let fb = read_file_block::unpack_file_block(*pos, &v)?;
-        if fb.block_type != "WayNodes" {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("wrong block type {}", fb.block_type),
-            ));
-        }
-
-        res.unpack(&fb.data(), minw, maxw)?;
-        if i == 0 && minw == 0 && maxw == 0 {
-            res.vals.reserve(res.vals.len() * nv);
-        }
-        *pos += v.len() as u64;
-        //drop(v);
-    }
-    res.sort();
-    Ok(res)
-}
-*/
 fn read_way_node_tiles_vals_fb(
     _pos: &mut u64,
     tile: u64,
@@ -336,7 +293,6 @@ fn read_way_node_tiles_vals_fb(
     }
     let nv = vals.len();
     for (i, fb) in vals.iter().enumerate() {
-        //let fb = read_file_block::unpack_file_block(*pos, &v)?;
         if fb.block_type != "WayNodes" {
             return Err(Error::new(
                 ErrorKind::Other,
@@ -368,7 +324,7 @@ fn read_way_node_tiles_vals_rf(
     }
     let nv = vals.len();
     for (i, v) in vals.iter().enumerate() {
-        let fb = read_file_block::unpack_file_block(*pos, v)?;
+        let fb = unpack_file_block(*pos, v)?;
         if fb.block_type != "WayNodes" {
             return Err(Error::new(
                 ErrorKind::Other,
@@ -496,7 +452,7 @@ fn read_way_node_tiles_file_send(
     }
 
     if locs.is_empty() {
-        for (i, fb) in read_file_block::ReadFileBlocks::new(&mut fbuf).enumerate() {
+        for (i, fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {
             qq[i % 4].call((0, vec![fb]));
         }
     } else {
@@ -510,7 +466,7 @@ fn read_way_node_tiles_file_send(
                         fbuf.seek(SeekFrom::Start(a))
                             .expect(&format!("failed to read {} @ {}", fname, a));
                     }
-                    let (np, fb) = read_file_block::read_file_block_with_pos(&mut fbuf, a)
+                    let (np, fb) = read_file_block_with_pos(&mut fbuf, a)
                         .expect(&format!("failed to read {} @ {}", fname, a));
                     if fb.block_type != "WayNodes" {
                         panic!("wrong block type {}", fb.block_type);

@@ -1,10 +1,10 @@
-use crate::elements::quadtree::{
+use crate::elements::{
         EARTH_WIDTH, coordinate_as_float, coordinate_as_integer,
         latitude_mercator, latitude_un_mercator, Bbox};
 
 
 
-extern crate geo;
+
 pub use geo::Coordinate;
 
 use std::borrow::Borrow;

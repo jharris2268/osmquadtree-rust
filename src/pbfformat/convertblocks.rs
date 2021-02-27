@@ -1,7 +1,7 @@
 use crate::callback::CallFinish;
 use crate::elements::{apply_change_minimal, combine_block_minimal, MinimalBlock};
 use crate::elements::{apply_change_primitive, combine_block_primitive, IdSet, PrimitiveBlock};
-use crate::pbfformat::read_file_block::FileBlock;
+use crate::pbfformat::FileBlock;
 use crate::utils::{CallAll, ThreadTimer, Timings};
 use std::io::Result;
 use std::marker::PhantomData;

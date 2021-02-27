@@ -47,9 +47,9 @@ impl WayBoxesSimple {
         Box::new(QuadtreeSimple::from_values(qts))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&i64, &Bbox)> + '_ {
+    /*pub fn iter(&self) -> impl Iterator<Item = (&i64, &Bbox)> + '_ {
         self.boxes.iter()
-    }
+    }*/
 }
 
 impl CallFinish for WayBoxesSimple {

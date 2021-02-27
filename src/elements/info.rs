@@ -1,6 +1,9 @@
 use crate::elements::common;
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+
+use simple_protocolbuffers::{
+        PbfTag, IterTags,
+        pack_value};
+
 use std::io::{Error, ErrorKind, Result};
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize)]
@@ -25,13 +28,13 @@ impl Info {
 
     pub fn read(strings: &Vec<String>, data: &[u8]) -> Result<Info> {
         let mut res = Info::new();
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, v) => res.version = v as i64,
-                read_pbf::PbfTag::Value(2, v) => res.timestamp = v as i64,
-                read_pbf::PbfTag::Value(3, v) => res.changeset = v as i64,
-                read_pbf::PbfTag::Value(4, v) => res.user_id = v as i64,
-                read_pbf::PbfTag::Value(5, v) => {
+                PbfTag::Value(1, v) => res.version = v as i64,
+                PbfTag::Value(2, v) => res.timestamp = v as i64,
+                PbfTag::Value(3, v) => res.changeset = v as i64,
+                PbfTag::Value(4, v) => res.user_id = v as i64,
+                PbfTag::Value(5, v) => {
                     if v as usize >= strings.len() {
                         return Err(Error::new(ErrorKind::Other, "info user idx out of range"));
                     }
@@ -53,21 +56,21 @@ impl Info {
         50
         /*
         let mut l=0;
-        l += write_pbf::value_length(1, self.version as u64);
-        l += write_pbf::value_length(2, self.timestamp as u64);
-        l += write_pbf::value_length(3, self.changeset as u64);
-        l += write_pbf::value_length(4, self.user_id as u64);
-        l += write_pbf::value_length(5, 250);//pack_strings.call(&self.user));
+        l += value_length(1, self.version as u64);
+        l += value_length(2, self.timestamp as u64);
+        l += value_length(3, self.changeset as u64);
+        l += value_length(4, self.user_id as u64);
+        l += value_length(5, 250);//pack_strings.call(&self.user));
 
         l*/
     }
     pub fn pack(&self, pack_strings: &mut Box<common::PackStringTable>) -> Result<Vec<u8>> {
         let mut res = Vec::with_capacity(self.pack_length(pack_strings));
-        write_pbf::pack_value(&mut res, 1, self.version as u64);
-        write_pbf::pack_value(&mut res, 2, self.timestamp as u64);
-        write_pbf::pack_value(&mut res, 3, self.changeset as u64);
-        write_pbf::pack_value(&mut res, 4, self.user_id as u64);
-        write_pbf::pack_value(&mut res, 5, pack_strings.call(&self.user));
+        pack_value(&mut res, 1, self.version as u64);
+        pack_value(&mut res, 2, self.timestamp as u64);
+        pack_value(&mut res, 3, self.changeset as u64);
+        pack_value(&mut res, 4, self.user_id as u64);
+        pack_value(&mut res, 5, pack_strings.call(&self.user));
         Ok(res)
     }
 }

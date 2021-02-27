@@ -6,12 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::elements::PrimitiveBlock;
-use crate::pbfformat::read_file_block::{FileBlock, ReadFileBlocks};
+use crate::pbfformat::{FileBlock, ReadFileBlocks};
 
 use crate::callback::CallFinish;
-use crate::elements::minimal_block::QuadtreeBlock;
-use crate::elements::ElementType;
-use crate::elements::Quadtree;
+use crate::elements::{QuadtreeBlock,ElementType,Quadtree};
+
 use crate::utils::{CallAll, ThreadTimer};
 
 use crate::sortblocks::Timings;

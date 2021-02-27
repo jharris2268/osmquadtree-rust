@@ -1,5 +1,6 @@
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+use simple_protocolbuffers::{
+        PbfTag, read_delta_packed_int,
+        pack_value, pack_data, pack_delta_int_ref, data_length};
 
 use crate::elements::common::{
     common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
@@ -47,7 +48,7 @@ impl Way {
 
         for t in rem {
             match t {
-                read_pbf::PbfTag::Data(8, d) => w.refs = read_pbf::read_delta_packed_int(&d),
+                PbfTag::Data(8, d) => w.refs = read_delta_packed_int(&d),
                 _ => {}
             }
         }
@@ -58,17 +59,17 @@ impl Way {
         pack_strings: &mut Box<PackStringTable>,
         include_qts: bool,
     ) -> Result<Vec<u8>> {
-        let refs = write_pbf::pack_delta_int_ref(self.refs.iter());
+        let refs = pack_delta_int_ref(self.refs.iter());
 
         let l = pack_length(&self.tags, pack_strings, include_qts)
-            + write_pbf::data_length(8, refs.len());
+            + data_length(8, refs.len());
 
         let mut res = Vec::with_capacity(l);
         pack_head(&self.id, &self.info, &self.tags, &mut res, pack_strings)?;
         if refs.is_empty() {
-            write_pbf::pack_value(&mut res, 8, 0);
+            pack_value(&mut res, 8, 0);
         } else {
-            write_pbf::pack_data(&mut res, 8, &refs);
+            pack_data(&mut res, 8, &refs);
         }
         pack_tail(&self.quadtree, &mut res, include_qts)?;
         Ok(res)

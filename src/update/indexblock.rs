@@ -1,11 +1,16 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{IdSet, MinimalBlock, Quadtree,ElementType};
-use crate::pbfformat::read_file_block::{
+use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks_prog, read_all_blocks, read_all_blocks_with_progbar, FileBlock,
     ProgBarWrap,
 };
-use crate::pbfformat::read_pbf::{un_zig_zag, DeltaPackedInt, IterTags, PbfTag};
-use crate::pbfformat::write_pbf::{pack_data, pack_delta_int, pack_value, zig_zag};
+
+use simple_protocolbuffers::{
+    un_zig_zag, DeltaPackedInt, IterTags, PbfTag,
+    pack_data, pack_delta_int, pack_value, zig_zag
+};
+
+
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
 
 pub enum ResultType {

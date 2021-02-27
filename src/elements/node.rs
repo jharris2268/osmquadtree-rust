@@ -1,4 +1,4 @@
-use crate::pbfformat::read_pbf;
+use simple_protocolbuffers::{PbfTag, un_zig_zag};
 
 use crate::elements::common::{
     common_cmp, common_eq, read_common, PackStringTable, 
@@ -49,8 +49,8 @@ impl Node {
 
         for t in rem {
             match t {
-                read_pbf::PbfTag::Value(8, lat) => nd.lat = read_pbf::un_zig_zag(lat) as i32,
-                read_pbf::PbfTag::Value(9, lon) => nd.lon = read_pbf::un_zig_zag(lon) as i32,
+                PbfTag::Value(8, lat) => nd.lat = un_zig_zag(lat) as i32,
+                PbfTag::Value(9, lon) => nd.lon = un_zig_zag(lon) as i32,
                 _ => {}
             }
         }

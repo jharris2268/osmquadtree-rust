@@ -1,7 +1,7 @@
 use crate::callback::CallFinish;
 use crate::elements::Bbox;
-use crate::pbfformat::header_block::{make_header_block, HeaderType};
-use crate::pbfformat::read_file_block::pack_file_block;
+use crate::pbfformat::{make_header_block, HeaderType};
+use crate::pbfformat::pack_file_block;
 use crate::utils::ThreadTimer;
 
 use serde_json;

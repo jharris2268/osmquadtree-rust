@@ -1,8 +1,8 @@
-pub mod filelist;
-pub mod find_update;
-pub mod indexblock;
-pub mod read_xml;
-pub mod run_update;
+mod filelist;
+mod find_update;
+mod indexblock;
+mod read_xml;
+mod run_update;
 
 pub use filelist::{get_file_locs, ParallelFileLocs, read_filelist, write_filelist, FilelistEntry};
 pub use find_update::find_update;

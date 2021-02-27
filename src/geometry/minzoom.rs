@@ -1,6 +1,6 @@
 use crate::geometry::default_minzoom_values::DEFAULT_MINZOOM_VALUES;
 use crate::geometry::{GeometryBlock,Timings,WorkingBlock,OtherData};
-use crate::elements::{Tag,quadtree::EARTH_WIDTH};
+use crate::elements::{Tag,EARTH_WIDTH};
 use crate::callback::CallFinish;
 use crate::utils::ThreadTimer;
 use std::io::{Result,Error,ErrorKind,Read};

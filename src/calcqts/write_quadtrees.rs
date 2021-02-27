@@ -1,11 +1,11 @@
 use crate::callback::{CallFinish, Callback, CallbackSync};
 use crate::elements::{Quadtree, QuadtreeBlock};
-use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::writefile::WriteFile;
+use crate::pbfformat::{HeaderType,pack_file_block};
+use crate::pbfformat::WriteFile;
 use crate::utils::ReplaceNoneWithTimings;
 
 use crate::calcqts::{OtherData, Timings};
-use crate::pbfformat::read_file_block;
+
 
 use std::io::Result;
 
@@ -79,7 +79,7 @@ where
     fn call(&mut self, t: Self::CallType) {
         let mut t = t;
         let p = t.pack().expect("failed to pack");
-        let b = read_file_block::pack_file_block("OSMData", &p, true).expect("failed to pack");
+        let b = pack_file_block("OSMData", &p, true).expect("failed to pack");
 
         self.out.call(b);
     }

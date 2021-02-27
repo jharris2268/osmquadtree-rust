@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::elements::{Bbox,Quadtree};
-use crate::pbfformat::header_block;
-use crate::pbfformat::read_file_block;
+use crate::pbfformat::HeaderBlock;
+use crate::pbfformat::{read_file_block,file_position};
 use crate::utils::{parse_timestamp};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -55,9 +55,9 @@ pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<Parallel
     let f = File::open(infn)?;
     let mut fbuf = BufReader::with_capacity(cap, f);
     
-    let fb = read_file_block::read_file_block(&mut fbuf)?;
-    let filepos = read_file_block::file_position(&mut fbuf)?;
-    let head = header_block::HeaderBlock::read(filepos, &fb.data(), infn)?;
+    let fb = read_file_block(&mut fbuf)?;
+    let filepos = file_position(&mut fbuf)?;
+    let head = HeaderBlock::read(filepos, &fb.data(), infn)?;
     if head.index.is_empty() {
         return Err(Error::new(ErrorKind::Other,"no locations in header"));
     }
@@ -113,9 +113,9 @@ pub fn get_file_locs(
         let f = File::open(&fle_fn)?;
         let mut fbuf = BufReader::with_capacity(cap, f);
         
-        let fb = read_file_block::read_file_block(&mut fbuf)?;
-        let filepos = read_file_block::file_position(&mut fbuf)?;
-        let head = header_block::HeaderBlock::read(filepos, &fb.data(), &fle_fn)?;
+        let fb = read_file_block(&mut fbuf)?;
+        let filepos = file_position(&mut fbuf)?;
+        let head = HeaderBlock::read(filepos, &fb.data(), &fle_fn)?;
         
         if head.index.is_empty() {
             return Err(Error::new(ErrorKind::Other,format!("no locations in header for {}", &fle_fn)));

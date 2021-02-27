@@ -1,5 +1,5 @@
-use crate::pbfformat::read_pbf::{read_packed_int, un_zig_zag, PbfTag, IterTags};
-use crate::pbfformat::write_pbf;
+use simple_protocolbuffers::{read_packed_int, un_zig_zag, PbfTag, IterTags, pack_data, pack_value, pack_int, data_length, zig_zag};
+
 
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
@@ -90,22 +90,22 @@ pub fn pack_head(
     res: &mut Vec<u8>,
     pack_strings: &mut Box<PackStringTable>,
 ) -> Result<()> {
-    write_pbf::pack_value(res, 1, *id as u64);
+    pack_value(res, 1, *id as u64);
     if !tags.is_empty() {
-        write_pbf::pack_data(
+        pack_data(
             res,
             2,
-            &write_pbf::pack_int(tags.iter().map(|t| pack_strings.call(&t.key))),
+            &pack_int(tags.iter().map(|t| pack_strings.call(&t.key))),
         );
-        write_pbf::pack_data(
+        pack_data(
             res,
             3,
-            &write_pbf::pack_int(tags.iter().map(|t| pack_strings.call(&t.val))),
+            &pack_int(tags.iter().map(|t| pack_strings.call(&t.val))),
         );
     }
     match info {
         Some(info) => {
-            write_pbf::pack_data(res, 4, &info.pack(pack_strings)?);
+            pack_data(res, 4, &info.pack(pack_strings)?);
         }
         None => {}
     }
@@ -114,7 +114,7 @@ pub fn pack_head(
 
 pub fn pack_tail(quadtree: &Quadtree, res: &mut Vec<u8>, include_qts: bool) -> Result<()> {
     if include_qts && quadtree.as_int() >= 0 {
-        write_pbf::pack_value(res, 20, write_pbf::zig_zag(quadtree.as_int()));
+        pack_value(res, 20, zig_zag(quadtree.as_int()));
     }
     Ok(())
 }
@@ -186,10 +186,10 @@ impl PackStringTable {
     }
 
     pub fn len(&self) -> usize {
-        let mut l = write_pbf::data_length(1, 0);
+        let mut l = data_length(1, 0);
         for (s, t) in &self.strings {
             if *t != 0 {
-                l += write_pbf::data_length(1, s.as_bytes().len());
+                l += data_length(1, s.as_bytes().len());
             }
         }
         l
@@ -203,13 +203,13 @@ impl PackStringTable {
                 m[0] = String::new()
             } else {
                 m[*t as usize] = s.clone();
-                tl += write_pbf::data_length(1, s.as_bytes().len());
+                tl += data_length(1, s.as_bytes().len());
             }
         }
 
         let mut r = Vec::with_capacity(tl);
         for t in m {
-            write_pbf::pack_data(&mut r, 1, t.as_bytes());
+            pack_data(&mut r, 1, t.as_bytes());
         }
         r
     }

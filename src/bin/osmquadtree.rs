@@ -8,7 +8,7 @@ use osmquadtree::calcqts::{run_calcqts, run_calcqts_prelim,run_calcqts_load_exis
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem,QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial,write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
-use osmquadtree::pbfformat::read_file_block::file_length;
+use osmquadtree::pbfformat::file_length;
 
 use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
 use osmquadtree::geometry::{process_geometry,GeometryStyle,OutputType};

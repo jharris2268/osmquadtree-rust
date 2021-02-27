@@ -7,8 +7,8 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 
 use crate::callback::CallFinish;
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+use simple_protocolbuffers as spb;
+
 use crate::utils::Checktime;
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -76,18 +76,18 @@ pub fn read_file_block_with_pos<F: Read>(
 
     pos += 4;
 
-    let (l, _) = read_pbf::read_uint32(&a, 0)?;
+    let (l, _) = spb::read_uint32(&a, 0)?;
 
     let b = read_file_data(file, l)?;
     pos += l;
 
-    let bb = read_pbf::IterTags::new(&b);
+    let bb = spb::IterTags::new(&b);
     //println!("{:?}", bb);
     let mut ln = 0;
     for tg in bb {
         match tg {
-            read_pbf::PbfTag::Value(3, v) => ln = v,
-            read_pbf::PbfTag::Data(1, d) => {
+            spb::PbfTag::Value(3, v) => ln = v,
+            spb::PbfTag::Data(1, d) => {
                 fb.block_type = std::str::from_utf8(&d).unwrap().to_string()
             }
             _ => println!("?? {:?}", tg),
@@ -98,11 +98,11 @@ pub fn read_file_block_with_pos<F: Read>(
     let c = read_file_data(file, ln).unwrap();
     pos += ln;
 
-    for tg in read_pbf::IterTags::new(&c) {
+    for tg in spb::IterTags::new(&c) {
         match tg {
-            read_pbf::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
-            read_pbf::PbfTag::Value(2, _) => fb.is_comp = true,
-            read_pbf::PbfTag::Data(3, d) => fb.data_raw = d.to_vec(),
+            spb::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
+            spb::PbfTag::Value(2, _) => fb.is_comp = true,
+            spb::PbfTag::Data(3, d) => fb.data_raw = d.to_vec(),
             _ => println!("?? {:?}", tg),
         }
     }
@@ -123,19 +123,19 @@ pub fn pack_file_block(blockname: &str, data: &[u8], compress: bool) -> io::Resu
 
         let comp = e.finish()?;
         body.reserve(comp.len() + 25);
-        write_pbf::pack_value(&mut body, 2, data.len() as u64);
-        write_pbf::pack_data(&mut body, 3, &comp[..]);
+        spb::pack_value(&mut body, 2, data.len() as u64);
+        spb::pack_data(&mut body, 3, &comp[..]);
     } else {
         body.reserve(data.len() + 5);
-        write_pbf::pack_data(&mut body, 1, &data[..]);
+        spb::pack_data(&mut body, 1, &data[..]);
     }
 
     let mut head = Vec::with_capacity(25);
-    write_pbf::pack_data(&mut head, 1, blockname.as_bytes());
-    write_pbf::pack_value(&mut head, 3, body.len() as u64);
+    spb::pack_data(&mut head, 1, blockname.as_bytes());
+    spb::pack_value(&mut head, 3, body.len() as u64);
 
     let mut result = Vec::with_capacity(4 + head.len() + body.len());
-    write_pbf::write_uint32(&mut result, head.len() as u32);
+    spb::write_uint32(&mut result, head.len() as u32);
     result.extend(head);
     result.extend(body);
 
@@ -335,44 +335,6 @@ where
     read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, &pb)
 }
 
-pub fn zread_all_blocks_locs<R, T, U>(
-    fobj: &mut R,
-    fname: &str,
-    locs: Vec<u64>,
-    print_msgs: bool,
-    mut pp: Box<T>,
-) -> (U, f64)
-where
-    T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
-    U: Send + Sync + 'static,
-    R: Read + Seek,
-{
-    let mut ct = Checktime::new();
-    let pf = 100.0 / (locs.len() as f64);
-    for (i, l) in locs.iter().enumerate() {
-        fobj.seek(SeekFrom::Start(*l))
-            .expect(&format!("failed to read {} @ {}", fname, *l));
-        let (_, fb) = read_file_block_with_pos(fobj, *l)
-            .expect(&format!("failed to read {} @ {}", fname, *l));
-        if print_msgs {
-            match ct.checktime() {
-                Some(d) => {
-                    print!(
-                        "\r{:8.3}s: {:6.1}% {:9.1}mb block {:10}",
-                        d,
-                        (i as f64) * pf,
-                        (fb.pos as f64) / 1024.0 / 1024.0,
-                        i
-                    );
-                    io::stdout().flush().expect("");
-                }
-                None => {}
-            }
-        }
-        pp.call((i, fb));
-    }
-    (pp.finish().expect("finish failed"), ct.gettime())
-}
 
 pub struct ProgBarWrap {
     start: u64,
@@ -459,51 +421,6 @@ where
         pp.call((i, fb));
     }
     pb.prog(100.0);
-    (pp.finish().expect("finish failed"), ct.gettime())
-}
-
-pub fn zread_all_blocks_parallel<T, U, F>(
-    mut fbufs: Vec<F>,
-    locs: Vec<(usize, Vec<(usize, u64)>)>,
-    mut pp: Box<T>,
-) -> (U, f64)
-where
-    T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = U> + ?Sized,
-    U: Send + Sync + 'static,
-    F: Seek + Read,
-{
-    let mut ct = Checktime::new();
-
-    let mut fposes = Vec::new();
-    for f in fbufs.iter_mut() {
-        fposes.push(file_position(f).expect("!"));
-    }
-    let pf = 100.0 / (locs.len() as f64);
-    for (j, (i, ll)) in locs.iter().enumerate() {
-        let mut fbs = Vec::new();
-        for (a, b) in ll {
-            if fposes[*a] != *b {
-                fbufs[*a]
-                    .seek(SeekFrom::Start(*b))
-                    .expect(&format!("failed to read {} @ {}", *a, *b));
-            }
-
-            let (x, y) = read_file_block_with_pos(&mut fbufs[*a], *b)
-                .expect(&format!("failed to read {} @ {}", *a, *b));
-
-            fbs.push(y);
-            fposes[*a] = x;
-        }
-
-        match ct.checktime() {
-            Some(d) => {
-                print!("\r{:8.3}s: {:6.1}% block {:10}", d, (j as f64) * pf, i);
-                io::stdout().flush().expect("");
-            }
-            None => {}
-        }
-        pp.call((*i, fbs));
-    }
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 

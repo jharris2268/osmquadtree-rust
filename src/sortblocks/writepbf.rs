@@ -6,26 +6,26 @@ use std::io::Write;
 
 use crate::callback::CallFinish;
 use crate::elements::{PrimitiveBlock, Quadtree,Bbox, Block};
-use crate::pbfformat::header_block::{make_header_block_stored_locs, HeaderType};
-use crate::pbfformat::read_file_block::pack_file_block;
-use crate::pbfformat::writefile;
+use crate::pbfformat::{make_header_block_stored_locs, HeaderType};
+use crate::pbfformat::pack_file_block;
+
 use crate::utils::{CallAll, ThreadTimer};
 
 use crate::sortblocks::{OtherData, Timings};
 
 pub struct WriteFile {
-    writefile: writefile::WriteFile,
+    writefile: crate::pbfformat::WriteFile,
 }
 
 impl WriteFile {
     pub fn new(outfn: &str, header_type: HeaderType) -> WriteFile {
         WriteFile {
-            writefile: writefile::WriteFile::new(outfn, header_type),
+            writefile: crate::pbfformat::WriteFile::new(outfn, header_type),
         }
     }
     pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
         WriteFile {
-            writefile: writefile::WriteFile::with_bbox(outfn, header_type, bbox),
+            writefile: crate::pbfformat::WriteFile::with_bbox(outfn, header_type, bbox),
         }
     }
 }

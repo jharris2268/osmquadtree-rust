@@ -11,11 +11,12 @@ use crate::geometry::pack_geometry::pack_geometry_block;
 
 use crate::utils::{LogTimes,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,ThreadTimer,CallAll};
 use crate::callback::{Callback,CallbackMerge,CallbackSync,CallFinish};
-use crate::pbfformat::writefile::WriteFile;
-use crate::pbfformat::header_block::HeaderType;
+
+use crate::pbfformat::HeaderType;
 use crate::update::get_file_locs;
-use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock,pack_file_block};
-use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all;
+use crate::pbfformat::{
+        read_all_blocks_parallel_with_progbar,FileBlock,pack_file_block,
+        make_read_primitive_blocks_combine_call_all, WriteFile};
 use crate::mergechanges::read_filter;
 use crate::elements::{Quadtree,Block};
 use std::io::{Result,/*Error,ErrorKind*/};

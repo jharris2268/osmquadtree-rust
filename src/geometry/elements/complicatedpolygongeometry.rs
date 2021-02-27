@@ -1,5 +1,5 @@
 use crate::elements::{Info,Tag,Quadtree,Relation,Bbox};
-use crate::elements::traits::*;
+use crate::elements::{WithId,WithTags,WithInfo,WithQuadtree};
 use crate::geometry::LonLat;
 use crate::geometry::position::calc_ring_area_and_bbox;
 use crate::geometry::elements::pointgeometry::pack_tags;

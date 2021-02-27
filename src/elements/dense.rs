@@ -4,8 +4,11 @@ use crate::elements::info::Info;
 use crate::elements::node;
 use crate::elements::quadtree;
 use crate::elements::tags;
-use crate::pbfformat::read_pbf;
-use crate::pbfformat::write_pbf;
+
+use simple_protocolbuffers::{
+        read_packed_int, PbfTag, IterTags, read_delta_packed_int,
+        pack_data, pack_delta_int, pack_delta_int_ref, data_length, pack_int_ref};
+
 use std::io::{Error, ErrorKind, Result};
 
 use crate::elements::idset::IdSet;
@@ -41,25 +44,25 @@ impl Dense {
         let mut ui = Vec::new();
         let mut us = Vec::new();
 
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Data(1, d) => ids = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(5, d) => {
+                PbfTag::Data(1, d) => ids = read_delta_packed_int(&d),
+                PbfTag::Data(5, d) => {
                     if !minimal {
-                        for y in read_pbf::IterTags::new(&d) {
+                        for y in IterTags::new(&d) {
                             match y {
-                                read_pbf::PbfTag::Data(1, d) => vs = read_pbf::read_packed_int(&d), //version NOT delta packed
-                                read_pbf::PbfTag::Data(2, d) => {
-                                    ts = read_pbf::read_delta_packed_int(&d)
+                                PbfTag::Data(1, d) => vs = read_packed_int(&d), //version NOT delta packed
+                                PbfTag::Data(2, d) => {
+                                    ts = read_delta_packed_int(&d)
                                 }
-                                read_pbf::PbfTag::Data(3, d) => {
-                                    cs = read_pbf::read_delta_packed_int(&d)
+                                PbfTag::Data(3, d) => {
+                                    cs = read_delta_packed_int(&d)
                                 }
-                                read_pbf::PbfTag::Data(4, d) => {
-                                    ui = read_pbf::read_delta_packed_int(&d)
+                                PbfTag::Data(4, d) => {
+                                    ui = read_delta_packed_int(&d)
                                 }
-                                read_pbf::PbfTag::Data(5, d) => {
-                                    us = read_pbf::read_delta_packed_int(&d)
+                                PbfTag::Data(5, d) => {
+                                    us = read_delta_packed_int(&d)
                                 }
                                 _ => {
                                     return Err(Error::new(
@@ -71,14 +74,14 @@ impl Dense {
                         }
                     }
                 }
-                read_pbf::PbfTag::Data(8, d) => lats = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(9, d) => lons = read_pbf::read_delta_packed_int(&d),
-                read_pbf::PbfTag::Data(10, d) => {
+                PbfTag::Data(8, d) => lats = read_delta_packed_int(&d),
+                PbfTag::Data(9, d) => lons = read_delta_packed_int(&d),
+                PbfTag::Data(10, d) => {
                     if !minimal {
-                        kvs = read_pbf::read_packed_int(&d)
+                        kvs = read_packed_int(&d)
                     }
                 }
-                read_pbf::PbfTag::Data(20, d) => qts = read_pbf::read_delta_packed_int(&d),
+                PbfTag::Data(20, d) => qts = read_delta_packed_int(&d),
                 _ => {
                     return Err(Error::new(
                         ErrorKind::Other,
@@ -224,30 +227,30 @@ impl Dense {
                 }
             }
         }
-        let vs = write_pbf::pack_int_ref(vsv.iter());
-        let ts = write_pbf::pack_delta_int_ref(tsv.iter());
-        let cs = write_pbf::pack_delta_int_ref(csv.iter());
-        let ui = write_pbf::pack_delta_int_ref(uiv.iter());
-        let us = write_pbf::pack_delta_int_ref(usv.iter());
+        let vs = pack_int_ref(vsv.iter());
+        let ts = pack_delta_int_ref(tsv.iter());
+        let cs = pack_delta_int_ref(csv.iter());
+        let ui = pack_delta_int_ref(uiv.iter());
+        let us = pack_delta_int_ref(usv.iter());
 
-        /*let vs = write_pbf::pack_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).version as u64 }));
-        let ts = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).timestamp }));
-        let cs = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).changeset }));
-        let ui = write_pbf::pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).user_id }));
-        let us = write_pbf::pack_delta_int(feats.iter().map( |n| { pack_strings.call(&n.info.as_ref().unwrap_or_else(default_info).user) as i64 }));*/
+        /*let vs = pack_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).version as u64 }));
+        let ts = pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).timestamp }));
+        let cs = pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).changeset }));
+        let ui = pack_delta_int(feats.iter().map( |n| { n.info.as_ref().unwrap_or_else(default_info).user_id }));
+        let us = pack_delta_int(feats.iter().map( |n| { pack_strings.call(&n.info.as_ref().unwrap_or_else(default_info).user) as i64 }));*/
 
-        let l = write_pbf::data_length(1, vs.len())
-            + write_pbf::data_length(2, cs.len())
-            + write_pbf::data_length(3, ts.len())
-            + write_pbf::data_length(4, ui.len())
-            + write_pbf::data_length(3, us.len());
+        let l = data_length(1, vs.len())
+            + data_length(2, cs.len())
+            + data_length(3, ts.len())
+            + data_length(4, ui.len())
+            + data_length(3, us.len());
 
         let mut res = Vec::with_capacity(l);
-        write_pbf::pack_data(&mut res, 1, &vs);
-        write_pbf::pack_data(&mut res, 2, &ts);
-        write_pbf::pack_data(&mut res, 3, &cs);
-        write_pbf::pack_data(&mut res, 4, &ui);
-        write_pbf::pack_data(&mut res, 5, &us);
+        pack_data(&mut res, 1, &vs);
+        pack_data(&mut res, 2, &ts);
+        pack_data(&mut res, 3, &cs);
+        pack_data(&mut res, 4, &ui);
+        pack_data(&mut res, 5, &us);
         Ok(res)
     }
 
@@ -256,13 +259,13 @@ impl Dense {
         pack_strings: &mut Box<PackStringTable>,
         include_qts: bool,
     ) -> Result<Vec<u8>> {
-        let ids = write_pbf::pack_delta_int(feats.iter().map(|n| n.id));
-        let lats = write_pbf::pack_delta_int(feats.iter().map(|n| n.lat as i64));
-        let lons = write_pbf::pack_delta_int(feats.iter().map(|n| n.lon as i64));
+        let ids = pack_delta_int(feats.iter().map(|n| n.id));
+        let lats = pack_delta_int(feats.iter().map(|n| n.lat as i64));
+        let lons = pack_delta_int(feats.iter().map(|n| n.lon as i64));
 
         let mut qts: Option<Vec<u8>> = None;
         if include_qts {
-            qts = Some(write_pbf::pack_delta_int(feats.iter().map(|n| {
+            qts = Some(pack_delta_int(feats.iter().map(|n| {
                 if n.quadtree.as_int() < 0 {
                     0
                 } else {
@@ -299,24 +302,24 @@ impl Dense {
         }
         let infs = Self::pack_info(feats, pack_strings)?;
 
-        let tt = write_pbf::pack_int_ref(tgs.iter());
+        let tt = pack_int_ref(tgs.iter());
 
-        let mut l = write_pbf::data_length(1, ids.len()) + write_pbf::data_length(5, infs.len());
-        l += write_pbf::data_length(8, lats.len()) + write_pbf::data_length(9, lons.len());
-        l += write_pbf::data_length(10, tgs.len());
+        let mut l = data_length(1, ids.len()) + data_length(5, infs.len());
+        l += data_length(8, lats.len()) + data_length(9, lons.len());
+        l += data_length(10, tgs.len());
         if include_qts {
-            l += write_pbf::data_length(20, qts.as_ref().unwrap().len());
+            l += data_length(20, qts.as_ref().unwrap().len());
         }
 
         let mut res = Vec::with_capacity(l);
 
-        write_pbf::pack_data(&mut res, 1, &ids);
-        write_pbf::pack_data(&mut res, 5, &infs);
-        write_pbf::pack_data(&mut res, 8, &lats);
-        write_pbf::pack_data(&mut res, 9, &lons);
-        write_pbf::pack_data(&mut res, 10, &tt);
+        pack_data(&mut res, 1, &ids);
+        pack_data(&mut res, 5, &infs);
+        pack_data(&mut res, 8, &lats);
+        pack_data(&mut res, 9, &lons);
+        pack_data(&mut res, 10, &tt);
         if include_qts {
-            write_pbf::pack_data(&mut res, 20, qts.as_ref().unwrap());
+            pack_data(&mut res, 20, qts.as_ref().unwrap());
         }
         Ok(res)
     }

@@ -1,10 +1,11 @@
 use crate::callback::{CallFinish,Callback,CallbackMerge,CallbackSync};
 use crate::utils::{ThreadTimer,Timer,ReplaceNoneWithTimings, MergeTimings,CallAll};
-use crate::pbfformat::{writefile::WriteFile,header_block::HeaderType,write_pbf::pack_data,write_pbf::pack_value,read_file_block::pack_file_block};
+use crate::pbfformat::{WriteFile,HeaderType,pack_file_block};
 use crate::geometry::postgresql::{PostgresqlConnection,PostgresqlOptions,TableSpec,PrepTable,AllocFunc,pack_geometry_block,prepare_tables};
 use crate::geometry::{Timings,OtherData,GeometryBlock};
 use crate::geometry::postgresql::Connection;
 
+use simple_protocolbuffers::{pack_value, pack_data};
 
 use serde::Serialize;
 use std::fs::File;

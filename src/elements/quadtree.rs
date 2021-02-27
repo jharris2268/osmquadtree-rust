@@ -1,4 +1,4 @@
-use crate::pbfformat::read_pbf;
+use simple_protocolbuffers::{PbfTag, IterTags};
 use std::fmt;
 use std::io::{Error, ErrorKind, Result};
 
@@ -41,11 +41,11 @@ impl Tuple {
     }
     pub fn read(data: &[u8]) -> Result<Tuple> {
         let mut res = Tuple::new(0, 0, 0);
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, x) => res.x = x as u32,
-                read_pbf::PbfTag::Value(2, y) => res.y = y as u32,
-                read_pbf::PbfTag::Value(3, z) => res.z = z as u32,
+                PbfTag::Value(1, x) => res.x = x as u32,
+                PbfTag::Value(2, y) => res.y = y as u32,
+                PbfTag::Value(3, z) => res.z = z as u32,
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
         }
@@ -290,11 +290,11 @@ impl Quadtree {
     }
     pub fn read(data: &[u8]) -> Result<Quadtree> {
         let mut res = (0, 0, 0);
-        for x in read_pbf::IterTags::new(&data) {
+        for x in IterTags::new(&data) {
             match x {
-                read_pbf::PbfTag::Value(1, x) => res.0 = x as u32,
-                read_pbf::PbfTag::Value(2, y) => res.1 = y as u32,
-                read_pbf::PbfTag::Value(3, z) => res.2 = z as u32,
+                PbfTag::Value(1, x) => res.0 = x as u32,
+                PbfTag::Value(2, y) => res.1 = y as u32,
+                PbfTag::Value(3, z) => res.2 = z as u32,
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
         }

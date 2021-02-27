@@ -6,15 +6,17 @@ use std::collections::BTreeMap;
 
 use std::sync::{Arc, Mutex};
 
-use crate::pbfformat::read_file_block;
-use crate::pbfformat::read_file_block::{file_length, pack_file_block, ProgBarWrap};
-use crate::pbfformat::read_pbf;
+use simple_protocolbuffers::{PbfTag,IterTags,un_zig_zag};
+
+
+use crate::pbfformat::{file_length, pack_file_block, ProgBarWrap, ReadFileBlocks};
+
 
 use crate::callback::{CallFinish, Callback, CallbackSync};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
-use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::writefile::WriteFile;
+use crate::pbfformat::HeaderType;
+use crate::pbfformat::WriteFile;
 
 use crate::utils::{/*trim_memory,*/ CallAll, ReplaceNoneWithTimings, Timer,LogTimes};
 
@@ -279,21 +281,21 @@ fn calc_way_quadtrees_split_inmem(
 }
 
 fn read_quadtree_block_ways(data: &[u8], res: &mut Box<QuadtreeSplit>) {
-    for x in read_pbf::IterTags::new(data) {
+    for x in IterTags::new(data) {
         match x {
-            read_pbf::PbfTag::Data(2, d) => {
-                for y in read_pbf::IterTags::new(&d) {
+            PbfTag::Data(2, d) => {
+                for y in IterTags::new(&d) {
                     match y {
-                        read_pbf::PbfTag::Data(3, d) => {
+                        PbfTag::Data(3, d) => {
                             let mut i = 0;
                             let mut q = Quadtree::new(-1);
-                            for z in read_pbf::IterTags::new(&d) {
+                            for z in IterTags::new(&d) {
                                 match z {
-                                    read_pbf::PbfTag::Value(1, v) => {
+                                    PbfTag::Value(1, v) => {
                                         i = v as i64;
                                     }
-                                    read_pbf::PbfTag::Value(20, v) => {
-                                        q = Quadtree::new(read_pbf::un_zig_zag(v));
+                                    PbfTag::Value(20, v) => {
+                                        q = Quadtree::new(un_zig_zag(v));
                                     }
                                     _ => {}
                                 }
@@ -315,7 +317,7 @@ fn load_way_qts(infn: &str) -> Box<QuadtreeSplit> {
     let fobj = File::open(&infn).expect("file not present");
     let mut fbuf = BufReader::new(fobj);
 
-    for bl in read_file_block::ReadFileBlocks::new(&mut fbuf) {
+    for bl in ReadFileBlocks::new(&mut fbuf) {
         if bl.block_type == "OSMData" {
             read_quadtree_block_ways(&bl.data(), &mut res);
         }
@@ -811,7 +813,7 @@ fn load_relmems(relmfn: &str, load_nodes: bool, load_others: bool) -> RelMems {
     let mut f = File::open(&relmfn).expect("couldn't open relmems file");
 
     let mut relmems = RelMems::new();
-    for fb in read_file_block::ReadFileBlocks::new(&mut f) {
+    for fb in ReadFileBlocks::new(&mut f) {
         relmems.unpack(&fb.data(), load_nodes, load_others);
     }
 

@@ -7,8 +7,8 @@ use std::sync::Arc;
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::{Node, PrimitiveBlock, Quadtree, Relation, Way, Block};
 
-use crate::pbfformat::header_block::HeaderType;
-use crate::pbfformat::read_file_block::{
+use crate::pbfformat::HeaderType;
+use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks_with_progbar,
     unpack_file_block, FileBlock, ProgBarWrap, read_file_block_with_pos
 };
