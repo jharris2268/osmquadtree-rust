@@ -5,8 +5,7 @@ use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{ProgBarWrap,read_all_blocks_parallel_prog,FileBlock};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,parse_timestamp,LogTimes};
 use crate::mergechanges::filter_elements::{prep_bbox_filter,Poly};
-use crate::sortblocks::{WriteFile};
-use crate::sortblocks::writepbf::make_packprimblock_zeroindex;
+use crate::sortblocks::{WriteFile,make_packprimblock_zeroindex};
 use crate::update::{get_file_locs,ParallelFileLocs};
 
 use std::sync::Arc;

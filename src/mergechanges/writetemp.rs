@@ -4,12 +4,12 @@ use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all
 use crate::pbfformat::header_block::HeaderType;
 use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock};
 use crate::utils::{ThreadTimer,MergeTimings,ReplaceNoneWithTimings,LogTimes,parse_timestamp,CallAll};
-use crate::mergechanges::inmem::{read_filter,make_write_file};
+use crate::mergechanges::{read_filter,make_write_file};
 use crate::mergechanges::filter_elements::prep_bbox_filter;
 use crate::sortblocks::{Timings,OtherData,TempData,WriteFile};
-use crate::sortblocks::writepbf::{make_packprimblock_many,make_packprimblock_qtindex};
+use crate::sortblocks::{make_packprimblock_many,make_packprimblock_qtindex};
 use crate::update::{ParallelFileLocs,get_file_locs};
-use crate::sortblocks::tempfile::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
+use crate::sortblocks::{WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
         read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
         write_tempfilesplit_locs};
 

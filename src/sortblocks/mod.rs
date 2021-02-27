@@ -1,10 +1,10 @@
-pub mod addquadtree;
-pub mod prepgraph;
-pub mod quadtreetree;
-pub mod sortblocks;
-pub mod writepbf;
-pub mod inmem;
-pub mod tempfile;
+mod addquadtree;
+mod prepgraph;
+mod quadtreetree;
+mod sortblocks;
+mod writepbf;
+mod inmem;
+mod tempfile;
 
 use crate::elements::PrimitiveBlock;
 
@@ -26,7 +26,11 @@ pub enum OtherData {
 pub type Timings = crate::utils::Timings<OtherData>;
 
 pub use prepgraph::find_groups;
-pub use quadtreetree::{QuadtreeTree, QuadtreeTreeItem};
-pub use tempfile::sort_blocks;
+pub use quadtreetree::{find_tree_groups, QuadtreeTree, QuadtreeTreeItem};
+pub use tempfile::{sort_blocks,WriteTempWhich,WriteTempData,WriteTempFile,WriteTempFileSplit,
+        read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
+        write_tempfilesplit_locs};
 pub use inmem::sort_blocks_inmem;
-pub use writepbf::{WriteFile, WriteFileInternalLocs};
+pub use writepbf::{WriteFile, WriteFileInternalLocs,make_packprimblock_many,make_packprimblock_qtindex,make_packprimblock_zeroindex};
+
+

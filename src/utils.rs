@@ -8,7 +8,7 @@ fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64) * 1.0 + (dur.subsec_nanos() as f64) * 0.000000001
 }
 
-pub struct Timer(std::time::SystemTime);
+pub(crate) struct Timer(std::time::SystemTime);
 
 impl Timer {
     pub fn new() -> Timer {
@@ -50,7 +50,7 @@ impl fmt::Display for LogTimes {
     }
 }
 
-pub struct ThreadTimer(cpu_time::ThreadTime);
+pub(crate) struct ThreadTimer(cpu_time::ThreadTime);
 
 impl ThreadTimer {
     pub fn new() -> ThreadTimer {
@@ -61,12 +61,9 @@ impl ThreadTimer {
         as_secs(self.0.elapsed())
     }
 
-    pub fn reset(&mut self) {
-        self.0 = cpu_time::ThreadTime::now();
-    }
 }
 
-pub struct Checktime {
+pub(crate) struct Checktime {
     //st: std::time::SystemTime,
     //lt: std::time::SystemTime
     st: Timer,
@@ -76,15 +73,7 @@ pub struct Checktime {
 
 impl Checktime {
     pub fn new() -> Checktime {
-        Checktime {
-            st: Timer::new(),
-            lt: Timer::new(),
-            thres: 2.0,
-        }
-
-        /*let st=std::time::SystemTime::now();
-        let lt=std::time::SystemTime::now();
-        Checktime{st,lt}        */
+        Self::with_threshold(2.0)
     }
     pub fn with_threshold(thres: f64) -> Checktime {
         Checktime {
@@ -100,16 +89,11 @@ impl Checktime {
             self.lt.reset();
             return Some(self.st.since());
         }
-        /*
-        let lm=as_secs(self.lt.elapsed().unwrap());
-        if lm > 2.0 {
-            self.lt=std::time::SystemTime::now();
-            return Some(self.gettime());
-        }*/
+        
         None
     }
     pub fn gettime(&self) -> f64 {
-        //as_secs(self.st.elapsed().unwrap())
+        
         self.st.since()
     }
 }
@@ -162,8 +146,8 @@ where
         write!(f, "Timings: {}", fs)
     }
 }
-
-pub struct ConsumeAll<T: Sync + Send + 'static, U: Sync + Send + 'static>(
+/*
+pub(crate) struct ConsumeAll<T: Sync + Send + 'static, U: Sync + Send + 'static>(
     PhantomData<T>,
     PhantomData<U>,
 );
@@ -191,8 +175,8 @@ where
         Ok(Timings::new())
     }
 }
-
-pub struct MergeTimings<U: Sync + Send + 'static>(PhantomData<U>);
+*/
+pub(crate) struct MergeTimings<U: Sync + Send + 'static>(PhantomData<U>);
 
 impl<U: Sync + Send + 'static> MergeTimings<U> {
     pub fn new() -> MergeTimings<U> {
@@ -223,7 +207,7 @@ where
     }
 }
 
-pub struct ReplaceNoneWithTimings<T> {
+pub(crate) struct ReplaceNoneWithTimings<T> {
     out: Box<T>,
 }
 impl<T> ReplaceNoneWithTimings<T> {
@@ -253,7 +237,7 @@ where
     }
 }
 
-pub struct CallAll<T: CallFinish + ?Sized, U: Sync + Send + 'static, W: Fn(U) -> T::CallType, V> {
+pub(crate) struct CallAll<T: CallFinish + ?Sized, U: Sync + Send + 'static, W: Fn(U) -> T::CallType, V> {
     out: Box<T>,
     tm: f64,
     msg: String,
@@ -333,22 +317,22 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
     ));
 }
 
-pub fn timestamp_string(ts: i64) -> String {
+pub(crate) fn timestamp_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format(TIMEFORMAT).to_string()
 }
-pub fn timestamp_string_alt(ts: i64) -> String {
+pub(crate) fn timestamp_string_alt(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format(TIMEFORMAT_ALT).to_string()
 }
-pub fn date_string(ts: i64) -> String {
+pub(crate) fn date_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format("%Y%m%d").to_string()
 }
-
+/*
 use std::io::Read;
 
-pub fn get_mem() -> u64 {
+pub(crate) fn get_mem() -> u64 {
     let pid = std::process::id();
     let procfn = format!("/proc/{}/statm", pid);
     let mut s = String::new();
@@ -363,7 +347,7 @@ pub fn get_mem() -> u64 {
 extern "C" {
     pub fn malloc_trim(__pad: usize) -> std::os::raw::c_int;
 }
-pub fn trim_memory() -> bool {
+pub(crate) fn trim_memory() -> bool {
     let a = get_mem();
     let b = unsafe { malloc_trim(0) };
 
@@ -376,8 +360,8 @@ pub fn trim_memory() -> bool {
     );
     b == 1
 }
-
-pub fn as_int(v: f64) -> i32 {
+*/
+pub(crate) fn as_int(v: f64) -> i32 {
     if v < 0.0 {
         return ((v * 10000000.0) - 0.5) as i32;
     }

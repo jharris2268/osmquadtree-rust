@@ -7,7 +7,7 @@ use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::read_file_block::{FileBlock, read_all_blocks_with_progbar};
-use crate::sortblocks::quadtreetree::{find_tree_groups, QuadtreeTree};
+use crate::sortblocks::{find_tree_groups, QuadtreeTree};
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer, LogTimes};
 
 use crate::sortblocks::{OtherData, Timings};

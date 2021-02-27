@@ -12,7 +12,7 @@ cpuprofiler = "0.0.2"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 #crossbeam = "0.7"
-bitvec = "0.19"
+#bitvec = "0.19"
 chrono = "0.4.0"
 cpu-time="1.0.0"
 quick-xml="0.20"
@@ -30,6 +30,8 @@ pq-sys = "0.4"
 geos-sys = { version="2", features = ["v3_8_0"]}
 
 ureq="1.0"
+
+simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocolbuffers.git", branch = "main" }
 
 [profile.release]
 #debug = true

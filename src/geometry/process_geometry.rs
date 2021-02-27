@@ -16,7 +16,7 @@ use crate::pbfformat::header_block::HeaderType;
 use crate::update::get_file_locs;
 use crate::pbfformat::read_file_block::{read_all_blocks_parallel_with_progbar,FileBlock,pack_file_block};
 use crate::pbfformat::convertblocks::make_read_primitive_blocks_combine_call_all;
-use crate::mergechanges::inmem::read_filter;
+use crate::mergechanges::read_filter;
 use crate::elements::{Quadtree,Block};
 use std::io::{Result,/*Error,ErrorKind*/};
 use std::sync::Arc;

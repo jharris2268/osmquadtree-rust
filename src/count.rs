@@ -27,7 +27,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Debug)]
-pub struct NodeCount {
+struct NodeCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -171,7 +171,7 @@ impl fmt::Display for NodeCount {
 }
 
 #[derive(Debug)]
-pub struct WayCount {
+struct WayCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -320,7 +320,7 @@ impl fmt::Display for WayCount {
 }
 
 #[derive(Debug)]
-pub struct RelationCount {
+struct RelationCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -444,13 +444,13 @@ impl fmt::Display for RelationCount {
     }
 }
 
-pub trait CountBlocks {
+trait CountBlocks {
     fn add_primitive(&mut self, bl: &PrimitiveBlock);
     fn add_minimal(&mut self, mb: &MinimalBlock);
 }
 
 #[derive(Debug)]
-pub struct Count {
+struct Count {
     pub node: NodeCount,
     pub way: WayCount,
     pub relation: RelationCount,
@@ -506,7 +506,7 @@ impl fmt::Display for Count {
 }
 
 #[derive(Debug)]
-pub struct CountChange {
+struct CountChange {
     pub node: BTreeMap<Changetype, NodeCount>,
     pub way: BTreeMap<Changetype, WayCount>,
     pub relation: BTreeMap<Changetype, RelationCount>,
