@@ -23,7 +23,7 @@ use crate::utils::{/*trim_memory,*/ CallAll, ReplaceNoneWithTimings, Timer,LogTi
 use crate::calcqts::expand_wayboxes::{WayBoxesSimple, WayBoxesSplit, WayBoxesVec};
 use crate::calcqts::node_waynodes::{
     read_nodewaynodes, /*write_nodewaynode_file, write_waynode_sorted,*/ write_waynode_sorted_resort,
-    NodeWayNodeCombTile,
+    NodeWayNodeComb,
 };
 use crate::calcqts::packwaynodes::{prep_relation_node_vals, prep_way_nodes, prep_way_nodes_tempfile, RelMems};
 use crate::calcqts::quadtree_store::{
@@ -367,19 +367,19 @@ impl<T> CallFinish for ExpandNodeQuadtree<T>
 where
     T: CallFinish<CallType = Vec<Box<QuadtreeBlock>>, ReturnType = Timings>,
 {
-    type CallType = NodeWayNodeCombTile;
+    type CallType = Vec<NodeWayNodeComb>;
     //type ReturnType = (T::ReturnType, Box<dyn QuadtreeGetSet>, QuadtreeSimple);
     type ReturnType = Timings;
 
-    fn call(&mut self, nn: NodeWayNodeCombTile) {
+    fn call(&mut self, nn: Vec<NodeWayNodeComb>) {
         let tx = Timer::new();
-        if nn.vals.is_empty() {
+        if nn.is_empty() {
             return;
         }
 
         //let mut bl = Box::new(QuadtreeBlock::with_capacity(nn.vals.len()));
         let mut bl = Vec::new();
-        for n in nn.vals {
+        for n in nn {
             let q = if n.ways.is_empty() {
                 Quadtree::calculate_point(n.lon, n.lat, self.qt_level, self.qt_buffer)
             } else {

@@ -22,7 +22,7 @@ pub enum WayNodeVals {
 
 #[derive(Clone)]
 pub enum NodeWayNodes {
-    Combined(String),
+    //Combined(String),
     InMem(String, Arc<WayNodeVals>, u64),
     Seperate(String, String, FileLocs, u64),
 }

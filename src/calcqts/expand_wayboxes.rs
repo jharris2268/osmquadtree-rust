@@ -1,4 +1,4 @@
-use crate::calcqts::node_waynodes::NodeWayNodeCombTile;
+use crate::calcqts::node_waynodes::NodeWayNodeComb;
 use crate::calcqts::quadtree_store::{
     QuadtreeSimple, QuadtreeTileInt, WAY_SPLIT_MASK, WAY_SPLIT_SHIFT, WAY_SPLIT_VAL,
 };
@@ -53,12 +53,12 @@ impl WayBoxesSimple {
 }
 
 impl CallFinish for WayBoxesSimple {
-    type CallType = NodeWayNodeCombTile;
+    type CallType = Vec<NodeWayNodeComb>;
     type ReturnType = Timings;
 
-    fn call(&mut self, v: NodeWayNodeCombTile) {
+    fn call(&mut self, nodewaynodes: Vec<NodeWayNodeComb>) {
         let t = Timer::new();
-        for n in &v.vals {
+        for n in nodewaynodes {
             for w in &n.ways {
                 self.expand(*w, n.lon, n.lat);
             }
@@ -222,12 +222,12 @@ impl WayBoxesSplit {
 }
 
 impl CallFinish for WayBoxesSplit {
-    type CallType = NodeWayNodeCombTile;
+    type CallType = Vec<NodeWayNodeComb>;
     type ReturnType = Timings;
 
-    fn call(&mut self, v: NodeWayNodeCombTile) {
+    fn call(&mut self, nodewaynodes: Vec<NodeWayNodeComb>) {
         let tx = Timer::new();
-        for n in &v.vals {
+        for n in nodewaynodes {
             for w in &n.ways {
                 self.expand(*w, n.lon, n.lat);
             }

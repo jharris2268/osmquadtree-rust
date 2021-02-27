@@ -1,16 +1,14 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::MinimalBlock;
+use crate::elements::{MinimalBlock,MinimalNode};
 use crate::pbfformat::{
     make_convert_minimal_block_parts, HeaderType,
     read_file_block_with_pos, ReadFileBlocks,
-    read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop,
+    read_all_blocks_with_progbar_stop,
     read_all_blocks_parallel_with_progbar, FileBlock, file_length, pack_file_block,
     ProgBarWrap, unpack_file_block,WriteFile};
 
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
 
-use simple_protocolbuffers::{
-        read_packed_int, PbfTag, IterTags, read_delta_packed_int, DeltaPackedInt};
 
 use std::fmt;
 use std::fs::File;
@@ -32,22 +30,15 @@ pub struct NodeWayNodeComb {
 }
 
 impl NodeWayNodeComb {
-    /*pub fn new(nd: MinimalNode, ways: Vec<i64>) -> NodeWayNodeComb {
+    pub fn new(nd: &MinimalNode, ways: Vec<i64>) -> NodeWayNodeComb {
         NodeWayNodeComb {
             id: nd.id,
             lon: nd.lon,
             lat: nd.lat,
             ways: ways,
         }
-    }*/
-    pub fn from_id(id: i64) -> NodeWayNodeComb {
-        NodeWayNodeComb {
-            id: id,
-            lon: 0,
-            lat: 0,
-            ways: Vec::new(),
-        }
     }
+    
 }
 
 impl fmt::Display for NodeWayNodeComb {
@@ -62,7 +53,7 @@ impl fmt::Display for NodeWayNodeComb {
         )
     }
 }
-
+/*
 pub struct NodeWayNodeCombTile {
     pub vals: Vec<NodeWayNodeComb>,
 }
@@ -72,113 +63,9 @@ impl NodeWayNodeCombTile {
         NodeWayNodeCombTile { vals }
     }
     
-    /*
-    pub fn pack(&self) -> Vec<u8> {
-        let mut res = Vec::new();
-        pack_value(&mut res, 1, self.vals.len() as u64);
-        pack_data(
-            &mut res,
-            2,
-            &pack_delta_int(self.vals.iter().map(|x| x.id)),
-        );
-        pack_data(
-            &mut res,
-            3,
-            &pack_delta_int(self.vals.iter().map(|x| x.lon as i64)),
-        );
-        pack_data(
-            &mut res,
-            4,
-            &pack_delta_int(self.vals.iter().map(|x| x.lat as i64)),
-        );
-        pack_data(
-            &mut res,
-            5,
-            &pack_int(self.vals.iter().map(|x| x.ways.len() as u64)),
-        );
-        pack_data(
-            &mut res,
-            6,
-            &pack_delta_int_ref(self.vals.iter().flat_map(|x| x.ways.iter())),
-        );
-
-        res
-    }
-    */
     
-    pub fn unpack(data: &[u8], minw: i64, maxw: i64) -> NodeWayNodeCombTile {
-        let mut res = NodeWayNodeCombTile { vals: Vec::new() };
-
-        let mut numw = Vec::new();
-        let mut ww = Vec::new();
-        for t in IterTags::new(&data) {
-            match t {
-                PbfTag::Value(1, c) => {
-                    res.vals.reserve(c as usize);
-                }
-                PbfTag::Data(2, x) => {
-                    //DeltaPackedInt::new(x).enumerate().map( |(_,x) | { res.vals.push(NodeWayNodeComb::from_id(x));}).collect(); },
-                    for i in DeltaPackedInt::new(x) {
-                        res.vals.push(NodeWayNodeComb::from_id(i));
-                    }
-                }
-                PbfTag::Data(3, x) => {
-                    for (i, ln) in DeltaPackedInt::new(x).enumerate() {
-                        res.vals[i].lon = ln as i32;
-                    }
-                }
-
-                PbfTag::Data(4, x) => {
-                    for (i, lt) in DeltaPackedInt::new(x).enumerate() {
-                        res.vals[i].lat = lt as i32;
-                    }
-                }
-                PbfTag::Data(5, x) => {
-                    numw = read_packed_int(x);
-                }
-                PbfTag::Data(6, x) => {
-                    ww = read_delta_packed_int(x);
-                }
-                _ => {}
-            }
-        }
-
-        let mut s = 0;
-        if minw == 0 && maxw == 0 {
-            for (i, r) in res.vals.iter_mut().enumerate() {
-                let n = numw[i] as usize;
-                r.ways.extend(ww[s..s + n].iter());
-                s += n;
-            }
-        } else {
-            for (i, r) in res.vals.iter_mut().enumerate() {
-                let n = numw[i] as usize;
-                r.ways.extend(
-                    ww[s..s + n]
-                        .iter()
-                        .filter(|w: &&i64| **w >= minw && (maxw == 0 || **w < maxw)),
-                );
-                s += n;
-            }
-        }
-        if s != ww.len() {
-            panic!("gone wrong");
-        }
-        res
-    }
-}
-/*
-pub fn make_packwaynodescomb<T: CallFinish<CallType = Vec<u8>, ReturnType = Timings>>(
-    out: Box<T>,
-) -> Box<impl CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>> {
-    let conv = Box::new(|n: NodeWayNodeCombTile| {
-        pack_file_block("NodeWayNodes", &n.pack(), true).expect("failed to pack")
-    });
-
-    Box::new(CallAll::new(out, "packnodewaycomb", conv))
 }
 */
-
 fn resort_waynodes((i, dd): (usize,Vec<FileBlock>)) -> Vec<(i64, Vec<u8>)> {
     let mut pos: u64 = 0;
     let wnt = read_way_node_tiles_vals_fb(&mut pos, i as u64, &dd, 0, 0).expect("?");
@@ -584,7 +471,7 @@ pub struct CombineNodeWayNodeCB<T, U> {
 
 impl<T, U> CombineNodeWayNodeCB<T, U>
 where
-    T: CallFinish<CallType = NodeWayNodeCombTile>,
+    T: CallFinish<CallType = Vec<NodeWayNodeComb>>,
     U: Iterator<Item = (i64, i64)>,
 {
     pub fn new(waynode: U, combined_cb: Box<T>) -> CombineNodeWayNodeCB<T, U> {
@@ -605,7 +492,7 @@ fn combine_nodes_waynodes<'a, T>(
     waynode_iter: &'a mut T,
     waynode_curr: &'a mut Option<(i64, i64)>,
     mb: MinimalBlock,
-) -> NodeWayNodeCombTile
+) -> Vec<NodeWayNodeComb>
 where
     T: Iterator<Item = (i64, i64)>,
 {
@@ -635,19 +522,14 @@ where
                 }
             }
         }();
-        res.push(NodeWayNodeComb {
-            id: n.id,
-            lon: n.lon,
-            lat: n.lat,
-            ways: ways,
-        });
+        res.push(NodeWayNodeComb::new(&n,ways));
     }
-    NodeWayNodeCombTile::new(res)
+    res
 }
 
 impl<T, U> CallFinish for CombineNodeWayNodeCB<T, U>
 where
-    T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>,
     U: Iterator<Item = (i64, i64)> + Sync + Send + 'static,
 {
     type CallType = MinimalBlock;
@@ -662,10 +544,10 @@ where
 
         let res = combine_nodes_waynodes(&mut self.waynode, &mut self.waynode_curr, mb);
         self.tm += t.since();
-        if res.vals.len() > 0 {
+        if !res.is_empty() {
             self.combined_cb.call(res);
         }
-        return;
+        
     }
 
     fn finish(&mut self) -> Result<Self::ReturnType> {
@@ -706,7 +588,7 @@ pub fn write_nodewaynode_file(nodewaynodes: NodeWayNodes, outfn: &str) -> NodeWa
     }
     println!("write_nodewaynodevals: {}, {} bytes", t, nt);
     NodeWayNodes::Combined(waynodesfn)
-}*/
+}
 
 struct UnpackNodeWayNodeCombTile<T> {
     out: Box<T>,
@@ -782,8 +664,8 @@ fn read_waynodeways_combined<
         read_all_blocks_with_progbar(waynodesfn, conv_merge, msg).0
     }
 }
-
-fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>>(
+*/
+fn read_waynodeways_inmem<T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>>(
     infn: &str,
     stop_after: u64,
     waynodevals: Arc<WayNodeVals>,
@@ -818,7 +700,7 @@ fn read_waynodeways_inmem<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnTy
 }
 
 fn read_waynodeways_seperate<
-    T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>,
 >(
     infn: &str,
     stop_after: u64,
@@ -856,7 +738,7 @@ fn read_waynodeways_seperate<
     }
 }
 
-pub fn read_nodewaynodes<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnType = Timings>>(
+pub fn read_nodewaynodes<T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>>(
     nodewaynodes: NodeWayNodes,
     eqt: Box<T>,
     minw: i64,
@@ -865,9 +747,9 @@ pub fn read_nodewaynodes<T: CallFinish<CallType = NodeWayNodeCombTile, ReturnTyp
     numchan: usize,
 ) -> Timings {
     match nodewaynodes {
-        NodeWayNodes::Combined(waynodesfn) => {
-            read_waynodeways_combined(&waynodesfn, eqt, minw, maxw, msg, numchan)
-        }
+        //NodeWayNodes::Combined(waynodesfn) => {
+        //    read_waynodeways_combined(&waynodesfn, eqt, minw, maxw, msg, numchan)
+        //}
         NodeWayNodes::InMem(infn, waynodevals, stop_after) => {
             read_waynodeways_inmem(&infn, stop_after, waynodevals, eqt, minw, maxw, msg, numchan)
         }
