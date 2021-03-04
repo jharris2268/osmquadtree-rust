@@ -140,7 +140,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("PRIMITIVE").short("-p").long("--primitive").help("reads full primitiveblock data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))            
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
         )
         .subcommand(
             SubCommand::with_name("calcqts")
@@ -171,7 +171,7 @@ fn main() {
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
         )
-        
+
         .subcommand(
             SubCommand::with_name("sortblocks")
                 .about("sorts osmquadtree data into blocks")
@@ -181,10 +181,10 @@ fn main() {
                 .arg(Arg::with_name("QT_MAX_LEVEL").short("-q").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("TARGET").short("-t").long("--target").takes_value(true).help("block target size, defaults to 40000"))
                 .arg(Arg::with_name("MIN_TARGET").short("-m").long("--min_target").takes_value(true).help("block min target size, defaults to TARGET/2"))
-                
+
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
+                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
         )
         .subcommand(
             SubCommand::with_name("sortblocks_inmem")
@@ -195,12 +195,12 @@ fn main() {
                 .arg(Arg::with_name("QT_MAX_LEVEL").short("-q").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("TARGET").short("-t").long("--target").takes_value(true).help("block target size, defaults to 40000"))
                 .arg(Arg::with_name("MIN_TARGET").short("-m").long("--min_target").takes_value(true).help("block min target size, defaults to TARGET/2"))
-                
+
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("update_initial")   
+            SubCommand::with_name("update_initial")
                 .about("calculate initial index")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("INFN").required(true).short("-i").long("--infn").takes_value(true).help("specify filename of orig file"))
@@ -208,51 +208,51 @@ fn main() {
                 .arg(Arg::with_name("INITIAL_STATE").required(true).short("-s").long("--state_initial").takes_value(true).help("initial state"))
                 .arg(Arg::with_name("DIFFS_LOCATION").required(true).short("-d").long("--diffs_location").takes_value(true).help("directory for downloaded osc.gz files"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+
         )
         .subcommand(
-            SubCommand::with_name("update")   
+            SubCommand::with_name("update")
                 .about("calculate update")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+
         )
         .subcommand(
-            SubCommand::with_name("update_demo")   
+            SubCommand::with_name("update_demo")
                 .about("calculate update")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+
         )
         .subcommand(
-            SubCommand::with_name("update_droplast")   
+            SubCommand::with_name("update_droplast")
                 .about("calculate update")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                
-                
+
+
         )
         .subcommand(
-            SubCommand::with_name("write_index_file")   
+            SubCommand::with_name("write_index_file")
                 .about("write pbf index file")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("out filename, defaults to INPUT-index.pbf"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+
         )
         .subcommand(
-            SubCommand::with_name("mergechanges_sort_inmem")   
+            SubCommand::with_name("mergechanges_sort_inmem")
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))            
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-                
+
         )
         .subcommand(
-            SubCommand::with_name("mergechanges_sort")   
+            SubCommand::with_name("mergechanges_sort")
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
@@ -260,19 +260,19 @@ fn main() {
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))            
+                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("mergechanges_sort_from_existing")   
+            SubCommand::with_name("mergechanges_sort_from_existing")
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
-                .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))            
+                .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("mergechanges")   
+            SubCommand::with_name("mergechanges")
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
@@ -282,7 +282,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_null")   
+            SubCommand::with_name("process_geometry_null")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
@@ -292,19 +292,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_json")   
-                .about("process_geometry")
-                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
-                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
-                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-        )
-        .subcommand(
-            SubCommand::with_name("process_geometry_tiled_json")   
+            SubCommand::with_name("process_geometry_json")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
@@ -316,7 +304,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_pbffile")   
+            SubCommand::with_name("process_geometry_tiled_json")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
@@ -328,7 +316,19 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_postgresqlnull")   
+            SubCommand::with_name("process_geometry_pbffile")
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_postgresqlnull")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
@@ -340,20 +340,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_postgresqlblob")   
-                .about("process_geometry")
-                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
-                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
-                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
-                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
-        )
-        .subcommand(
-            SubCommand::with_name("process_geometry_postgresqlblob_pbf")   
+            SubCommand::with_name("process_geometry_postgresqlblob")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
@@ -366,7 +353,20 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
-            SubCommand::with_name("process_geometry_postgresql")   
+            SubCommand::with_name("process_geometry_postgresqlblob_pbf")
+                .about("process_geometry")
+                .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
+                .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
+                .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
+                .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+        )
+        .subcommand(
+            SubCommand::with_name("process_geometry_postgresql")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("CONNECTION").short("-c").long("--connection").required(true).takes_value(true).help("connection string"))

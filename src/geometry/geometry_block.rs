@@ -160,7 +160,7 @@ impl GeometryBlock {
 impl fmt::Display for GeometryBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "GeometryBlock[{} [{}] with {} points, {} linestrings, {} simple polygons, {} complicated polgons]", 
-            self.index,  self.quadtree, 
+            self.index,  self.quadtree,
             self.points.len(), self.linestrings.len(),
             self.simple_polygons.len(), self.complicated_polygons.len())
     }
