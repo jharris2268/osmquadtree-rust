@@ -3,8 +3,9 @@ use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
 use crate::pbfformat::{
-        HeaderBlock, pack_file_block,ProgBarWrap,FileBlock,
-        read_file_block_with_pos, read_all_blocks_locs_prog};
+    pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos, FileBlock, HeaderBlock,
+    ProgBarWrap,
+};
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
@@ -264,15 +265,9 @@ fn read_change_tiles(
     let (mut tm, b) = if numchan == 0 {
         let convert = Box::new(ReadPB::new(ischange, idset));
         read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
-        
     } else {
         let mut convs: Vec<
-            Box<
-                dyn CallFinish<
-                    CallType = (usize, FileBlock),
-                    ReturnType = Timings<OrigData>,
-                >,
-            >,
+            Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<OrigData>>>,
         > = Vec::new();
         for _ in 0..numchan {
             convs.push(Box::new(Callback::new(Box::new(ReadPB::new(
@@ -282,7 +277,6 @@ fn read_change_tiles(
         }
         let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
         read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
-        
     };
 
     let mut tls = tm.others.pop().unwrap().1;

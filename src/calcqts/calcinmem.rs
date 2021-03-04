@@ -1,5 +1,4 @@
-
-use simple_protocolbuffers::{PackedInt,DeltaPackedInt,read_delta_packed_int};
+use simple_protocolbuffers::{read_delta_packed_int, DeltaPackedInt, PackedInt};
 
 use crate::callback::{CallFinish, Callback, CallbackMerge};
 use crate::elements::{Bbox, ElementType, MinimalBlock, Quadtree};
@@ -47,8 +46,6 @@ impl CollectTiles {
     }
 }
 
-
-
 impl CallFinish for CollectTiles {
     type CallType = MinimalBlock;
     type ReturnType = Timings;
@@ -59,14 +56,11 @@ impl CallFinish for CollectTiles {
             dx.nodes.insert(n.id, (n.lon, n.lat));
         }
         for w in bl.ways {
-            dx.ways
-                .insert(w.id, read_delta_packed_int(&w.refs_data));
+            dx.ways.insert(w.id, read_delta_packed_int(&w.refs_data));
         }
         for r in bl.relations {
             let mut p = Vec::new();
-            for (t, r) in PackedInt::new(&r.types_data)
-                .zip(DeltaPackedInt::new(&r.refs_data))
-            {
+            for (t, r) in PackedInt::new(&r.types_data).zip(DeltaPackedInt::new(&r.refs_data)) {
                 let c = ElementType::from_int(t);
                 p.push((c, r));
             }

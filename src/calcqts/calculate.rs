@@ -6,11 +6,9 @@ use std::collections::BTreeMap;
 
 use std::sync::{Arc, Mutex};
 
-use simple_protocolbuffers::{PbfTag,IterTags,un_zig_zag};
-
+use simple_protocolbuffers::{un_zig_zag, IterTags, PbfTag};
 
 use crate::pbfformat::{file_length, pack_file_block, ProgBarWrap, ReadFileBlocks};
-
 
 use crate::callback::{CallFinish, Callback, CallbackSync};
 use crate::elements::Quadtree;
@@ -18,19 +16,22 @@ use crate::elements::QuadtreeBlock;
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::WriteFile;
 
-use crate::utils::{/*trim_memory,*/ CallAll, ReplaceNoneWithTimings, Timer,LogTimes};
+use crate::utils::{/*trim_memory,*/ CallAll, LogTimes, ReplaceNoneWithTimings, Timer};
 
 use crate::calcqts::expand_wayboxes::{WayBoxesSimple, WayBoxesSplit, WayBoxesVec};
 use crate::calcqts::node_waynodes::{
-    read_nodewaynodes, /*write_nodewaynode_file, write_waynode_sorted,*/ write_waynode_sorted_resort,
+    read_nodewaynodes,
+    /*write_nodewaynode_file, write_waynode_sorted,*/ write_waynode_sorted_resort,
     NodeWayNodeComb,
 };
-use crate::calcqts::packwaynodes::{prep_relation_node_vals, prep_way_nodes, prep_way_nodes_tempfile, RelMems};
+use crate::calcqts::packwaynodes::{
+    prep_relation_node_vals, prep_way_nodes, prep_way_nodes_tempfile, RelMems,
+};
 use crate::calcqts::quadtree_store::{
     QuadtreeGetSet, QuadtreeSimple, QuadtreeSplit, QuadtreeTileInt, WAY_SPLIT_VAL,
 };
 use crate::calcqts::write_quadtrees::{PackQuadtrees, WrapWriteFile, WriteQuadTree};
-use crate::calcqts::{NodeWayNodes, OtherData, Timings,run_calcqts_inmem};
+use crate::calcqts::{run_calcqts_inmem, NodeWayNodes, OtherData, Timings};
 
 fn calc_way_quadtrees_simple(
     nodewaynodes: NodeWayNodes,
@@ -225,8 +226,8 @@ fn calc_way_quadtrees_split(
     )))));
 
     //let mut qts = Box::new(QuadtreeSplit::new());
-    
-    for (a,b) in &vec![(0,350),(350,700),(700,0)] {
+
+    for (a, b) in &vec![(0, 350), (350, 700), (700, 0)] {
         calc_way_quadtrees_split_part(
             nodewaynodes.clone(),
             a << 20,
@@ -238,7 +239,7 @@ fn calc_way_quadtrees_split(
         );
         //trim_memory();
     }
-    
+
     wf.lock().unwrap().finish().expect("?");
     load_way_qts(&tempfn)
 }
@@ -250,10 +251,9 @@ fn calc_way_quadtrees_split_inmem(
     numchan: usize,
 ) -> Box<QuadtreeSplit> {
     let qts = Arc::new(Mutex::new(Box::new(QuadtreeSplit::new())));
-    
+
     //for (a,b) in &vec![(0,350),(350,700),(700,0)] {
-    for (a,b) in &vec![(0,11),(11,22),(22,0)] {
-    
+    for (a, b) in &vec![(0, 11), (11, 22), (22, 0)] {
         calc_way_quadtrees_split_part_inmem(
             nodewaynodes.clone(),
             a << 25,
@@ -265,7 +265,6 @@ fn calc_way_quadtrees_split_inmem(
         );
         //trim_memory();
     }
-    
 
     match Arc::try_unwrap(qts) {
         Ok(q) => match q.into_inner() {
@@ -618,16 +617,16 @@ fn calc_quadtrees_simple(
     qt_level: usize,
     qt_buffer: f64,
     numchan: usize,
-    lt: &mut LogTimes
+    lt: &mut LogTimes,
 ) {
     let mut nqts = Box::new(QuadtreeSimple::new());
-    
+
     let relmems = match relmems {
         Some(mut rm) => {
             rm.unpack_stored(true, true);
             lt.add("unpack relmems");
             rm
-        },
+        }
         None => {
             let relmfn = format!("{}-relmems", outfn);
             let rm = load_relmems(&relmfn, true, true);
@@ -641,7 +640,7 @@ fn calc_quadtrees_simple(
     }
 
     println!("expecting {} rel nodes qts", nqts.len());
-    
+
     let qts = calc_way_quadtrees_simple(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
         as Box<dyn QuadtreeGetSet>;
     println!("have {} way quadtrees", qts.len());
@@ -669,7 +668,7 @@ fn calc_quadtrees_flatvec(
     qt_buffer: f64,
     qinmem: bool,
     numchan: usize,
-    lt: &mut LogTimes
+    lt: &mut LogTimes,
 ) {
     //trim_memory();
 
@@ -683,7 +682,7 @@ fn calc_quadtrees_flatvec(
     lt.add("calc_way_quadtrees_split");
     println!("have {} way quadtrees", qts.len());
     let relmfn = format!("{}-relmems", &outfn);
-    
+
     let nqts = match &relmems {
         Some(rm) => prep_relation_node_vals(&rm),
         None => {
@@ -691,7 +690,7 @@ fn calc_quadtrees_flatvec(
             prep_relation_node_vals(&rm)
         }
     };
-            
+
     println!("expecting {} rel nodes qts", nqts.len());
     lt.add("prep_relation_node_vals");
     let writeqts = Box::new(WriteQuadTree::new(outfn));
@@ -706,20 +705,20 @@ fn calc_quadtrees_flatvec(
     );
     //trim_memory();
     lt.add("find_node_quadtrees_flatvec");
-    
+
     let rm = match relmems {
         Some(mut rm) => {
             rm.unpack_stored(true, true);
             lt.add("relmems.unpack_stored");
             rm
-        },
+        }
         None => {
             let rm = load_relmems(&relmfn, true, true);
             lt.add("load_relmems");
             rm
         }
     };
-    
+
     //let relmems = load_relmems(&relmfn, true, true);
     write_ways_rels(writeqts, qts, nqts, rm);
     lt.add("write_ways_rels");
@@ -843,8 +842,7 @@ pub fn run_calcqts_load_existing(
         None => format!("{}-qts.pbf", &fname[0..fname.len() - 4]),
     };
     let outfn = &outfn_;
-    
-        
+
     let relmfn = format!("{}-relmems", &outfn);
     let relmems = load_relmems(&relmfn, true, false);
     /*let mut nqts = Box::new(QuadtreeSimple::new());
@@ -858,35 +856,34 @@ pub fn run_calcqts_load_existing(
 
     println!("expecting {} rel nodes qts", nqts.len());
     lt.add("prep_relation_node_vals");
-    
-    
+
     let nodewaynodes = NodeWayNodes::Seperate(
-            String::from(fname),
-            format!("{}-waynodes", outfn),
-            Vec::new(),
-            match stop_at {
-                Some(s) => s,
-                None => file_length(fname)
-            }
-        );
+        String::from(fname),
+        format!("{}-waynodes", outfn),
+        Vec::new(),
+        match stop_at {
+            Some(s) => s,
+            None => file_length(fname),
+        },
+    );
 
     calc_quadtrees_flatvec(
-            nodewaynodes,
-            outfn,
-            None,
-            qt_level,
-            qt_buffer,
-            true,//seperate,
-            numchan,
-            &mut lt
-        );
+        nodewaynodes,
+        outfn,
+        None,
+        qt_level,
+        qt_buffer,
+        true, //seperate,
+        numchan,
+        &mut lt,
+    );
 
     /*
     let qts = calc_way_quadtrees_split_inmem(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
         as Box<dyn QuadtreeGetSet>;
 
     println!("have {} way quadtrees", qts.len());
-    
+
     let writeqts = Box::new(WriteQuadTree::new(&outfn));
     let (writeqts, qts, nqts) = find_node_quadtrees_flatvec(
         writeqts,
@@ -905,38 +902,30 @@ pub fn run_calcqts_load_existing(
     Ok(())
 }
 
-pub fn run_calcqts_prelim(
-    fname: &str,
-    outfn: Option<&str>,
-    numchan: usize
-) -> Result<()> {
+pub fn run_calcqts_prelim(fname: &str, outfn: Option<&str>, numchan: usize) -> Result<()> {
     let mut lt = LogTimes::new();
-    
-    
+
     let outfn_ = match outfn {
         Some(o) => String::from(o),
         None => format!("{}-qts.pbf", &fname[0..fname.len() - 4]),
     };
     let outfn = &outfn_;
 
-    
     let (relmems, waynodevals, first_waytile_pos) = prep_way_nodes_tempfile(fname, outfn, numchan)?;
-    
+
     lt.add("prep_way_nodes");
-    
+
     let relmfn = format!("{}-relmems", &outfn);
     write_relmems(relmems, &relmfn)?;
-    
-    println!("stop reading {} after {}", &fname, first_waytile_pos+1);
-    
+
+    println!("stop reading {} after {}", &fname, first_waytile_pos + 1);
+
     write_waynode_sorted_resort(waynodevals, outfn);
     lt.add("write_waynode_sorted_resort");
-    
+
     println!("{}", lt);
     Ok(())
 }
-    
-    
 
 pub fn run_calcqts(
     fname: &str,
@@ -948,7 +937,6 @@ pub fn run_calcqts(
     //resort_waynodes: bool,
     numchan: usize,
 ) -> Result<()> {
-    
     let mut use_simple = false;
     let fl = file_length(fname) / 1024 / 1024;
     match mode {
@@ -958,31 +946,31 @@ pub fn run_calcqts(
             } else if fl < 4096 {
                 use_simple = true;
             }
-        },
-        Some("INMEM") => { 
+        }
+        Some("INMEM") => {
             return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
-        },
-        
-        Some("SIMPLE") => { use_simple = true; },
-        Some("FLATVEC") => { },
+        }
+
+        Some("SIMPLE") => {
+            use_simple = true;
+        }
+        Some("FLATVEC") => {}
         Some(x) => {
-            return Err(Error::new(ErrorKind::Other, format!("unexpected mode {}", x)));
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("unexpected mode {}", x),
+            ));
         }
     }
-    
-    
-        
-    
+
     let mut lt = LogTimes::new();
-    
-    
+
     let outfn_ = match outfn {
         Some(o) => String::from(o),
         None => format!("{}-qts.pbf", &fname[0..fname.len() - 4]),
     };
     let outfn = &outfn_;
 
-    
     if use_simple && fl > 8192 {
         return Err(Error::new(
             ErrorKind::Other,
@@ -996,32 +984,42 @@ pub fn run_calcqts(
         ));
     }
     let relmfn = format!("{}-relmems", &outfn);
-    
+
     let (relmems, waynodevals, first_waytile_pos) = if fl > 20480 {
-        let (rl,wn,fw) = prep_way_nodes_tempfile(fname, outfn, numchan)?;
+        let (rl, wn, fw) = prep_way_nodes_tempfile(fname, outfn, numchan)?;
         write_relmems(rl, &relmfn)?;
         (None, wn, fw)
-        
     } else {
-        let (rl,wn,fw) = prep_way_nodes(fname, numchan)?;
+        let (rl, wn, fw) = prep_way_nodes(fname, numchan)?;
         (Some(rl), wn, fw)
     };
-    
-    
-    
+
     lt.add("prep_way_nodes");
-    
-    println!("stop reading {} after {}", &fname, first_waytile_pos+1);
-    
+
+    println!("stop reading {} after {}", &fname, first_waytile_pos + 1);
+
     //trim_memory();
     if use_simple {
-        let nodewaynodes = NodeWayNodes::InMem(String::from(fname), Arc::new(waynodevals), first_waytile_pos+1);
-        calc_quadtrees_simple(nodewaynodes, outfn, relmems, qt_level, qt_buffer, numchan, &mut lt);
+        let nodewaynodes = NodeWayNodes::InMem(
+            String::from(fname),
+            Arc::new(waynodevals),
+            first_waytile_pos + 1,
+        );
+        calc_quadtrees_simple(
+            nodewaynodes,
+            outfn,
+            relmems,
+            qt_level,
+            qt_buffer,
+            numchan,
+            &mut lt,
+        );
     } else {
         let a = write_waynode_sorted_resort(waynodevals, outfn);
         lt.add("write_waynode_sorted_resort");
-        let nodewaynodes = NodeWayNodes::Seperate(String::from(fname), a, vec![], first_waytile_pos+1);
-        
+        let nodewaynodes =
+            NodeWayNodes::Seperate(String::from(fname), a, vec![], first_waytile_pos + 1);
+
         //trim_memory();
         calc_quadtrees_flatvec(
             nodewaynodes,
@@ -1029,9 +1027,9 @@ pub fn run_calcqts(
             relmems,
             qt_level,
             qt_buffer,
-            true,//seperate,
+            true, //seperate,
             numchan,
-            &mut lt
+            &mut lt,
         );
     }
     println!("{}", lt);

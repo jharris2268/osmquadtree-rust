@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom, Write, Error};
+use std::io::{BufReader, Cursor, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
 //extern crate flate2;
 use flate2::read::ZlibDecoder;
@@ -55,8 +55,8 @@ pub fn file_position<F: Seek>(file: &mut F) -> io::Result<u64> {
 pub fn read_file_block<F: Seek + Read>(file: &mut F) -> io::Result<FileBlock> {
     let pos = file_position(file)?;
     match read_file_block_with_pos(file, pos) {
-        Ok((_,y)) => Ok(y),
-        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?} at {}", e, pos)))
+        Ok((_, y)) => Ok(y),
+        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?} at {}", e, pos))),
     }
     /*let (_, y) = read_file_block_with_pos(file, pos)?;
     Ok(y)*/
@@ -87,9 +87,7 @@ pub fn read_file_block_with_pos<F: Read>(
     for tg in bb {
         match tg {
             spb::PbfTag::Value(3, v) => ln = v,
-            spb::PbfTag::Data(1, d) => {
-                fb.block_type = std::str::from_utf8(&d).unwrap().to_string()
-            }
+            spb::PbfTag::Data(1, d) => fb.block_type = std::str::from_utf8(&d).unwrap().to_string(),
             _ => println!("?? {:?}", tg),
         }
     }
@@ -154,21 +152,31 @@ where
 {
     pub fn new(file: &mut R) -> ReadFileBlocks<R> {
         let p = file_position(file).expect("!");
-        ReadFileBlocks { file: file, p: p, stop_at: u64::MAX }
+        ReadFileBlocks {
+            file: file,
+            p: p,
+            stop_at: u64::MAX,
+        }
     }
-    
 }
 impl<R> ReadFileBlocks<'_, R>
 where
     R: Read,
 {
     pub fn new_at_start(file: &mut R) -> ReadFileBlocks<R> {
-        ReadFileBlocks { file: file, p: 0, stop_at: u64::MAX }
+        ReadFileBlocks {
+            file: file,
+            p: 0,
+            stop_at: u64::MAX,
+        }
     }
-    
+
     pub fn new_at_start_with_stop(file: &mut R, stop_at: u64) -> ReadFileBlocks<R> {
-        
-        ReadFileBlocks { file: file, p: 0, stop_at: stop_at }
+        ReadFileBlocks {
+            file: file,
+            p: 0,
+            stop_at: stop_at,
+        }
     }
 }
 
@@ -256,9 +264,8 @@ where
     let pf = pfs / (flen as f64);
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        
         pb.prog((fb.pos as f64) * pf);
-        
+
         pp.call((i, fb));
     }
     pb.prog(pfs);
@@ -321,7 +328,12 @@ where
     read_all_blocks_prog_fpos(&mut fbuf, pp, &pb)
 }
 
-pub fn read_all_blocks_with_progbar_stop<T, U>(fname: &str, stop_after: u64, pp: Box<T>, msg: &str) -> (U, f64)
+pub fn read_all_blocks_with_progbar_stop<T, U>(
+    fname: &str,
+    stop_after: u64,
+    pp: Box<T>,
+    msg: &str,
+) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
@@ -334,7 +346,6 @@ where
 
     read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, &pb)
 }
-
 
 pub struct ProgBarWrap {
     start: u64,
@@ -414,9 +425,7 @@ where
         let (_, fb) = read_file_block_with_pos(fobj, *l)
             .expect(&format!("failed to read {} @ {}", fname, *l));
 
-        
         pb.prog(((i + 1) as f64) * pf);
-        
 
         pp.call((i, fb));
     }
@@ -457,9 +466,8 @@ where
             fbs.push(y);
             fposes[*a] = x;
         }
-        
+
         pb.prog(((j + 1) as f64) * pf);
-        
 
         pp.call((j, fbs));
     }
@@ -467,33 +475,30 @@ where
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
-
-
 pub fn read_all_blocks_parallel_with_progbar<T, U, F, Q>(
     fbufs: &mut Vec<F>,
     locs: &Vec<(Q, Vec<(usize, u64)>)>,
     mut pp: Box<T>,
     msg: &str,
-    total_len: u64
+    total_len: u64,
 ) -> U
 where
     T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
     F: Seek + Read,
 {
-    
     let mut fposes = Vec::new();
     for f in fbufs.iter_mut() {
         fposes.push(file_position(f).expect("!"));
     }
-    
+
     let pb = ProgBarWrap::new_filebytes(total_len);
     pb.set_message(msg);
-    
+
     let mut pos = 0;
     for (j, (_, ll)) in locs.iter().enumerate() {
         let mut fbs = Vec::new();
-        
+
         for (a, b) in ll {
             if fposes[*a] != *b {
                 fbufs[*a]
@@ -506,11 +511,10 @@ where
 
             fbs.push(y);
             fposes[*a] = x;
-            pos += x-*b;
+            pos += x - *b;
         }
-        
+
         pb.prog(pos as f64);
-        
 
         pp.call((j, fbs));
     }

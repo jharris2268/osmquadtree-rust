@@ -9,7 +9,7 @@ use crate::elements::PrimitiveBlock;
 use crate::pbfformat::{FileBlock, ReadFileBlocks};
 
 use crate::callback::CallFinish;
-use crate::elements::{QuadtreeBlock,ElementType,Quadtree};
+use crate::elements::{ElementType, Quadtree, QuadtreeBlock};
 
 use crate::utils::{CallAll, ThreadTimer};
 

@@ -1,11 +1,10 @@
 use crate::callback::{CallFinish, Callback, CallbackSync};
 use crate::elements::{Quadtree, QuadtreeBlock};
-use crate::pbfformat::{HeaderType,pack_file_block};
 use crate::pbfformat::WriteFile;
+use crate::pbfformat::{pack_file_block, HeaderType};
 use crate::utils::ReplaceNoneWithTimings;
 
 use crate::calcqts::{OtherData, Timings};
-
 
 use std::io::Result;
 
@@ -92,7 +91,6 @@ where
 pub struct WriteQuadTree {
     packs: Vec<Box<Callback<Box<QuadtreeBlock>, Timings>>>,
     numwritten: usize,
-    
 }
 
 impl WriteQuadTree {
@@ -113,11 +111,8 @@ impl WriteQuadTree {
 
         let numwritten = 0;
         //let byteswritten = 0;
-        
-        WriteQuadTree {
-            packs,
-            numwritten,
-        }
+
+        WriteQuadTree { packs, numwritten }
     }
 }
 
@@ -126,10 +121,9 @@ impl CallFinish for WriteQuadTree {
     type ReturnType = Timings;
 
     fn call(&mut self, t: Self::CallType) {
-        
         let i = self.numwritten % 4;
         self.numwritten += 1;
-        
+
         self.packs[i].call(t);
     }
     fn finish(&mut self) -> Result<Timings> {
@@ -146,11 +140,7 @@ impl CallFinish for WriteQuadTree {
         }
 
         //let x = self.out.finish()?;
-        println!(
-            "{} written, [{} bytes]",
-            self.numwritten,
-            byteswritten
-        );
+        println!("{} written, [{} bytes]", self.numwritten, byteswritten);
 
         Ok(r)
     }

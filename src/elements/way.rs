@@ -1,14 +1,14 @@
 use simple_protocolbuffers::{
-        PbfTag, read_delta_packed_int,
-        pack_value, pack_data, pack_delta_int_ref, data_length};
+    data_length, pack_data, pack_delta_int_ref, pack_value, read_delta_packed_int, PbfTag,
+};
 
 use crate::elements::common::{
     common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
 };
-use crate::elements::traits::*;
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
+use crate::elements::traits::*;
 
 use core::cmp::Ordering;
 use std::io::Result;
@@ -43,7 +43,6 @@ impl Way {
     ) -> Result<Way> {
         let mut w = Way::new(0, changetype);
 
-        
         let rem = read_common(&mut w, &strings, data, minimal)?;
 
         for t in rem {
@@ -61,8 +60,7 @@ impl Way {
     ) -> Result<Vec<u8>> {
         let refs = pack_delta_int_ref(self.refs.iter());
 
-        let l = pack_length(&self.tags, pack_strings, include_qts)
-            + data_length(8, refs.len());
+        let l = pack_length(&self.tags, pack_strings, include_qts) + data_length(8, refs.len());
 
         let mut res = Vec::with_capacity(l);
         pack_head(&self.id, &self.info, &self.tags, &mut res, pack_strings)?;
@@ -77,7 +75,6 @@ impl Way {
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
 }
-
 
 impl WithType for Way {
     fn get_type(&self) -> ElementType {
@@ -108,7 +105,6 @@ impl WithQuadtree for Way {
         &self.quadtree
     }
 }
-
 
 impl SetCommon for Way {
     fn set_id(&mut self, id: i64) {
@@ -162,4 +158,3 @@ impl PartialEq for Way {
         )
     }
 }
-

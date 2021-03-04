@@ -1,7 +1,8 @@
 use std::fs::File;
 
 use crate::pbfformat::{
-    file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock, ProgBarWrap,
+    file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock,
+    ProgBarWrap,
 };
 
 use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
@@ -14,13 +15,13 @@ use crate::pbfformat::{
 use crate::utils::{MergeTimings, ThreadTimer};
 
 use crate::elements::{
-    Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node,
-    PrimitiveBlock, Relation, Way,
+    Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node, PrimitiveBlock,
+    Relation, Way,
 };
 use std::io::BufReader;
 use std::io::{Error, ErrorKind, Result};
 
-use simple_protocolbuffers::{read_delta_packed_int};
+use simple_protocolbuffers::read_delta_packed_int;
 
 use crate::utils::timestamp_string;
 
@@ -705,8 +706,6 @@ impl CallFinish for CountMinimal {
     }
 }
 
-
-
 pub fn run_count(
     fname: &str,
     use_primitive: bool,
@@ -754,7 +753,8 @@ pub fn run_count(
     //println!("{:?}", cn.relation.get(&Changetype::Create));
     } else if std::fs::metadata(fname)
         .expect("failed to open file")
-        .is_file() && filter.is_none()
+        .is_file()
+        && filter.is_none()
     {
         let mut cc = Count::new();
 
@@ -826,8 +826,6 @@ pub fn run_count(
     } else {
         let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, None).expect("?");
 
-        
-        
         let mut pps: Vec<
             Box<
                 dyn CallFinish<
@@ -838,7 +836,7 @@ pub fn run_count(
         > = Vec::new();
         let msg: String;
         if use_primitive {
-            msg=format!(
+            msg = format!(
                 "count blocks combine primitive {}, numchan={}",
                 fname, numchan
             );
@@ -849,7 +847,7 @@ pub fn run_count(
                 )));
             }
         } else {
-            msg=format!(
+            msg = format!(
                 "count blocks combine minimal {}, numchan={}",
                 fname, numchan
             );
@@ -862,7 +860,6 @@ pub fn run_count(
         }
         let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
         let a = read_all_blocks_parallel_with_progbar(&mut fbufs, &locsv, readb, &msg, total_len);
-        
 
         let mut cc = Count::new();
         for (_, y) in &a.others {

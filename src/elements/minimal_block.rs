@@ -1,10 +1,11 @@
-use crate::elements::traits::*;
 use crate::elements::quadtree;
 use crate::elements::quadtree::Quadtree;
+use crate::elements::traits::*;
 use simple_protocolbuffers::{
-        read_packed_int, PbfTag, IterTags, read_delta_packed_int, un_zig_zag,
-        pack_value, pack_data, pack_delta_int, pack_delta_int_ref, data_length, value_length, zig_zag};
-        
+    data_length, pack_data, pack_delta_int, pack_delta_int_ref, pack_value, read_delta_packed_int,
+    read_packed_int, un_zig_zag, value_length, zig_zag, IterTags, PbfTag,
+};
+
 use std::cmp::Ordering;
 use std::io;
 use std::io::{Error, ErrorKind};
@@ -62,8 +63,6 @@ impl WithQuadtree for MinimalNode {
     }
 }
 
-
-
 impl Ord for MinimalNode {
     fn cmp(&self, other: &Self) -> Ordering {
         let a = self.id.cmp(&other.id);
@@ -114,7 +113,6 @@ impl MinimalWay {
     }
 }
 
-
 impl WithType for MinimalWay {
     fn get_type(&self) -> ElementType {
         ElementType::Way
@@ -142,7 +140,6 @@ impl WithQuadtree for MinimalWay {
         &self.quadtree
     }
 }
-
 
 impl Ord for MinimalWay {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -196,7 +193,6 @@ impl MinimalRelation {
         }
     }
 }
-
 
 impl WithType for MinimalRelation {
     fn get_type(&self) -> ElementType {
@@ -310,9 +306,7 @@ impl MinimalBlock {
                 PbfTag::Data(1, _) => {}
                 PbfTag::Data(2, d) => groups.push(d),
 
-                PbfTag::Value(32, qt) => {
-                    res.quadtree = quadtree::Quadtree::new(un_zig_zag(qt))
-                }
+                PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(un_zig_zag(qt)),
                 PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 PbfTag::Value(34, ed) => res.end_date = ed as i64,
 
@@ -397,9 +391,7 @@ impl MinimalBlock {
                 }
                 PbfTag::Value(7, i) => nd.lat = i as i32,
                 PbfTag::Value(8, i) => nd.lon = i as i32,
-                PbfTag::Value(20, i) => {
-                    nd.quadtree = Quadtree::new(un_zig_zag(i))
-                }
+                PbfTag::Value(20, i) => nd.quadtree = Quadtree::new(un_zig_zag(i)),
                 _ => {}
             }
         }
@@ -423,9 +415,7 @@ impl MinimalBlock {
                     }
                 }
                 PbfTag::Data(8, d) => wy.refs_data = d.to_vec(),
-                PbfTag::Value(20, i) => {
-                    wy.quadtree = Quadtree::new(un_zig_zag(i))
-                }
+                PbfTag::Value(20, i) => wy.quadtree = Quadtree::new(un_zig_zag(i)),
                 _ => {}
             }
         }
@@ -450,9 +440,7 @@ impl MinimalBlock {
                 }
                 PbfTag::Data(9, d) => rl.refs_data = d.to_vec(),
                 PbfTag::Data(10, d) => rl.types_data = d.to_vec(),
-                PbfTag::Value(20, i) => {
-                    rl.quadtree = Quadtree::new(un_zig_zag(i))
-                }
+                PbfTag::Value(20, i) => rl.quadtree = Quadtree::new(un_zig_zag(i)),
                 _ => {}
             }
         }
@@ -476,9 +464,7 @@ impl MinimalBlock {
                     for y in IterTags::new(&d) {
                         match y {
                             PbfTag::Data(1, d) => vs = read_packed_int(&d), //version NOT delta packed
-                            PbfTag::Data(2, d) => {
-                                ts = read_delta_packed_int(&d)
-                            }
+                            PbfTag::Data(2, d) => ts = read_delta_packed_int(&d),
 
                             _ => {}
                         }
@@ -699,16 +685,14 @@ impl QuadtreeBlock {
         for (w, q) in &self.ways {
             l += data_length(
                 2,
-                value_length(1, *w as u64)
-                    + value_length(20, zig_zag(q.as_int())),
+                value_length(1, *w as u64) + value_length(20, zig_zag(q.as_int())),
             );
         }
 
         let mut r2 = Vec::with_capacity(l);
         for (w, q) in &self.ways {
             let mut r = Vec::with_capacity(
-                value_length(1, *w as u64)
-                    + value_length(20, zig_zag(q.as_int())),
+                value_length(1, *w as u64) + value_length(20, zig_zag(q.as_int())),
             );
             pack_value(&mut r, 1, *w as u64);
             pack_value(&mut r, 20, zig_zag(q.as_int()));
@@ -723,16 +707,14 @@ impl QuadtreeBlock {
         for (w, q) in &self.ways {
             l += data_length(
                 2,
-                value_length(1, *w as u64)
-                    + value_length(20, zig_zag(q.as_int())),
+                value_length(1, *w as u64) + value_length(20, zig_zag(q.as_int())),
             );
         }
 
         let mut r2 = Vec::with_capacity(l);
         for (w, q) in &self.relations {
             let mut r = Vec::with_capacity(
-                value_length(1, *w as u64)
-                    + value_length(20, zig_zag(q.as_int())),
+                value_length(1, *w as u64) + value_length(20, zig_zag(q.as_int())),
             );
             pack_value(&mut r, 1, *w as u64);
             pack_value(&mut r, 20, zig_zag(q.as_int()));

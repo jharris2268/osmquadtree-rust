@@ -353,17 +353,16 @@ pub fn find_tree_groups(
     target: i64,
     absmintarget: i64,
 ) -> io::Result<Box<QuadtreeTree>> {
-    
     let mut pb = ProgBarWrap::new(100);
     pb.set_message("find_tree_groups");
     pb.set_range(100);
     let pf = 100.0 / (tree.total_weight() as f64);
-    
+
     let mut res = Box::new(QuadtreeTree::new());
 
     let mut mintarget = target - 50;
     let mut maxtarget = target + 50;
-    
+
     let mut all = Vec::new();
     while tree.total_weight() > 0 {
         pb.prog(100.0 - pf * (tree.total_weight() as f64));
@@ -373,14 +372,12 @@ pub fn find_tree_groups(
             mintarget = i64::max(absmintarget, mintarget - 50);
             maxtarget += 50;
         } else {
-            
             for (a, _) in vv {
                 let b = tree.remove(&a);
 
                 all.push((a, b));
                 //res.add(a,b);
             }
-            
         }
     }
     pb.finish();

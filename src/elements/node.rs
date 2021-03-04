@@ -1,12 +1,10 @@
-use simple_protocolbuffers::{PbfTag, un_zig_zag};
+use simple_protocolbuffers::{un_zig_zag, PbfTag};
 
-use crate::elements::common::{
-    common_cmp, common_eq, read_common, PackStringTable, 
-};
-use crate::elements::traits::*;
+use crate::elements::common::{common_cmp, common_eq, read_common, PackStringTable};
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
 use crate::elements::tags::Tag;
+use crate::elements::traits::*;
 
 use core::cmp::Ordering;
 use std::io::{Error, ErrorKind, Result};
@@ -44,7 +42,6 @@ impl Node {
     ) -> Result<Node> {
         let mut nd = Node::new(0, changetype);
 
-        
         let rem = read_common(&mut nd, &strings, data, minimal)?;
 
         for t in rem {
@@ -148,4 +145,3 @@ impl PartialEq for Node {
         )
     }
 }
-

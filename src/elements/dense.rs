@@ -1,18 +1,18 @@
-use crate::elements::common::{PackStringTable};
-use crate::elements::traits::{Changetype,ElementType};
+use crate::elements::common::PackStringTable;
 use crate::elements::info::Info;
 use crate::elements::node;
 use crate::elements::quadtree;
 use crate::elements::tags;
+use crate::elements::traits::{Changetype, ElementType};
 
 use simple_protocolbuffers::{
-        read_packed_int, PbfTag, IterTags, read_delta_packed_int,
-        pack_data, pack_delta_int, pack_delta_int_ref, data_length, pack_int_ref};
+    data_length, pack_data, pack_delta_int, pack_delta_int_ref, pack_int_ref,
+    read_delta_packed_int, read_packed_int, IterTags, PbfTag,
+};
 
 use std::io::{Error, ErrorKind, Result};
 
 use crate::elements::idset::IdSet;
-
 
 fn check_id(id: i64, idset: Option<&dyn IdSet>) -> bool {
     match idset {
@@ -52,18 +52,10 @@ impl Dense {
                         for y in IterTags::new(&d) {
                             match y {
                                 PbfTag::Data(1, d) => vs = read_packed_int(&d), //version NOT delta packed
-                                PbfTag::Data(2, d) => {
-                                    ts = read_delta_packed_int(&d)
-                                }
-                                PbfTag::Data(3, d) => {
-                                    cs = read_delta_packed_int(&d)
-                                }
-                                PbfTag::Data(4, d) => {
-                                    ui = read_delta_packed_int(&d)
-                                }
-                                PbfTag::Data(5, d) => {
-                                    us = read_delta_packed_int(&d)
-                                }
+                                PbfTag::Data(2, d) => ts = read_delta_packed_int(&d),
+                                PbfTag::Data(3, d) => cs = read_delta_packed_int(&d),
+                                PbfTag::Data(4, d) => ui = read_delta_packed_int(&d),
+                                PbfTag::Data(5, d) => us = read_delta_packed_int(&d),
                                 _ => {
                                     return Err(Error::new(
                                         ErrorKind::Other,

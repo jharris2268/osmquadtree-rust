@@ -1,5 +1,7 @@
-use simple_protocolbuffers::{read_packed_int, un_zig_zag, PbfTag, IterTags, pack_data, pack_value, pack_int, data_length, zig_zag};
-
+use simple_protocolbuffers::{
+    data_length, pack_data, pack_int, pack_value, read_packed_int, un_zig_zag, zig_zag, IterTags,
+    PbfTag,
+};
 
 use crate::elements::info::Info;
 use crate::elements::quadtree::Quadtree;
@@ -10,7 +12,7 @@ use core::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::io::{Error, ErrorKind, Result};
 
-pub fn read_common<'a, T: SetCommon+WithId>(
+pub fn read_common<'a, T: SetCommon + WithId>(
     obj: &mut T,
     strings: &Vec<String>,
     data: &'a [u8],
@@ -19,7 +21,7 @@ pub fn read_common<'a, T: SetCommon+WithId>(
     let mut kk = Vec::new();
     let mut vv = Vec::new();
     let mut rem = Vec::new();
-    
+
     for t in IterTags::new(data) {
         match t {
             PbfTag::Value(1, i) => {
@@ -58,7 +60,12 @@ pub fn read_common<'a, T: SetCommon+WithId>(
     if kk.len() != vv.len() {
         return Err(Error::new(
             ErrorKind::Other,
-            format!("tags don't match: [id: {}] {} // {}", obj.get_id(), kk.len(), vv.len()),
+            format!(
+                "tags don't match: [id: {}] {} // {}",
+                obj.get_id(),
+                kk.len(),
+                vv.len()
+            ),
         ));
     }
     if kk.len() > 0 {

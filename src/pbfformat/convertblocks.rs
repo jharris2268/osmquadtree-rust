@@ -113,7 +113,7 @@ pub fn make_read_primitive_blocks_combine_call_all_idset<
 >(
     out: Box<O>,
     idset: Arc<dyn IdSet>,
-    filter_relations: bool
+    filter_relations: bool,
 ) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>>> {
     //Box::new(CallAll::new(out, "read_primitive_blocks_combine_idset", Box::new(move |pp| { wrap_read_primitive_blocks_combine(pp, Some(idset)) })))
     Box::new(Rpbccai::new(out, idset, filter_relations))

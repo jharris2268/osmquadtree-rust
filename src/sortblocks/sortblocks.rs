@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::io::Result;
+use std::sync::Arc;
 
-use crate::elements::{Quadtree, Block,Element, WithQuadtree};
+use crate::elements::{Block, Element, Quadtree, WithQuadtree};
 use crate::sortblocks::QuadtreeTree;
-
-
 
 fn get_block<'a, B: Block>(
     blocks: &'a mut HashMap<i64, B>,
@@ -29,7 +27,8 @@ pub struct SortBlocks<BlockType: Block> {
 }
 
 impl<'a, BlockType> SortBlocks<BlockType>
-    where BlockType : Block
+where
+    BlockType: Block,
 {
     pub fn new(groups: Arc<QuadtreeTree>) -> SortBlocks<BlockType> {
         SortBlocks {
@@ -46,7 +45,7 @@ impl<'a, BlockType> SortBlocks<BlockType>
         let t = self.get_block(e.get_quadtree());
         t.add_object(e)
     }
-     
+
     /*
 
     fn add_node(&mut self, n: Node) {
@@ -64,14 +63,13 @@ impl<'a, BlockType> SortBlocks<BlockType>
         t.relations.push(r);
     }*/
 
-    pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter)  -> Result<()>{
-        
+    pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter) -> Result<()> {
         for o in bl {
             self.add_object(o)?;
         }
         Ok(())
         /*
-        
+
         for n in bl.nodes {
             self.add_node(n);
         }

@@ -105,7 +105,6 @@ impl WayBoxesVec {
     }
 
     pub fn expand(&mut self, i: usize, lon: i32, lat: i32) {
-        
         if self.minlon[i] > 1800000000 {
             self.c += 1;
         }
@@ -154,7 +153,7 @@ impl WayBoxesVec {
 
     pub fn calculate_tile(&mut self, maxlevel: usize, buffer: f64) -> Box<QuadtreeTileInt> {
         let mut t = Box::new(QuadtreeTileInt::new(self.off));
-        
+
         for i in 0..WAY_SPLIT_VAL {
             if self.minlon[i] <= 1800000000 {
                 let q = Quadtree::calculate_vals(
@@ -180,8 +179,6 @@ impl WayBoxesVec {
         t
     }
 }
-
-
 
 pub struct WayBoxesSplit {
     tiles: BTreeMap<i64, Box<WayBoxesVec>>,

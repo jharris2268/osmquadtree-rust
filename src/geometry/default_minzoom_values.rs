@@ -1,4 +1,3 @@
-
 pub const _DEFAULT_MINAREA_VALUES: &str = r#"
 natural,water,4
 landuse,reservoir,4
@@ -8,7 +7,6 @@ landuse,basin,3000
 natural,bay,3000
 waterway,dock,3000
 "#;
-
 
 pub const DEFAULT_MINZOOM_VALUES: &str = r#"
 type,key,val,minzoom,table
@@ -612,6 +610,3 @@ type,key,val,minzoom,table
 2,wetland,tidalflat,5,polygon
 2,wetland,wet_meadow,5,polygon
 "#;
-
-
-

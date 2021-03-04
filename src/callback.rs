@@ -22,16 +22,14 @@ fn call_all<T: Send + 'static, U: Send + 'static>(
 
 fn call_all_sync<T: Send + 'static, U: Send + 'static>(
     recvs: Vec<mpsc::Receiver<T>>,
-    mut cf: Box<impl CallFinish<CallType = T, ReturnType = U> +?Sized>,
+    mut cf: Box<impl CallFinish<CallType = T, ReturnType = U> + ?Sized>,
 ) -> Result<U> {
     let mut i = 0;
     let l = recvs.len();
     let mut nf = 0;
     loop {
         match recvs[i % l].recv() {
-            Ok(m) => {
-                cf.call(m)
-            }
+            Ok(m) => cf.call(m),
 
             Err(_) => {
                 nf += 1;
@@ -46,7 +44,7 @@ fn call_all_sync<T: Send + 'static, U: Send + 'static>(
 
 pub struct Callback<T, U> {
     send: Option<mpsc::SyncSender<T>>,
-    result: Option<thread::JoinHandle<Result<U>>>, 
+    result: Option<thread::JoinHandle<Result<U>>>,
 }
 impl<T, U> Callback<T, U>
 where
@@ -180,23 +178,17 @@ where
         let r = std::mem::replace(&mut self.result, None);
 
         match r {
-            Some(r) => {
-                match r.join() {
-                    Ok(p) => {
-                        match p {
-                            Ok(q) => {
-                                Ok(Some(q))
-                            }
+            Some(r) => match r.join() {
+                Ok(p) => match p {
+                    Ok(q) => Ok(Some(q)),
 
-                            Err(e) => Err(e),
-                        }
-                    }
-                    Err(e) => Err(Error::new(
-                        ErrorKind::Other,
-                        format!("failed to join {:?}", e),
-                    )),
-                }
-            }
+                    Err(e) => Err(e),
+                },
+                Err(e) => Err(Error::new(
+                    ErrorKind::Other,
+                    format!("failed to join {:?}", e),
+                )),
+            },
             None => Err(Error::new(ErrorKind::Other, "already called finish")),
         }
     }

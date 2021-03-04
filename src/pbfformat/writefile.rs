@@ -1,7 +1,7 @@
 use crate::callback::CallFinish;
 use crate::elements::Bbox;
-use crate::pbfformat::{make_header_block, HeaderType};
 use crate::pbfformat::pack_file_block;
+use crate::pbfformat::{make_header_block, HeaderType};
 use crate::utils::ThreadTimer;
 
 use serde_json;
@@ -23,23 +23,29 @@ impl WriteFile {
     pub fn new(outfn: &str, header_type: HeaderType) -> WriteFile {
         WriteFile::with_bbox(outfn, header_type, None)
     }
-    
+
     pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
         let mut outf = Some(File::create(outfn).expect("failed to create"));
         let mut write_external_locs = false;
         match header_type {
             HeaderType::None => {}
             HeaderType::NoLocs => {
-                outf.as_mut().unwrap().write_all(
-                    &pack_file_block("OSMHeader", &make_header_block(false, bbox), true).expect("?"),
-                )
-                .expect("?");
+                outf.as_mut()
+                    .unwrap()
+                    .write_all(
+                        &pack_file_block("OSMHeader", &make_header_block(false, bbox), true)
+                            .expect("?"),
+                    )
+                    .expect("?");
             }
             HeaderType::ExternalLocs => {
-                outf.as_mut().unwrap().write_all(
-                    &pack_file_block("OSMHeader", &make_header_block(true, bbox), true).expect("?"),
-                )
-                .expect("?");
+                outf.as_mut()
+                    .unwrap()
+                    .write_all(
+                        &pack_file_block("OSMHeader", &make_header_block(true, bbox), true)
+                            .expect("?"),
+                    )
+                    .expect("?");
                 write_external_locs = true;
             }
             HeaderType::InternalLocs => {
@@ -57,10 +63,19 @@ impl WriteFile {
     }
 
     fn add_loc(&mut self, i: i64, l: u64) {
-        let p = self.outf.as_mut().unwrap().seek(SeekFrom::Current(0)).expect("??");
+        let p = self
+            .outf
+            .as_mut()
+            .unwrap()
+            .seek(SeekFrom::Current(0))
+            .expect("??");
         match self.locs.get_mut(&i) {
-            Some(x) => { x.push((p, l)); },
-            None => { self.locs.insert(i, vec![(p, l)]); },
+            Some(x) => {
+                x.push((p, l));
+            }
+            None => {
+                self.locs.insert(i, vec![(p, l)]);
+            }
         }
     }
 }
@@ -73,7 +88,11 @@ impl CallFinish for WriteFile {
         let c = ThreadTimer::new();
         for (i, d) in bls {
             self.add_loc(i, d.len() as u64);
-            self.outf.as_mut().unwrap().write_all(&d).expect("failed to write block");
+            self.outf
+                .as_mut()
+                .unwrap()
+                .write_all(&d)
+                .expect("failed to write block");
         }
 
         self.tm += c.since();
@@ -81,8 +100,7 @@ impl CallFinish for WriteFile {
 
     fn finish(&mut self) -> Result<Self::ReturnType> {
         drop(self.outf.take());
-        
-        
+
         let mut ls = Vec::new();
         let mut lf = Vec::new();
         for (a, b) in std::mem::take(&mut self.locs) {

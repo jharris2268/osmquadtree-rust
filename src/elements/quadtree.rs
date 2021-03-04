@@ -1,4 +1,4 @@
-use simple_protocolbuffers::{PbfTag, IterTags};
+use simple_protocolbuffers::{IterTags, PbfTag};
 use std::fmt;
 use std::io::{Error, ErrorKind, Result};
 
@@ -83,11 +83,11 @@ impl Tuple {
     pub fn xyz(&self) -> (u32, u32, u32) {
         (self.x, self.y, self.z)
     }
-    
+
     pub fn as_vec(&self) -> Vec<u32> {
-        vec![self.x,self.y,self.z]
+        vec![self.x, self.y, self.z]
     }
-    
+
     pub fn as_int(&self) -> Quadtree {
         Quadtree::from_xyz(self.x, self.y, self.z)
     }
@@ -121,11 +121,14 @@ impl Bbox {
     pub fn planet() -> Bbox {
         Bbox::new(-1800000000, -900000000, 1800000000, 900000000)
     }
-    
+
     pub fn is_planet(&self) -> bool {
-        self.minlon <= -1800000000 && self.minlat <= -900000000 && self.maxlon >= 1800000000 && self.maxlat >= 900000000
+        self.minlon <= -1800000000
+            && self.minlat <= -900000000
+            && self.maxlon >= 1800000000
+            && self.maxlat >= 900000000
     }
-    
+
     pub fn from_str(fstr: &str) -> Result<Bbox> {
         let vv: Vec<&str> = fstr.split(",").collect();
         if vv.len() != 4 {
@@ -137,8 +140,8 @@ impl Bbox {
         }
         Ok(Bbox::new(vvi[0], vvi[1], vvi[2], vvi[3]))
     }
-    
-    pub fn contains(&self,other: &Bbox) -> bool {
+
+    pub fn contains(&self, other: &Bbox) -> bool {
         if self.minlon > other.minlon {
             return false;
         }
@@ -168,8 +171,7 @@ impl Bbox {
         }
         true
     }
-        
-    
+
     pub fn expand(&mut self, lon: i32, lat: i32) {
         if lon < self.minlon {
             self.minlon = lon;
@@ -229,7 +231,6 @@ impl serde::Serialize for Bbox {
         seq.serialize_element(&self.maxlon)?;
         seq.serialize_element(&self.maxlat)?;
         seq.end()
-
     }
 }
 
@@ -244,7 +245,7 @@ impl Quadtree {
     pub fn empty() -> Quadtree {
         Quadtree(-2)
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.0 < 0
     }
@@ -368,16 +369,18 @@ impl Quadtree {
         qt <<= 63 - 2 * level;
         Quadtree(qt + level as i64)
     }
-    
+
     pub fn is_parent(&self, other: &Quadtree) -> bool {
-        if self==other { return true; }
+        if self == other {
+            return true;
+        }
         if self.depth() > other.depth() {
             return other.is_parent(&self);
         }
-    
+
         self == &other.round(self.depth())
     }
-    
+
     pub fn common(&self, other: &Quadtree) -> Quadtree {
         if self.0 < 0 {
             return Quadtree(other.0);
@@ -464,7 +467,6 @@ impl serde::Serialize for Quadtree {
         serializer.serialize_str(&self.as_string())
     }
 }
-
 
 fn find_quad(min_x: f64, min_y: f64, max_x: f64, max_y: f64, buffer: f64) -> i64 {
     if (min_x < (-1.0 - buffer))

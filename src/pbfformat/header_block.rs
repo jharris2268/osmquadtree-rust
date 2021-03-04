@@ -1,10 +1,10 @@
-use crate::elements::{Quadtree,Bbox};
+use crate::elements::{Bbox, Quadtree};
 
 use simple_protocolbuffers as spb;
 
 use serde_json;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Result,BufReader};
+use std::io::{BufReader, Error, ErrorKind, Result};
 
 #[derive(Debug)]
 pub struct IndexItem {
@@ -33,9 +33,7 @@ impl IndexItem {
                 spb::PbfTag::Data(1, d) => quadtree = Quadtree::read(&d)?,
                 spb::PbfTag::Value(2, isc) => is_change = isc != 0,
                 spb::PbfTag::Value(3, l) => length = spb::un_zig_zag(l) as u64,
-                spb::PbfTag::Value(4, qt) => {
-                    quadtree = Quadtree::new(spb::un_zig_zag(qt))
-                }
+                spb::PbfTag::Value(4, qt) => quadtree = Quadtree::new(spb::un_zig_zag(qt)),
                 _ => {
                     return Err(Error::new(
                         ErrorKind::Other,
@@ -116,7 +114,6 @@ impl HeaderBlock {
     }
 
     fn read_file_locs(&mut self, filelocs_fn: &str) -> Result<()> {
-        
         let fl = File::open(filelocs_fn)?;
         let mut flb = BufReader::new(fl);
         let ff: Vec<(i64, u64, u64)>;
@@ -133,7 +130,7 @@ impl HeaderBlock {
             self.index
                 .push(IndexItem::new(Quadtree::new(a), false, b, c));
         }
-        
+
         Ok(())
     }
 }
@@ -159,8 +156,12 @@ pub fn make_header_block(withlocs: bool, bbox: Option<&Bbox>) -> Vec<u8> {
     let mut res = Vec::new();
 
     match bbox {
-        Some(bbox) => { spb::pack_data(&mut res, 1, &pack_bbox(bbox)); },
-        None => { spb::pack_data(&mut res, 1, &pack_bbox_planet()); },
+        Some(bbox) => {
+            spb::pack_data(&mut res, 1, &pack_bbox(bbox));
+        }
+        None => {
+            spb::pack_data(&mut res, 1, &pack_bbox_planet());
+        }
     }
     spb::pack_data(&mut res, 4, b"OsmSchema-V0.6");
     spb::pack_data(&mut res, 4, b"DenseNodes");

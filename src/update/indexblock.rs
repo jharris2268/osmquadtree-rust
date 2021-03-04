@@ -1,15 +1,13 @@
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::{IdSet, MinimalBlock, Quadtree,ElementType};
+use crate::elements::{ElementType, IdSet, MinimalBlock, Quadtree};
 use crate::pbfformat::{
-    file_length, pack_file_block, read_all_blocks_prog, read_all_blocks, read_all_blocks_with_progbar, FileBlock,
-    ProgBarWrap,
+    file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
+    read_all_blocks_with_progbar, FileBlock, ProgBarWrap,
 };
 
 use simple_protocolbuffers::{
-    un_zig_zag, DeltaPackedInt, IterTags, PbfTag,
-    pack_data, pack_delta_int, pack_value, zig_zag
+    pack_data, pack_delta_int, pack_value, un_zig_zag, zig_zag, DeltaPackedInt, IterTags, PbfTag,
 };
-
 
 use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
 
@@ -56,21 +54,21 @@ fn check_index_block(bl: Vec<u8>, idset: &dyn IdSet) -> Option<Quadtree> {
             PbfTag::Value(1, q) => qt = Quadtree::new(un_zig_zag(q)),
             PbfTag::Data(2, nn) => {
                 for n in DeltaPackedInt::new(&nn) {
-                    if idset.contains(ElementType::Node,n) {
+                    if idset.contains(ElementType::Node, n) {
                         return Some(qt);
                     }
                 }
             }
             PbfTag::Data(3, ww) => {
                 for w in DeltaPackedInt::new(&ww) {
-                    if idset.contains(ElementType::Way,w) {
+                    if idset.contains(ElementType::Way, w) {
                         return Some(qt);
                     }
                 }
             }
             PbfTag::Data(4, rr) => {
                 for r in DeltaPackedInt::new(&rr) {
-                    if idset.contains(ElementType::Relation,r) {
+                    if idset.contains(ElementType::Relation, r) {
                         return Some(qt);
                     }
                 }

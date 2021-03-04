@@ -1,6 +1,8 @@
-use crate::elements::{Tag,Quadtree,Info};
-use crate::elements::{Node,Way,Relation};
-use crate::geometry::{PointGeometry,LinestringGeometry,SimplePolygonGeometry,ComplicatedPolygonGeometry};
+use crate::elements::{Info, Quadtree, Tag};
+use crate::elements::{Node, Relation, Way};
+use crate::geometry::{
+    ComplicatedPolygonGeometry, LinestringGeometry, PointGeometry, SimplePolygonGeometry,
+};
 #[derive(Debug)]
 pub enum Element {
     Node(Node),
@@ -11,7 +13,6 @@ pub enum Element {
     SimplePolygonGeometry(SimplePolygonGeometry),
     ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),
 }
-
 
 #[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
 pub enum ElementType {
@@ -26,7 +27,9 @@ impl ElementType {
             0 => ElementType::Node,
             1 => ElementType::Way,
             2 => ElementType::Relation,
-            _ => { panic!("wrong type"); },
+            _ => {
+                panic!("wrong type");
+            }
         }
     }
     pub fn as_int(&self) -> u64 {
@@ -37,7 +40,6 @@ impl ElementType {
         }
     }
 }
-
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 pub enum Changetype {
@@ -66,7 +68,7 @@ impl std::fmt::Display for Changetype {
     }
 }
 impl Changetype {
-    pub fn from_int(ct: u64)  -> Changetype {
+    pub fn from_int(ct: u64) -> Changetype {
         match ct {
             0 => Changetype::Normal,
             1 => Changetype::Delete,
@@ -79,7 +81,7 @@ impl Changetype {
             }
         }
     }
-    
+
     pub fn as_int(&self) -> u64 {
         match self {
             Changetype::Normal => 0,
@@ -91,8 +93,6 @@ impl Changetype {
         }
     }
 }
-
-
 
 pub trait WithType {
     fn get_type(&self) -> ElementType;
@@ -118,21 +118,25 @@ pub trait WithVersion {
 }
 
 impl<T> WithTimestamp for T
-where T: WithInfo {
+where
+    T: WithInfo,
+{
     fn get_timestamp(&self) -> i64 {
         match self.get_info() {
             Some(info) => info.timestamp,
-            None => -1
+            None => -1,
         }
     }
 }
 
 impl<T> WithVersion for T
-where T: WithInfo {
+where
+    T: WithInfo,
+{
     fn get_version(&self) -> i64 {
         match self.get_info() {
             Some(info) => info.version,
-            None => -1
+            None => -1,
         }
     }
 }
@@ -162,7 +166,6 @@ impl WithQuadtree for Element {
         }
     }
 }
-
 
 pub trait SetCommon {
     fn set_id(&mut self, id: i64);

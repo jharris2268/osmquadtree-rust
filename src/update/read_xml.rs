@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, Error, ErrorKind, Result};
 
 use crate::elements::{Changetype, ElementType, Info, Member, Node, Relation, Tag, Way};
-use crate::utils::{Checktime, as_int};
+use crate::utils::{as_int, Checktime};
 
 use chrono::NaiveDateTime;
 use quick_xml::events::{BytesStart, Event};
@@ -48,8 +48,6 @@ fn all_whitespace(s: &[u8]) -> bool {
     }
     return true;
 }
-
-
 
 fn read_node<T: BufRead>(
     reader: &mut Reader<T>,

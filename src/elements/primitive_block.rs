@@ -1,9 +1,9 @@
 use simple_protocolbuffers::{
-        PbfTag, IterTags, read_tag, un_zig_zag,
-        pack_value, pack_data, data_length, value_length, zig_zag};
+    data_length, pack_data, pack_value, read_tag, un_zig_zag, value_length, zig_zag, IterTags,
+    PbfTag,
+};
 
 use crate::elements::Quadtree;
-
 
 pub use crate::elements::idset::IdSet;
 pub use crate::elements::info::Info;
@@ -12,35 +12,31 @@ pub use crate::elements::relation::{Member, Relation};
 pub use crate::elements::tags::Tag;
 pub use crate::elements::way::Way;
 
-use crate::elements::common::{PackStringTable};
+use crate::elements::common::PackStringTable;
 use crate::elements::dense::Dense;
-use crate::elements::traits::{WithChangetype,Changetype,ElementType,Element};
+use crate::elements::traits::{Changetype, Element, ElementType, WithChangetype};
 
 use std::io::{Error, ErrorKind, Result};
-
-
 
 pub trait Block {
     fn with_quadtree(q: Quadtree) -> Self;
     fn get_index(&self) -> i64;
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree;
     fn get_end_date(&self) -> i64;
-    
-    
+
     fn len(&self) -> usize;
     fn weight(&self) -> usize;
-    
+
     fn add_object(&mut self, ele: Element) -> Result<()>;
     fn sort(&mut self);
 }
 
 pub trait PackableBlock: Block {
     fn pack(&self) -> Result<Vec<u8>>;
-    fn unpack(index: i64, data: &[u8]) -> Result<Self> where Self: Sized;
+    fn unpack(index: i64, data: &[u8]) -> Result<Self>
+    where
+        Self: Sized;
 }
-    
-
-
 
 #[derive(Debug)]
 pub struct PrimitiveBlock {
@@ -68,8 +64,6 @@ fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     }
     Ok(res)
 }
-
-
 
 impl WithChangetype for Node {
     fn get_changetype(&self) -> Changetype {
@@ -108,33 +102,47 @@ fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype, usize, usiz
     res
 }
 
-
-
-
 impl Block for PrimitiveBlock {
     fn with_quadtree(q: Quadtree) -> Self {
-        let mut b = PrimitiveBlock::new(0,0);
+        let mut b = PrimitiveBlock::new(0, 0);
         b.quadtree = q;
         b
     }
-    fn get_index(&self) -> i64 { self.index }
-    fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.quadtree }
-    fn get_end_date(&self) -> i64 { self.end_date }
-    
-    
+    fn get_index(&self) -> i64 {
+        self.index
+    }
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.quadtree
+    }
+    fn get_end_date(&self) -> i64 {
+        self.end_date
+    }
+
     fn len(&self) -> usize {
         self.nodes.len() + self.ways.len() + self.relations.len()
     }
     fn weight(&self) -> usize {
         self.nodes.len() + 8 * self.ways.len() + 20 * self.relations.len()
     }
-    
+
     fn add_object(&mut self, ele: Element) -> Result<()> {
         match ele {
-            Element::Node(n) => { self.nodes.push(n); Ok(()) },
-            Element::Way(w) => { self.ways.push(w); Ok(()) },
-            Element::Relation(r) => { self.relations.push(r); Ok(()) },
-            _ => Err(Error::new(ErrorKind::Other, format!("wrong element type {:?}", ele)))
+            Element::Node(n) => {
+                self.nodes.push(n);
+                Ok(())
+            }
+            Element::Way(w) => {
+                self.ways.push(w);
+                Ok(())
+            }
+            Element::Relation(r) => {
+                self.relations.push(r);
+                Ok(())
+            }
+            _ => Err(Error::new(
+                ErrorKind::Other,
+                format!("wrong element type {:?}", ele),
+            )),
         }
     }
     fn sort(&mut self) {
@@ -142,7 +150,6 @@ impl Block for PrimitiveBlock {
         self.ways.sort();
         self.relations.sort();
     }
-     
 }
 
 impl From<Node> for Element {
@@ -160,58 +167,62 @@ impl From<Relation> for Element {
         Element::Relation(n)
     }
 }
-    
-
 
 impl IntoIterator for PrimitiveBlock {
     type Item = Element;
     type IntoIter = Box<dyn Iterator<Item = Element>>;
     fn into_iter(self: Self) -> Self::IntoIter {
-        
-        Box::new(self.nodes.into_iter().map(Element::from)
-            .chain(
-                self.ways.into_iter().map(Element::from)
-            )
-            .chain(
-                self.relations.into_iter().map(Element::from)
-            ))
-        
+        Box::new(
+            self.nodes
+                .into_iter()
+                .map(Element::from)
+                .chain(self.ways.into_iter().map(Element::from))
+                .chain(self.relations.into_iter().map(Element::from)),
+        )
     }
 }
 
 pub struct SortablePrimitiveBlock(PrimitiveBlock);
 impl Block for SortablePrimitiveBlock {
-    fn with_quadtree(q: Quadtree) -> Self { SortablePrimitiveBlock(PrimitiveBlock::with_quadtree(q)) }
-    fn get_index(&self) -> i64 { self.0.get_index() }
-    fn get_quadtree<'a>(&'a self) -> &'a Quadtree { &self.0.get_quadtree() }
-    fn get_end_date(&self) -> i64 { self.0.get_end_date() }
-    
-    
-    fn len(&self) -> usize { self.0.len() }
-    fn weight(&self) -> usize { self.0.weight() }
-    
-    fn add_object(&mut self, ele: Element) -> Result<()> { self.0.add_object(ele) }
-    
+    fn with_quadtree(q: Quadtree) -> Self {
+        SortablePrimitiveBlock(PrimitiveBlock::with_quadtree(q))
+    }
+    fn get_index(&self) -> i64 {
+        self.0.get_index()
+    }
+    fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
+        &self.0.get_quadtree()
+    }
+    fn get_end_date(&self) -> i64 {
+        self.0.get_end_date()
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+    fn weight(&self) -> usize {
+        self.0.weight()
+    }
+
+    fn add_object(&mut self, ele: Element) -> Result<()> {
+        self.0.add_object(ele)
+    }
+
     fn sort(&mut self) {
         self.0.sort();
     }
-    
 }
 impl PackableBlock for SortablePrimitiveBlock {
-    
-    
     fn pack(&self) -> Result<Vec<u8>> {
         self.0.pack(true, true)
     }
-    
+
     fn unpack(index: i64, data: &[u8]) -> Result<Self> {
-        Ok(SortablePrimitiveBlock(PrimitiveBlock::read(index, 0, data, false, false)?))
+        Ok(SortablePrimitiveBlock(PrimitiveBlock::read(
+            index, 0, data, false, false,
+        )?))
     }
 }
-        
-
-    
-    
 
 impl PrimitiveBlock {
     pub fn new(index: i64, location: u64) -> PrimitiveBlock {
@@ -227,14 +238,11 @@ impl PrimitiveBlock {
         }
     }
 
-       
     pub fn extend(&mut self, mut other: PrimitiveBlock) {
         self.nodes.extend(std::mem::take(&mut other.nodes));
         self.ways.extend(std::mem::take(&mut other.ways));
         self.relations.extend(std::mem::take(&mut other.relations));
     }
-    
-    
 
     pub fn read(
         index: i64,
@@ -267,9 +275,7 @@ impl PrimitiveBlock {
                 }
                 PbfTag::Data(2, d) => groups.push(d),
 
-                PbfTag::Value(32, qt) => {
-                    res.quadtree = Quadtree::new(un_zig_zag(qt))
-                }
+                PbfTag::Value(32, qt) => res.quadtree = Quadtree::new(un_zig_zag(qt)),
                 PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 PbfTag::Value(34, ed) => res.end_date = ed as i64,
 

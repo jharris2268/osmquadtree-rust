@@ -1,8 +1,9 @@
-
-
-use pq_sys::{PGconn,PQconnectdb,PQresultStatus,PGRES_COMMAND_OK,/*PQerrorMessage,*/PQclear,PQfinish,PQexec};
-use pq_sys::{PGRES_COPY_IN,PQputCopyData,PQputCopyEnd,PQgetResult, PQstatus, CONNECTION_BAD};
-use std::io::{Result,Error,ErrorKind};
+use pq_sys::{
+    PGconn, /*PQerrorMessage,*/ PQclear, PQconnectdb, PQexec, PQfinish, PQresultStatus,
+    PGRES_COMMAND_OK,
+};
+use pq_sys::{PQgetResult, PQputCopyData, PQputCopyEnd, PQstatus, CONNECTION_BAD, PGRES_COPY_IN};
+use std::io::{Error, ErrorKind, Result};
 
 use std::ffi::CString;
 use std::ops::Drop;
@@ -26,10 +27,10 @@ use std::ops::Drop;
                 PQclear(res);
                 init=true;
             }
-            
-            
+
+
             std::string sql="COPY "+tab+" FROM STDIN";
-            
+
             if (as_binary) {
                 sql += " (FORMAT binary)";
             } else {
@@ -38,7 +39,7 @@ use std::ops::Drop;
                     sql += " HEADER";
                 }
             }
-            
+
             auto res = PQexec(conn,sql.c_str());
 
             if (PQresultStatus(res) != PGRES_COPY_IN) {
@@ -59,29 +60,29 @@ use std::ops::Drop;
                 return 0;
             }
 
-            
+
 
             r = PQputCopyEnd(conn,nullptr);
             if (r!=PGRES_COMMAND_OK) {
                 Logger::Message() << "\n*****\ncopy failed [" << sql << "]" << PQerrorMessage(conn) << "\n" ;
-                    
+
                 return 0;
             }
-            
+
             PQclear(res);
-            
+
             res = PQgetResult(conn);
             if (PQresultStatus(res) != PGRES_COMMAND_OK) {
                 Logger::Message() << "copy end failed: " << PQerrorMessage(conn);
                 throw std::domain_error("failed");
             }
-                            
+
             PQclear(res);
             return 1;
         }
-        std::string connection_string;        
-        std::string table_prfx;      
-        bool with_header;  
+        std::string connection_string;
+        std::string table_prfx;
+        bool with_header;
         bool as_binary;
         PGconn* conn;
         bool init;
@@ -89,16 +90,13 @@ use std::ops::Drop;
 
 pub struct Connection {
     conn: *mut PGconn,
-    
 }
 unsafe impl Send for Connection {}
 
 impl Connection {
     pub fn connect(connstr: &str) -> Result<Connection> {
-        
         let connstr_cstr = CString::new(connstr).expect("failed to read connstr");
-        
-        
+
         let conn;
         unsafe {
             conn = PQconnectdb(connstr_cstr.as_ptr());
@@ -106,69 +104,66 @@ impl Connection {
                 PQfinish(conn);
                 return Err(Error::new(ErrorKind::Other, "failed to connect"));
             }
-                
         }
-        Ok(Connection{conn})
-        
+        Ok(Connection { conn })
     }
-    
+
     pub fn execute(&mut self, sql: &str) -> Result<()> {
         let sql_cstr = CString::new(sql).expect("failed to read sql str");
         unsafe {
-            let res = PQexec(self.conn,sql_cstr.as_ptr());
-            if PQresultStatus(res)!=PGRES_COMMAND_OK {
+            let res = PQexec(self.conn, sql_cstr.as_ptr());
+            if PQresultStatus(res) != PGRES_COMMAND_OK {
                 PQclear(res);
                 return Err(Error::new(ErrorKind::Other, "failed to execute"));
             }
             PQclear(res);
             Ok(())
-            
         }
-        
     }
-    
+
     pub fn copy(&mut self, cmd: &str, data: &[&[u8]]) -> Result<()> {
-        
         let cmd_cstr = CString::new(cmd).expect("failed to read cmd str");
-       
+
         unsafe {
-            let res = PQexec(self.conn,cmd_cstr.as_ptr());
+            let res = PQexec(self.conn, cmd_cstr.as_ptr());
 
             if PQresultStatus(res) != PGRES_COPY_IN {
                 PQclear(res);
                 return Err(Error::new(ErrorKind::Other, "failed to copy"));
             }
-            
-            
+
             for data_part in data {
-                let r = PQputCopyData(self.conn,data_part.as_ptr() as *mut i8, data_part.len() as i32);
-                
+                let r = PQputCopyData(
+                    self.conn,
+                    data_part.as_ptr() as *mut i8,
+                    data_part.len() as i32,
+                );
+
                 if r != 1 {
-                    PQputCopyEnd(self.conn,std::ptr::null());
+                    PQputCopyEnd(self.conn, std::ptr::null());
                     PQclear(res);
                     return Err(Error::new(ErrorKind::Other, "failed to copy"));
                 }
             }
-            
-            let r = PQputCopyEnd(self.conn,std::ptr::null());
+
+            let r = PQputCopyEnd(self.conn, std::ptr::null());
             if r != 1 {
                 PQclear(res);
-                return Err(Error::new(ErrorKind::Other, format!("failed to copy: ")));//{}", PQerrorMessage(self.conn))));
+                return Err(Error::new(ErrorKind::Other, format!("failed to copy: ")));
+                //{}", PQerrorMessage(self.conn))));
             }
-            
+
             PQclear(res);
-            
+
             let res = PQgetResult(self.conn);
             if PQresultStatus(res) != PGRES_COMMAND_OK {
                 PQclear(res);
                 return Err(Error::new(ErrorKind::Other, "copy end failed"));
             }
             PQclear(res);
-            
         }
         Ok(())
     }
-    
 }
 impl Drop for Connection {
     fn drop(&mut self) {

@@ -4,18 +4,21 @@ use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
 
-use osmquadtree::calcqts::{run_calcqts, run_calcqts_prelim,run_calcqts_load_existing};
-use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem,QuadtreeTree};
-use osmquadtree::update::{run_update, run_update_initial,write_index_file};
-use osmquadtree::utils::{parse_timestamp, LogTimes};
+use osmquadtree::calcqts::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim};
 use osmquadtree::pbfformat::file_length;
+use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem, QuadtreeTree};
+use osmquadtree::update::{run_update, run_update_initial, write_index_file};
+use osmquadtree::utils::{parse_timestamp, LogTimes};
 
-use osmquadtree::mergechanges::{run_mergechanges_sort_inmem,run_mergechanges_sort,run_mergechanges_sort_from_existing,run_mergechanges};
-use osmquadtree::geometry::{process_geometry,GeometryStyle,OutputType};
-use osmquadtree::geometry::postgresql::{PostgresqlConnection,PostgresqlOptions};
+use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions};
+use osmquadtree::geometry::{process_geometry, GeometryStyle, OutputType};
+use osmquadtree::mergechanges::{
+    run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
+    run_mergechanges_sort_inmem,
+};
 
-use std::sync::Arc;
 use std::io::{Error, ErrorKind, Result};
+use std::sync::Arc;
 
 fn run_sortblocks(
     infn: &str,
@@ -30,19 +33,17 @@ fn run_sortblocks(
     numchan: usize,
     keep_temps: bool,
 ) -> Result<()> {
-    
     let mut lt = LogTimes::new();
-    
+
     let mut splitat = 0i64;
-    let tempinmem = file_length(infn) < 512*1024*1024;
+    let tempinmem = file_length(infn) < 512 * 1024 * 1024;
     let mut limit = 0usize;
-    
-    
+
     if splitat == 0 {
         splitat = 1500000i64 / target;
     }
     //let write_at = 2000000;
-    
+
     let qtsfn_ = match qtsfn {
         Some(q) => String::from(q),
         None => format!("{}-qts.pbf", &infn[0..infn.len() - 4]),
@@ -64,8 +65,10 @@ fn run_sortblocks(
         mintarget = target / 2;
     }
 
-    let groups: Arc<QuadtreeTree> = Arc::from(find_groups(&qtsfn, numchan, maxdepth, target, mintarget, &mut lt)?);
-    
+    let groups: Arc<QuadtreeTree> = Arc::from(find_groups(
+        &qtsfn, numchan, maxdepth, target, mintarget, &mut lt,
+    )?);
+
     println!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
         limit = 30000000usize / (groups.len() / (splitat as usize));
@@ -77,7 +80,8 @@ fn run_sortblocks(
         sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp, &mut lt)?;
     } else {
         sort_blocks(
-            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit/*write_at*/, timestamp, keep_temps, &mut lt
+            &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit, /*write_at*/
+            timestamp, keep_temps, &mut lt,
         )?;
     }
     println!("{}", lt);
@@ -85,21 +89,22 @@ fn run_sortblocks(
 }
 
 fn run_update_droplast(prfx: &str) -> Result<()> {
-    
     let mut fl = osmquadtree::update::read_filelist(prfx);
-    if fl.len()<2 {
-        return Err(Error::new(ErrorKind::Other, format!("{}filelist.json only has {} entries",prfx,fl.len())));
+    if fl.len() < 2 {
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!("{}filelist.json only has {} entries", prfx, fl.len()),
+        ));
     }
     fl.pop();
     osmquadtree::update::write_filelist(prfx, &fl);
     Ok(())
 }
-   
 
 fn write_index_file_w(prfx: &str, outfn: Option<&str>, numchan: usize) -> Result<()> {
     match outfn {
         Some(o) => write_index_file(prfx, o, numchan),
-        None => write_index_file(prfx, "", numchan)
+        None => write_index_file(prfx, "", numchan),
     };
     Ok(())
 }
@@ -116,8 +121,8 @@ fn dump_geometry_style(outfn: Option<&str>) -> Result<()> {
 
 fn get_i64(x: Option<&str>) -> Option<i64> {
     match x {
-        None=>None,
-        Some(t) => Some(t.parse().expect("expected integer argument"))
+        None => None,
+        Some(t) => Some(t.parse().expect("expected integer argument")),
     }
 }
 
@@ -380,7 +385,6 @@ fn main() {
                 .arg(Arg::with_name("OUTPUT").required(true))
         )
         ;
-        
 
     let mut help = Vec::new();
     app.write_help(&mut help).expect("?");
@@ -404,28 +408,22 @@ fn main() {
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
-        ("calcqts_prelim", Some(calcqts)) => {
-            run_calcqts_prelim(
-                calcqts.value_of("INPUT").unwrap(),
-                calcqts.value_of("QTSFN"),
-                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-            )
-            
-            
-        },
-        ("calcqts_load_existing", Some(calcqts)) => {
-            run_calcqts_load_existing(
-                calcqts.value_of("INPUT").unwrap(),
-                calcqts.value_of("QTSFN"),
-                value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
-                value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
-                match value_t!(calcqts, "STOP_AT", u64) {
-                    Ok(s) => Some(s),
-                    Err(_) => None
-                },
-                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-            )
-        },
+        ("calcqts_prelim", Some(calcqts)) => run_calcqts_prelim(
+            calcqts.value_of("INPUT").unwrap(),
+            calcqts.value_of("QTSFN"),
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("calcqts_load_existing", Some(calcqts)) => run_calcqts_load_existing(
+            calcqts.value_of("INPUT").unwrap(),
+            calcqts.value_of("QTSFN"),
+            value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
+            value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+            match value_t!(calcqts, "STOP_AT", u64) {
+                Ok(s) => Some(s),
+                Err(_) => None,
+            },
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
         ("sortblocks", Some(sortblocks)) => {
             run_sortblocks(
                 sortblocks.value_of("INPUT").unwrap(),
@@ -437,7 +435,7 @@ fn main() {
                 false, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-                sortblocks.is_present("KEEPTEMPS")
+                sortblocks.is_present("KEEPTEMPS"),
             )
         }
         ("sortblocks_inmem", Some(sortblocks)) => {
@@ -451,7 +449,7 @@ fn main() {
                 true, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-                false
+                false,
             )
         }
         ("update_initial", Some(update)) => run_update_initial(
@@ -469,7 +467,7 @@ fn main() {
                 false, //as_demo
                 value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        },
+        }
         ("update_demo", Some(update)) => {
             run_update(
                 update.value_of("INPUT").unwrap(),
@@ -477,105 +475,84 @@ fn main() {
                 true, //as_demo
                 value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-            
-        },
-        ("update_droplast", Some(update)) => {
-            run_update_droplast(update.value_of("INPUT").unwrap())
-        },  
-        ("write_index_file", Some(write)) => {
-            write_index_file_w(
-                write.value_of("INPUT").unwrap(),
-                write.value_of("OUTFN"),
-                value_t!(write, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("mergechanges_sort_inmem", Some(filter)) => {
-            run_mergechanges_sort_inmem(
-                filter.value_of("INPUT").unwrap(),
-                filter.value_of("OUTFN").unwrap(),
-                filter.value_of("FILTER"),
-                filter.value_of("TIMESTAMP"),
-                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
         }
-        ("mergechanges_sort", Some(filter)) => {
-            run_mergechanges_sort(
-                filter.value_of("INPUT").unwrap(),
-                filter.value_of("OUTFN").unwrap(),
-                filter.value_of("TEMPFN"),
-                filter.value_of("FILTER"),
-                filter.is_present("FILTEROBJS"),
-                filter.value_of("TIMESTAMP"),
-                filter.is_present("KEEPTEMPS"),
-                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("mergechanges_sort_from_existing", Some(filter)) => {
-            run_mergechanges_sort_from_existing(
-                filter.value_of("OUTFN").unwrap(),
-                filter.value_of("TEMPFN").unwrap(),
-                filter.is_present("ISSPLIT"),
-                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("mergechanges", Some(filter)) => {
-            run_mergechanges(
-                filter.value_of("INPUT").unwrap(),
-                filter.value_of("OUTFN").unwrap(),
-                filter.value_of("FILTER"),
-                filter.is_present("FILTEROBJS"),
-                filter.value_of("TIMESTAMP"),
-                value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("process_geometry_null", Some(geom)) => {
-            process_geometry(
-                geom.value_of("INPUT").unwrap(),
-                OutputType::None,
-                geom.value_of("FILTER"),
-                geom.value_of("TIMESTAMP"),
-                geom.is_present("FIND_MINZOOM"),
-                geom.value_of("STYLE_NAME"),
-                get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("process_geometry_json", Some(geom)) => {
-            process_geometry(
-                geom.value_of("INPUT").unwrap(),
-                OutputType::Json(String::from(geom.value_of("OUTFN").unwrap())),
-                geom.value_of("FILTER"),
-                geom.value_of("TIMESTAMP"),
-                geom.is_present("FIND_MINZOOM"),
-                geom.value_of("STYLE_NAME"),
-                get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("process_geometry_tiled_json", Some(geom)) => {
-            process_geometry(
-                geom.value_of("INPUT").unwrap(),
-                OutputType::TiledJson(String::from(geom.value_of("OUTFN").unwrap())),
-                geom.value_of("FILTER"),
-                geom.value_of("TIMESTAMP"),
-                geom.is_present("FIND_MINZOOM"),
-                geom.value_of("STYLE_NAME"),
-                get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
-        ("process_geometry_pbffile", Some(geom)) => {
-            process_geometry(
-                geom.value_of("INPUT").unwrap(),
-                OutputType::PbfFile(String::from(geom.value_of("OUTFN").unwrap())),
-                geom.value_of("FILTER"),
-                geom.value_of("TIMESTAMP"),
-                geom.is_present("FIND_MINZOOM"),
-                geom.value_of("STYLE_NAME"),
-                get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
-            )
-        },
+        ("update_droplast", Some(update)) => run_update_droplast(update.value_of("INPUT").unwrap()),
+        ("write_index_file", Some(write)) => write_index_file_w(
+            write.value_of("INPUT").unwrap(),
+            write.value_of("OUTFN"),
+            value_t!(write, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("mergechanges_sort_inmem", Some(filter)) => run_mergechanges_sort_inmem(
+            filter.value_of("INPUT").unwrap(),
+            filter.value_of("OUTFN").unwrap(),
+            filter.value_of("FILTER"),
+            filter.value_of("TIMESTAMP"),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
+            filter.value_of("INPUT").unwrap(),
+            filter.value_of("OUTFN").unwrap(),
+            filter.value_of("TEMPFN"),
+            filter.value_of("FILTER"),
+            filter.is_present("FILTEROBJS"),
+            filter.value_of("TIMESTAMP"),
+            filter.is_present("KEEPTEMPS"),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("mergechanges_sort_from_existing", Some(filter)) => run_mergechanges_sort_from_existing(
+            filter.value_of("OUTFN").unwrap(),
+            filter.value_of("TEMPFN").unwrap(),
+            filter.is_present("ISSPLIT"),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("mergechanges", Some(filter)) => run_mergechanges(
+            filter.value_of("INPUT").unwrap(),
+            filter.value_of("OUTFN").unwrap(),
+            filter.value_of("FILTER"),
+            filter.is_present("FILTEROBJS"),
+            filter.value_of("TIMESTAMP"),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("process_geometry_null", Some(geom)) => process_geometry(
+            geom.value_of("INPUT").unwrap(),
+            OutputType::None,
+            geom.value_of("FILTER"),
+            geom.value_of("TIMESTAMP"),
+            geom.is_present("FIND_MINZOOM"),
+            geom.value_of("STYLE_NAME"),
+            get_i64(geom.value_of("MAX_MINZOOM")),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("process_geometry_json", Some(geom)) => process_geometry(
+            geom.value_of("INPUT").unwrap(),
+            OutputType::Json(String::from(geom.value_of("OUTFN").unwrap())),
+            geom.value_of("FILTER"),
+            geom.value_of("TIMESTAMP"),
+            geom.is_present("FIND_MINZOOM"),
+            geom.value_of("STYLE_NAME"),
+            get_i64(geom.value_of("MAX_MINZOOM")),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("process_geometry_tiled_json", Some(geom)) => process_geometry(
+            geom.value_of("INPUT").unwrap(),
+            OutputType::TiledJson(String::from(geom.value_of("OUTFN").unwrap())),
+            geom.value_of("FILTER"),
+            geom.value_of("TIMESTAMP"),
+            geom.is_present("FIND_MINZOOM"),
+            geom.value_of("STYLE_NAME"),
+            get_i64(geom.value_of("MAX_MINZOOM")),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
+        ("process_geometry_pbffile", Some(geom)) => process_geometry(
+            geom.value_of("INPUT").unwrap(),
+            OutputType::PbfFile(String::from(geom.value_of("OUTFN").unwrap())),
+            geom.value_of("FILTER"),
+            geom.value_of("TIMESTAMP"),
+            geom.is_present("FIND_MINZOOM"),
+            geom.value_of("STYLE_NAME"),
+            get_i64(geom.value_of("MAX_MINZOOM")),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+        ),
         ("process_geometry_postgresqlnull", Some(geom)) => {
             let pc = PostgresqlConnection::Null;
             let po = if geom.is_present("EXTENDED") {
@@ -591,11 +568,12 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        },
+        }
         ("process_geometry_postgresqlblob", Some(geom)) => {
-            let pc = PostgresqlConnection::CopyFilePrfx(String::from(geom.value_of("OUTFN").unwrap()));
+            let pc =
+                PostgresqlConnection::CopyFilePrfx(String::from(geom.value_of("OUTFN").unwrap()));
             let po = if geom.is_present("EXTENDED") {
                 PostgresqlOptions::extended(pc, &GeometryStyle::default())
             } else {
@@ -609,11 +587,12 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        },
+        }
         ("process_geometry_postgresqlblob_pbf", Some(geom)) => {
-            let pc = PostgresqlConnection::CopyFileBlob(String::from(geom.value_of("OUTFN").unwrap()));
+            let pc =
+                PostgresqlConnection::CopyFileBlob(String::from(geom.value_of("OUTFN").unwrap()));
             let po = if geom.is_present("EXTENDED") {
                 PostgresqlOptions::extended(pc, &GeometryStyle::default())
             } else {
@@ -627,14 +606,14 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
-        },
+        }
         ("process_geometry_postgresql", Some(geom)) => {
             let pc = PostgresqlConnection::Connection((
                 String::from(geom.value_of("CONNECTION").unwrap()),
                 String::from(geom.value_of("TABLE_PREFIX").unwrap()),
-                geom.is_present("EXEC_INDICES")
+                geom.is_present("EXEC_INDICES"),
             ));
             let po = if geom.is_present("EXTENDED") {
                 PostgresqlOptions::extended(pc, &GeometryStyle::default())
@@ -649,12 +628,10 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT)
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             )
         }
-        ("dump_geometry_style", Some(geom)) => {
-            dump_geometry_style(geom.value_of("OUTPUT"))
-        },
+        ("dump_geometry_style", Some(geom)) => dump_geometry_style(geom.value_of("OUTPUT")),
         _ => Err(Error::new(ErrorKind::Other, "??")),
     };
 

@@ -1,22 +1,18 @@
-
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::{PrimitiveBlock};
+use crate::elements::PrimitiveBlock;
 
 use crate::pbfformat::HeaderType;
-use crate::pbfformat::{
-    read_all_blocks_with_progbar,FileBlock
-};
+use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
 use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, Timer, LogTimes};
-
+use crate::utils::{LogTimes, MergeTimings, ReplaceNoneWithTimings, Timer};
 
 use crate::sortblocks::sortblocks::SortBlocks;
 
@@ -60,11 +56,12 @@ fn get_blocks(
     groups: Arc<QuadtreeTree>,
     numchan: usize,
 ) -> io::Result<Vec<PrimitiveBlock>> {
-    let pp: Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings>> = if numchan == 0 {
+    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
+        == 0
+    {
         let cc = Box::new(CollectBlocks::new(groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
         make_unpackprimblock(aq)
-        
     } else {
         let cc = Box::new(Callback::new(Box::new(CollectBlocks::new(groups))));
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, cc)), numchan);
@@ -76,7 +73,6 @@ fn get_blocks(
         }
 
         Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())))
-        
     };
     let (mut res, d) = read_all_blocks_with_progbar(infn, pp, "get_blocks");
     let mut blocks: Option<Vec<PrimitiveBlock>> = None;
@@ -107,20 +103,22 @@ fn write_blocks(
 ) -> io::Result<()> {
     let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
 
-    let mut wq: Box<dyn CallFinish<CallType=PrimitiveBlock,ReturnType=Timings>> = if numchan == 0 {
-        make_packprimblock_qtindex(wf, true)
-    } else {
-        
-        let wfs = CallbackSync::new(wf, numchan);
-        let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
-            Vec::new();
-        for w in wfs {
-            let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-            wqs.push(Box::new(Callback::new(make_packprimblock_qtindex(w2, true))));
-        }
-        Box::new(CallbackMerge::new(wqs, Box::new(MergeTimings::new())))
-    };
-    
+    let mut wq: Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> =
+        if numchan == 0 {
+            make_packprimblock_qtindex(wf, true)
+        } else {
+            let wfs = CallbackSync::new(wf, numchan);
+            let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
+                Vec::new();
+            for w in wfs {
+                let w2 = Box::new(ReplaceNoneWithTimings::new(w));
+                wqs.push(Box::new(Callback::new(make_packprimblock_qtindex(
+                    w2, true,
+                ))));
+            }
+            Box::new(CallbackMerge::new(wqs, Box::new(MergeTimings::new())))
+        };
+
     for mut b in blocks {
         b.end_date = timestamp;
         wq.call(b);
@@ -128,7 +126,6 @@ fn write_blocks(
     println!("{}", wq.finish()?);
     Ok(())
 }
-
 
 pub fn sort_blocks_inmem(
     infn: &str,

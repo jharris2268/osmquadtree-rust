@@ -1,11 +1,13 @@
-mod pointgeometry;
 mod complicatedpolygongeometry;
 mod linestringgeometry;
+mod pointgeometry;
 mod simplepolygongeometry;
 
-pub use pointgeometry::PointGeometry;
-pub use complicatedpolygongeometry::{ComplicatedPolygonGeometry,RingPart,Ring,PolygonPart,collect_rings};
+pub use complicatedpolygongeometry::{
+    collect_rings, ComplicatedPolygonGeometry, PolygonPart, Ring, RingPart,
+};
 pub use linestringgeometry::LinestringGeometry;
+pub use pointgeometry::PointGeometry;
 pub use simplepolygongeometry::SimplePolygonGeometry;
 
 pub trait GeoJsonable {

@@ -26,12 +26,16 @@ impl Timer {
 
 pub struct LogTimes {
     timer: Timer,
-    msgs: Vec<(String,f64)>,
+    msgs: Vec<(String, f64)>,
     longest: usize,
 }
 impl LogTimes {
     pub fn new() -> LogTimes {
-        LogTimes{timer: Timer::new(), msgs: Vec::new(), longest: 5}
+        LogTimes {
+            timer: Timer::new(),
+            msgs: Vec::new(),
+            longest: 5,
+        }
     }
     pub fn add(&mut self, msg: &str) {
         self.longest = usize::max(self.longest, msg.len());
@@ -41,12 +45,18 @@ impl LogTimes {
 }
 impl fmt::Display for LogTimes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut tot =0.0;
-        for (a,b) in &self.msgs {
-            write!(f, "{}:{}{:6.2}s\n", a," ".repeat(self.longest-a.len()),b)?;
-            tot+=b;
+        let mut tot = 0.0;
+        for (a, b) in &self.msgs {
+            write!(
+                f,
+                "{}:{}{:6.2}s\n",
+                a,
+                " ".repeat(self.longest - a.len()),
+                b
+            )?;
+            tot += b;
         }
-        write!(f, "TOTAL:{}{:6.2}s", " ".repeat(self.longest-5),tot)
+        write!(f, "TOTAL:{}{:6.2}s", " ".repeat(self.longest - 5), tot)
     }
 }
 
@@ -60,7 +70,6 @@ impl ThreadTimer {
     pub fn since(&self) -> f64 {
         as_secs(self.0.elapsed())
     }
-
 }
 
 pub(crate) struct Checktime {
@@ -89,11 +98,10 @@ impl Checktime {
             self.lt.reset();
             return Some(self.st.since());
         }
-        
+
         None
     }
     pub fn gettime(&self) -> f64 {
-        
         self.st.since()
     }
 }
@@ -237,7 +245,12 @@ where
     }
 }
 
-pub(crate) struct CallAll<T: CallFinish + ?Sized, U: Sync + Send + 'static, W: Fn(U) -> T::CallType, V> {
+pub(crate) struct CallAll<
+    T: CallFinish + ?Sized,
+    U: Sync + Send + 'static,
+    W: Fn(U) -> T::CallType,
+    V,
+> {
     out: Box<T>,
     tm: f64,
     msg: String,

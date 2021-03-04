@@ -1,20 +1,18 @@
-
-
 use std::collections::BTreeMap;
 use std::io::Result;
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
-use crate::pbfformat::{FileBlock, read_all_blocks_with_progbar};
+use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
 use crate::sortblocks::{find_tree_groups, QuadtreeTree};
-use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer, LogTimes};
+use crate::utils::{CallAll, LogTimes, MergeTimings, ReplaceNoneWithTimings, Timer};
 
 use crate::sortblocks::{OtherData, Timings};
 
 struct AddAll {
     groups: Option<Box<QuadtreeTree>>,
-    
+
     tm: f64,
 }
 
@@ -36,14 +34,11 @@ impl CallFinish for AddAll {
         let groups = self.groups.as_mut().unwrap();
         for (q, w) in mb.2 {
             groups.add(&q, w);
-        
         }
 
-        
         self.tm += tx.since();
     }
     fn finish(&mut self) -> Result<Timings> {
-        
         let mut t = Timings::new();
         t.add("addall", self.tm);
         t.add_other(
@@ -114,26 +109,25 @@ pub fn find_groups(
     mintarget: i64,
     lt: &mut LogTimes,
 ) -> Result<Box<QuadtreeTree>> {
-    
-    let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> =
-        if numchan > 0 {
-            let aa = CallbackSync::new(Box::new(AddAll::new()), numchan);
-            let mut bb: Vec<
-                Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>,
-            > = Vec::new();
-            for a in aa {
-                let a2 = Box::new(ReplaceNoneWithTimings::new(a));
-                bb.push(Box::new(Callback::new(make_convertquadtreeblock(
-                    a2, maxdepth,
-                ))));
-            }
-            Box::new(CallbackMerge::new(bb, Box::new(MergeTimings::new())))
-        } else {
-            make_convertquadtreeblock(Box::new(AddAll::new()), maxdepth)
-        };
-    
-    let (mut t,_) = read_all_blocks_with_progbar(qtsfn, cc, "prepare quadtreetree");
-    
+    let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
+        > 0
+    {
+        let aa = CallbackSync::new(Box::new(AddAll::new()), numchan);
+        let mut bb: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
+            Vec::new();
+        for a in aa {
+            let a2 = Box::new(ReplaceNoneWithTimings::new(a));
+            bb.push(Box::new(Callback::new(make_convertquadtreeblock(
+                a2, maxdepth,
+            ))));
+        }
+        Box::new(CallbackMerge::new(bb, Box::new(MergeTimings::new())))
+    } else {
+        make_convertquadtreeblock(Box::new(AddAll::new()), maxdepth)
+    };
+
+    let (mut t, _) = read_all_blocks_with_progbar(qtsfn, cc, "prepare quadtreetree");
+
     println!("{}", t);
 
     let mut tree: Option<Box<QuadtreeTree>> = None;
@@ -152,5 +146,4 @@ pub fn find_groups(
     let res = find_tree_groups(tree, target, mintarget)?;
     lt.add("find groups");
     Ok(res)
-    
 }

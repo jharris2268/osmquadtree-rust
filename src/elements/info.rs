@@ -1,8 +1,6 @@
 use crate::elements::common;
 
-use simple_protocolbuffers::{
-        PbfTag, IterTags,
-        pack_value};
+use simple_protocolbuffers::{pack_value, IterTags, PbfTag};
 
 use std::io::{Error, ErrorKind, Result};
 

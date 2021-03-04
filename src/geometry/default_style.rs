@@ -1,5 +1,4 @@
-
-pub const DEFAULT_GEOMETRY_STYLE:&str = r#"
+pub const DEFAULT_GEOMETRY_STYLE: &str = r#"
 {
     "boundary_relations": true,
     "all_objs": false,

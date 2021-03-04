@@ -1,6 +1,6 @@
 use simple_protocolbuffers::{
-        read_packed_int, PbfTag, read_delta_packed_int,
-        pack_data, pack_int, pack_delta_int};
+    pack_data, pack_delta_int, pack_int, read_delta_packed_int, read_packed_int, PbfTag,
+};
 
 use crate::elements::common::{
     common_cmp, common_eq, pack_head, pack_length, pack_tail, read_common, PackStringTable,
@@ -49,7 +49,7 @@ impl Relation {
             quadtree: Quadtree::empty(),
         }
     }
-    
+
     pub fn read(
         changetype: Changetype,
         strings: &Vec<String>,
@@ -58,7 +58,6 @@ impl Relation {
     ) -> Result<Relation> {
         let mut rel = Relation::new(0, changetype);
 
-        
         let rem = read_common(&mut rel, &strings, data, minimal)?;
 
         let mut roles = Vec::new();
@@ -113,11 +112,9 @@ impl Relation {
         pack_head(&self.id, &self.info, &self.tags, &mut res, pack_strings)?;
 
         if !self.members.is_empty() {
-            let roles =
-                pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
+            let roles = pack_int(self.members.iter().map(|m| pack_strings.call(&m.role)));
             let refs = pack_delta_int(self.members.iter().map(|m| m.mem_ref));
-            let types =
-                pack_int(self.members.iter().map(|m| m.mem_type.as_int()));
+            let types = pack_int(self.members.iter().map(|m| m.mem_type.as_int()));
 
             pack_data(&mut res, 8, &roles);
             pack_data(&mut res, 9, &refs);
@@ -128,17 +125,16 @@ impl Relation {
 
         //Err(Error::new(ErrorKind::Other, "not impl"))
     }
-    
+
     pub fn filter_relations(&mut self, ids: &dyn IdSet) -> bool {
         let nm = self.members.len();
         for m in std::mem::take(&mut self.members) {
-            if ids.contains(m.mem_type.clone(),m.mem_ref) {
+            if ids.contains(m.mem_type.clone(), m.mem_ref) {
                 self.members.push(m);
             }
         }
         self.members.len() != nm
     }
-    
 }
 impl WithType for Relation {
     fn get_type(&self) -> ElementType {
@@ -169,7 +165,6 @@ impl WithQuadtree for Relation {
         &self.quadtree
     }
 }
-
 
 impl SetCommon for Relation {
     fn set_id(&mut self, id: i64) {
