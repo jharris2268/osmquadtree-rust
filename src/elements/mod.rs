@@ -19,9 +19,9 @@ pub use combine_block::{
 
 pub use idset::{IdSet, IdSetAll, IdSetBool, IdSetSet};
 pub use minimal_block::{MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, QuadtreeBlock};
-pub use primitive_block::{Block, Info, Member, Node, PrimitiveBlock, Relation, Tag, Way};
+pub use primitive_block::{Block, Info, Member, Node, PrimitiveBlock, Relation, Tag, Way, read_stringtable};
 
-pub use common::{pack_head, PackStringTable};
+pub use common::{pack_head, PackStringTable, read_common};
 pub use quadtree::{
     coordinate_as_float, coordinate_as_integer, latitude_mercator, latitude_un_mercator, Bbox,
     Quadtree, EARTH_WIDTH,

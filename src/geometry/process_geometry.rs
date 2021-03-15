@@ -4,7 +4,7 @@ use crate::geometry::addparenttag::AddParentTag;
 use crate::geometry::elements::GeoJsonable;
 use crate::geometry::minzoom::{FindMinZoom, MinZoomSpec};
 use crate::geometry::multipolygons::ProcessMultiPolygons;
-use crate::geometry::pack_geometry::pack_geometry_block;
+
 use crate::geometry::position::{calc_line_length, calc_ring_area};
 use crate::geometry::relationtags::AddRelationTags;
 use crate::geometry::{
@@ -12,48 +12,29 @@ use crate::geometry::{
     SimplePolygonGeometry, Timings, WorkingBlock,
 };
 
+use crate::geometry::tempfile::{prep_write_geometry_pbffile, make_write_temp_geometry, write_temp_geometry};
+
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
 use crate::utils::{
-    parse_timestamp, CallAll, LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer,
+    parse_timestamp, LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer,
 };
 
 use crate::elements::{Block, Quadtree};
 use crate::mergechanges::read_filter;
-use crate::pbfformat::HeaderType;
+
 use crate::pbfformat::{
-    make_read_primitive_blocks_combine_call_all, pack_file_block,
-    read_all_blocks_parallel_with_progbar, FileBlock, WriteFile,
+    make_read_primitive_blocks_combine_call_all,
+    read_all_blocks_parallel_with_progbar, FileBlock,
 };
+use crate::sortblocks::{TempData,QuadtreeTree};
+
+
 use crate::update::get_file_locs;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
-use std::io::Result;
+use std::io::{Error,ErrorKind,Result};
 use std::sync::Arc;
 
-fn pack_geom(bl: GeometryBlock) -> (i64, Vec<u8>) {
-    let p = pack_geometry_block(&bl).expect("!");
-    let q = pack_file_block("OSMData", &p, true).expect("?");
-
-    (bl.quadtree.as_int(), q)
-}
-
-struct WrapWriteFile(WriteFile);
-
-impl CallFinish for WrapWriteFile {
-    type CallType = (i64, Vec<u8>);
-    type ReturnType = Timings;
-
-    fn call(&mut self, p: Self::CallType) {
-        self.0.call(vec![p]);
-    }
-
-    fn finish(&mut self) -> Result<Timings> {
-        let (t, _) = self.0.finish()?;
-        let mut tms = Timings::new();
-        tms.add("WriteFile", t);
-        Ok(tms)
-    }
-}
 
 struct StoreBlocks {
     tiles: BTreeMap<Quadtree, GeometryBlock>,
@@ -346,6 +327,7 @@ pub enum OutputType {
     Json(String),
     TiledJson(String),
     PbfFile(String),
+    PbfFileSorted(String),
     Postgresql(PostgresqlOptions),
 }
 
@@ -379,53 +361,35 @@ pub fn process_geometry(
     };
     tx.add("load_style");
 
+    if !find_minzoom && !max_minzoom.is_none() {
+        return Err(Error::new(ErrorKind::Other, "must run with find_minzoom=true if specifing max_minzoom"));
+    }
+
     let minzoom: Option<MinZoomSpec> = if find_minzoom {
         println!("MinZoomSpec::default({}, {:?})", 5.0, max_minzoom);
         Some(MinZoomSpec::default(5.0, max_minzoom))
     } else {
+        
         None
     };
     tx.add("load_minzoom");
-
+    
+    let mut groups: Option<Arc<QuadtreeTree>> = None;
+    
+    
     let out: Option<Box<dyn CallFinish<CallType = GeometryBlock, ReturnType = Timings>>> =
         match &outfn {
             OutputType::None => None,
             OutputType::Json(_) | OutputType::TiledJson(_) => Some(Box::new(StoreBlocks::new())),
             OutputType::PbfFile(ofn) => {
-                if numchan == 0 {
-                    let wt = Box::new(WrapWriteFile(WriteFile::with_bbox(
-                        &ofn,
-                        HeaderType::NoLocs,
-                        Some(&bbox),
-                    )));
-                    let pt = Box::new(CallAll::new(wt, "pack_geometry", Box::new(pack_geom)));
-                    Some(pt)
-                } else {
-                    let wts = CallbackSync::new(
-                        Box::new(WrapWriteFile(WriteFile::with_bbox(
-                            &ofn,
-                            HeaderType::NoLocs,
-                            Some(&bbox),
-                        ))),
-                        numchan,
-                    );
-                    let mut pps: Vec<
-                        Box<dyn CallFinish<CallType = GeometryBlock, ReturnType = Timings>>,
-                    > = Vec::new();
-                    for wt in wts {
-                        let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-                        pps.push(Box::new(Callback::new(Box::new(CallAll::new(
-                            wt2,
-                            "pack_geometry",
-                            Box::new(pack_geom),
-                        )))));
-                    }
-                    Some(Box::new(CallbackMerge::new(
-                        pps,
-                        Box::new(MergeTimings::new()),
-                    )))
-                }
-            }
+                Some(prep_write_geometry_pbffile(ofn, &bbox, numchan)?)
+            },
+            OutputType::PbfFileSorted(ofn) => {
+                let (pp,gg) = make_write_temp_geometry(ofn, &pfilelocs, &max_minzoom, numchan)?;
+                groups = Some(gg);
+                Some(pp)
+            },
+                
             OutputType::Postgresql(options) => {
                 Some(make_write_postgresql_geometry(&options, numchan)?)
             }
@@ -530,6 +494,7 @@ pub fn process_geometry(
 
     println!("{}", tm);
     let mut all_tiles = BTreeMap::new();
+    let mut tempdata: Option<TempData> = None;
     for (w, x) in tm.others {
         match x {
             OtherData::Messages(mm) => {
@@ -542,23 +507,33 @@ pub fn process_geometry(
             }
             OtherData::GeometryBlocks(tiles) => {
                 all_tiles.extend(tiles);
-            }
+            },
+            OtherData::TempData(td) => { tempdata = Some(td); },
         }
     }
     tx.add("finish process_geometry");
-    if !all_tiles.is_empty() {
-        match outfn {
-            OutputType::None | OutputType::PbfFile(_) | OutputType::Postgresql(_) => {}
-            OutputType::Json(ofn) => {
+    
+    match outfn {
+        OutputType::None | OutputType::PbfFile(_) | OutputType::Postgresql(_) => {},
+        OutputType::PbfFileSorted(outfn) => {
+            write_temp_geometry(&outfn, &bbox, tempdata.unwrap(), groups.unwrap(), numchan)?;
+            tx.add("write final pbf");
+            
+        },
+        OutputType::Json(ofn) => {
+            if !all_tiles.is_empty() {
                 write_geojson_flat(all_tiles, &ofn)?;
                 tx.add("write json");
             }
-            OutputType::TiledJson(ofn) => {
+        }
+        OutputType::TiledJson(ofn) => {
+            if !all_tiles.is_empty() {
                 write_geojson_tiles(all_tiles, &ofn)?;
                 tx.add("write json");
             }
         }
     }
+    
 
     println!("{}", tx);
     Ok(())

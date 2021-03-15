@@ -13,8 +13,10 @@ mod relationtags;
 mod style;
 mod waywithnodes;
 mod wkb;
+mod tempfile;
 
 use crate::elements::{Element, Node, Quadtree, Relation, Way};
+use crate::sortblocks::TempData;
 pub use crate::geometry::position::{get_srid, LonLat, XY};
 pub use crate::geometry::waywithnodes::CollectWayNodes;
 
@@ -50,6 +52,7 @@ pub enum OtherData {
     Errors(Vec<(Element, String)>),
     Messages(Vec<String>),
     GeometryBlocks(BTreeMap<Quadtree, GeometryBlock>),
+    TempData(TempData),
 }
 
 pub type Timings = crate::utils::Timings<OtherData>;

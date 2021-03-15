@@ -1,5 +1,5 @@
 use crate::elements::{Bbox, Info, Quadtree, Relation, Tag};
-use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags};
+
 use crate::geometry::elements::pointgeometry::pack_tags;
 use crate::geometry::elements::simplepolygongeometry::{pack_bounds, read_lonlats};
 use crate::geometry::elements::GeoJsonable;
@@ -32,6 +32,9 @@ impl fmt::Debug for RingPart {
 }
 
 impl RingPart {
+    pub fn empty() -> RingPart {
+        RingPart::new(0,false,Vec::new(),Vec::new())
+    }
     pub fn new(orig_id: i64, is_reversed: bool, refs: Vec<i64>, lonlats: Vec<LonLat>) -> RingPart {
         RingPart {
             orig_id,
@@ -44,6 +47,7 @@ impl RingPart {
 
 #[derive(Debug, Serialize)]
 pub struct Ring {
+    
     pub parts: Vec<RingPart>,
     pub area: f64,
     pub bbox: Bbox,
@@ -51,6 +55,8 @@ pub struct Ring {
 }
 
 impl Ring {
+    
+    
     pub fn new() -> Ring {
         Ring {
             parts: Vec::new(),
@@ -345,6 +351,11 @@ pub struct PolygonPart {
 }
 
 impl PolygonPart {
+    
+    pub fn empty() -> PolygonPart {
+        PolygonPart{ exterior: Ring::new(), interiors: Vec::new(), area: 0.0 }
+    }
+    
     pub fn new(mut ext: Ring) -> PolygonPart {
         if ext.area < 0.0 {
             ext.reverse();
@@ -409,6 +420,12 @@ pub struct ComplicatedPolygonGeometry {
 }
 
 impl ComplicatedPolygonGeometry {
+    pub fn empty() -> ComplicatedPolygonGeometry {
+        ComplicatedPolygonGeometry{id: 0, info: None, tags: Vec::new(), parts: Vec::new(),
+            area: 0.0, layer: None, z_order: None, minzoom: None, quadtree: Quadtree::empty()}
+    }
+    
+    
     pub fn new(
         relation: &Relation,
         tags: Vec<Tag>,
@@ -545,7 +562,7 @@ impl GeoJsonable for ComplicatedPolygonGeometry {
         Ok(json!(res))
     }
 }
-
+use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags,SetCommon};
 impl WithId for ComplicatedPolygonGeometry {
     fn get_id(&self) -> i64 {
         self.id
@@ -567,5 +584,19 @@ impl WithInfo for ComplicatedPolygonGeometry {
 impl WithQuadtree for ComplicatedPolygonGeometry {
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
         &self.quadtree
+    }
+}
+impl SetCommon for ComplicatedPolygonGeometry {
+    fn set_id(&mut self, id: i64) {
+        self.id = id;
+    }
+    fn set_info(&mut self, info: Info) {
+        self.info = Some(info);
+    }
+    fn set_tags(&mut self, tags: Vec<Tag>) {
+        self.tags = tags;
+    }
+    fn set_quadtree(&mut self, quadtree: Quadtree) {
+        self.quadtree = quadtree;
     }
 }

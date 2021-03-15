@@ -30,6 +30,11 @@ pub struct PointGeometry {
 }
 
 impl PointGeometry {
+    
+    pub fn empty() -> PointGeometry {
+        PointGeometry{id: 0, info: None, tags: Vec::new(), lonlat: LonLat::empty(), layer: None, minzoom: None, quadtree: Quadtree::empty()}
+    }
+    
     pub fn from_node(n: Node, tgs: Vec<Tag>, layer: Option<i64>) -> PointGeometry {
         PointGeometry {
             id: n.id,
@@ -100,7 +105,7 @@ impl GeoJsonable for PointGeometry {
     }
 }
 
-use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags};
+use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags,SetCommon};
 impl WithId for PointGeometry {
     fn get_id(&self) -> i64 {
         self.id
@@ -122,5 +127,19 @@ impl WithTags for PointGeometry {
 impl WithQuadtree for PointGeometry {
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
         &self.quadtree
+    }
+}
+impl SetCommon for PointGeometry {
+    fn set_id(&mut self, id: i64) {
+        self.id = id;
+    }
+    fn set_info(&mut self, info: Info) {
+        self.info = Some(info);
+    }
+    fn set_tags(&mut self, tags: Vec<Tag>) {
+        self.tags = tags;
+    }
+    fn set_quadtree(&mut self, quadtree: Quadtree) {
+        self.quadtree = quadtree;
     }
 }

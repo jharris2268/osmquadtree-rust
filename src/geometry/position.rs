@@ -13,6 +13,9 @@ pub struct LonLat {
     pub lat: i32,
 }
 impl LonLat {
+    pub fn empty() -> LonLat {
+        LonLat { lon: -2000000000, lat: -2000000000 }
+    }
     pub fn new(lon: i32, lat: i32) -> LonLat {
         LonLat { lon: lon, lat: lat }
     }

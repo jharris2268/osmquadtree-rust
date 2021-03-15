@@ -50,7 +50,7 @@ pub struct PrimitiveBlock {
     pub relations: Vec<Relation>,
 }
 
-fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
+pub fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     let mut res = Vec::new();
     for x in IterTags::new(&data) {
         match x {

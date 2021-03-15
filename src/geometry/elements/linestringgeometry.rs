@@ -24,6 +24,11 @@ pub struct LinestringGeometry {
 }
 
 impl LinestringGeometry {
+    pub fn empty() -> LinestringGeometry {
+        LinestringGeometry{id: 0, info: None, tags: Vec::new(), refs: Vec::new(), lonlats: Vec::new(),
+            length: 0.0, layer: None, z_order: None, minzoom: None, quadtree: Quadtree::empty()}
+    }
+    
     pub fn from_way(
         w: Way,
         lonlats: Vec<LonLat>,
@@ -120,7 +125,7 @@ impl GeoJsonable for LinestringGeometry {
     }
 }
 
-use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags};
+use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags,SetCommon};
 impl WithId for LinestringGeometry {
     fn get_id(&self) -> i64 {
         self.id
@@ -142,5 +147,19 @@ impl WithTags for LinestringGeometry {
 impl WithQuadtree for LinestringGeometry {
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
         &self.quadtree
+    }
+}
+impl SetCommon for LinestringGeometry {
+    fn set_id(&mut self, id: i64) {
+        self.id = id;
+    }
+    fn set_info(&mut self, info: Info) {
+        self.info = Some(info);
+    }
+    fn set_tags(&mut self, tags: Vec<Tag>) {
+        self.tags = tags;
+    }
+    fn set_quadtree(&mut self, quadtree: Quadtree) {
+        self.quadtree = quadtree;
     }
 }

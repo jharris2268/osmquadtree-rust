@@ -84,6 +84,43 @@ impl Block for GeometryBlock {
     }
 }
 
+impl From<PointGeometry> for Element {
+    fn from(n: PointGeometry) -> Element {
+        Element::PointGeometry(n)
+    }
+}
+impl From<LinestringGeometry> for Element {
+    fn from(n: LinestringGeometry) -> Element {
+        Element::LinestringGeometry(n)
+    }
+}
+impl From<SimplePolygonGeometry> for Element {
+    fn from(n: SimplePolygonGeometry) -> Element {
+        Element::SimplePolygonGeometry(n)
+    }
+}
+
+impl From<ComplicatedPolygonGeometry> for Element {
+    fn from(n: ComplicatedPolygonGeometry) -> Element {
+        Element::ComplicatedPolygonGeometry(n)
+    }
+}
+
+impl IntoIterator for GeometryBlock {
+    type Item = Element;
+    type IntoIter = Box<dyn Iterator<Item = Element>>;
+    fn into_iter(self: Self) -> Self::IntoIter {
+        Box::new(
+            self.points
+                .into_iter()
+                .map(Element::from)
+                .chain(self.linestrings.into_iter().map(Element::from))
+                .chain(self.simple_polygons.into_iter().map(Element::from))
+                .chain(self.complicated_polygons.into_iter().map(Element::from))
+        )
+    }
+}
+
 impl GeometryBlock {
     pub fn new(index: i64, quadtree: Quadtree, end_date: i64) -> GeometryBlock {
         GeometryBlock {

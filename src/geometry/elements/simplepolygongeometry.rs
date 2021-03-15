@@ -49,6 +49,12 @@ pub struct SimplePolygonGeometry {
 }
 
 impl SimplePolygonGeometry {
+    pub fn empty() -> SimplePolygonGeometry {
+        SimplePolygonGeometry{id: 0, info: None, tags: Vec::new(), refs: Vec::new(), lonlats: Vec::new(),
+            area: 0.0, reversed: false, layer: None, z_order: None, minzoom: None, quadtree: Quadtree::empty()}
+    }
+    
+    
     pub fn from_way(
         w: Way,
         lonlats: Vec<LonLat>,
@@ -150,7 +156,7 @@ impl GeoJsonable for SimplePolygonGeometry {
     }
 }
 
-use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags};
+use crate::elements::{WithId, WithInfo, WithQuadtree, WithTags,SetCommon};
 impl WithId for SimplePolygonGeometry {
     fn get_id(&self) -> i64 {
         self.id
@@ -172,5 +178,19 @@ impl WithTags for SimplePolygonGeometry {
 impl WithQuadtree for SimplePolygonGeometry {
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree {
         &self.quadtree
+    }
+}
+impl SetCommon for SimplePolygonGeometry {
+    fn set_id(&mut self, id: i64) {
+        self.id = id;
+    }
+    fn set_info(&mut self, info: Info) {
+        self.info = Some(info);
+    }
+    fn set_tags(&mut self, tags: Vec<Tag>) {
+        self.tags = tags;
+    }
+    fn set_quadtree(&mut self, quadtree: Quadtree) {
+        self.quadtree = quadtree;
     }
 }

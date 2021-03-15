@@ -5,7 +5,7 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::sync::Arc;
 
 use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::elements::{Block, Node, PrimitiveBlock, Quadtree, Relation, Way};
+use crate::elements::{ PrimitiveBlock};
 
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::{
@@ -20,7 +20,7 @@ use crate::sortblocks::{FileLocs, OtherData, QuadtreeTree, TempData, Timings};
 
 use crate::utils::{LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer, Timer};
 
-use crate::sortblocks::sortblocks::SortBlocks;
+use crate::sortblocks::sortblocks::{SortBlocks,CollectTemp};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -168,7 +168,7 @@ impl CallFinish for WriteTempFileSplit {
         Ok(tm)
     }
 }
-
+/*
 pub enum WriteTempWhich {
     Data(WriteTempData),
     File(WriteTempFile),
@@ -195,19 +195,20 @@ impl CallFinish for WriteTempWhich {
         }
     }
 }
-
-struct CollectTemp<T> {
+*/
+struct CollectTempBlocks<T> {
     out: Box<T>,
-    limit: usize,
+    collect: CollectTemp<PrimitiveBlock>,
+    /*limit: usize,
     splitat: i64,
     groups: Arc<QuadtreeTree>,
     pending: BTreeMap<i64, PrimitiveBlock>,
-    qttoidx: BTreeMap<Quadtree, i64>,
+    qttoidx: BTreeMap<Quadtree, i64>,*/
     tm: f64,
     //count: usize
 }
 
-impl<'a, T> CollectTemp<T>
+impl<'a, T> CollectTempBlocks<T>
 where
     T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>,
 {
@@ -216,7 +217,11 @@ where
         limit: usize,
         splitat: i64,
         groups: Arc<QuadtreeTree>,
-    ) -> CollectTemp<T> {
+    ) -> CollectTempBlocks<T> {
+        
+        CollectTempBlocks{out: out, collect: CollectTemp::new(limit, splitat, groups), tm: 0.0}
+        /*
+        
         let mut qttoidx = BTreeMap::new();
         let mut i = 0;
         for (_, t) in groups.iter() {
@@ -233,9 +238,9 @@ where
             pending: BTreeMap::new(),
             tm: 0.0,
             //count: 0
-        }
+        }*/
     }
-
+/*
     fn add_all(&mut self, bl: PrimitiveBlock) -> Vec<(i64, PrimitiveBlock)> {
         let mut mm = Vec::new();
         for n in bl.nodes {
@@ -298,10 +303,10 @@ where
             return Some(std::mem::replace(t, PrimitiveBlock::new(t.index, 0)));
         }
         None
-    }
+    }*/
 }
 
-impl<T> CallFinish for CollectTemp<T>
+impl<T> CallFinish for CollectTempBlocks<T>
 where
     T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>,
 {
@@ -309,22 +314,28 @@ where
     type ReturnType = Timings;
 
     fn call(&mut self, bl: PrimitiveBlock) {
-        let tx = Timer::new();
-        let mm = self.add_all(bl);
+        let tx = ThreadTimer::new();
+        let mm = self.collect.add_all(bl.into_iter()).expect("?");
         self.tm += tx.since();
 
         self.out.call(mm);
     }
 
     fn finish(&mut self) -> io::Result<Timings> {
-        let mut mm = Vec::new();
+        /*let mut mm = Vec::new();
         for (_, b) in std::mem::take(&mut self.pending) {
             mm.push((b.index, b));
-        }
+        }*/
+        
+        let tx=ThreadTimer::new();
+        let mm = self.collect.finish();
+        let tf=tx.since();
+        
         self.out.call(mm);
 
         let mut r = self.out.finish()?;
-        r.add("collect temp", self.tm);
+        r.add("CollectTempBlocks::call", self.tm);
+        r.add("CollectTempBlocks::finish", tf);
         Ok(r)
     }
 }
@@ -341,7 +352,7 @@ fn write_temp_blocks(
 ) -> io::Result<TempData> {
     let flen = file_length(&infn);
 
-    let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
+    /*let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
         Box::new(WriteTempWhich::Data(WriteTempData::new()))
     } else {
         if flen < 2 * 1024 * 1024 * 1024 {
@@ -351,13 +362,25 @@ fn write_temp_blocks(
             let sp = groups.len() as i64 / splitat / nsp;
             Box::new(WriteTempWhich::Split(WriteTempFileSplit::new(tempfn, sp)))
         }
+    };*/
+    
+    let wt: Box<dyn CallFinish<CallType = Vec<(i64,Vec<u8>)>, ReturnType = Timings>> = if tempfn == "NONE" {
+        Box::new(WriteTempData::new())
+    } else {
+        if flen < 2 * 1024 * 1024 * 1024 {
+            Box::new(WriteTempFile::new(tempfn))
+        } else {
+            let nsp = (flen / (1 * 1024 * 1024 * 1024)) as i64;
+            let sp = groups.len() as i64 / splitat / nsp;
+            Box::new(WriteTempFileSplit::new(tempfn, sp))
+        }
     };
 
     let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
         == 0
     {
         let pc = make_packprimblock_many(wt, true);
-        let cc = Box::new(CollectTemp::new(pc, limit, splitat, groups));
+        let cc = Box::new(CollectTempBlocks::new(pc, limit, splitat, groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
         make_unpackprimblock(aq)
     } else {
@@ -369,7 +392,7 @@ fn write_temp_blocks(
         for wt in wts {
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
             let pp = make_packprimblock_many(wt2, true);
-            pcs.push(Box::new(Callback::new(Box::new(CollectTemp::new(
+            pcs.push(Box::new(Callback::new(Box::new(CollectTempBlocks::new(
                 pp,
                 limit / numchan,
                 splitat,
@@ -490,11 +513,11 @@ where
     }
 }
 
-pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>(
+pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = crate::utils::Timings<X>> + ?Sized, X: Sync+Send>(
     xx: TempData,
     mut out: Box<T>,
     remove_files: bool,
-) -> io::Result<Timings> {
+) -> io::Result<crate::utils::Timings<X>> {
     //let mut ct = Checktime::with_threshold(2.0);
 
     match xx {
@@ -561,7 +584,7 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
     }
 }
 
-fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>>(
+fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ ?Sized>(
     fbuf: &mut R,
     locs: Vec<(i64, Vec<(u64, u64)>)>,
     split_size: u64,

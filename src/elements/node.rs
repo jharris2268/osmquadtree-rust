@@ -8,28 +8,35 @@ use crate::elements::traits::*;
 
 use core::cmp::Ordering;
 use std::io::{Error, ErrorKind, Result};
+
+
+
+/// Representation of openstreetmap node element.
+/// See [https://wiki.openstreetmap.org/wiki/Node](https://wiki.openstreetmap.org/wiki/Node).
+/// Longitude and latitude are represented as integer values of 10^-7 degrees.
 #[derive(Debug, Eq, Clone)]
 pub struct Node {
     pub id: i64,
     pub changetype: Changetype,
     pub info: Option<Info>,
     pub tags: Vec<Tag>,
-
-    pub lon: i32,
+    
     pub lat: i32,
-
+    pub lon: i32,
+    
     pub quadtree: Quadtree,
 }
 
 impl Node {
+    /// Returns a new Node. Latitude, longitude, tags and metadata must be set by user
     pub fn new(id: i64, changetype: Changetype) -> Node {
         Node {
             id: id,
             changetype: changetype,
             info: None,
             tags: Vec::new(),
-            lon: 0,
             lat: 0,
+            lon: 0,
             quadtree: Quadtree::empty(),
         }
     }
@@ -53,6 +60,7 @@ impl Node {
         }
         Ok(nd)
     }
+    
     pub fn pack(
         &self,
         _prep_strings: &mut Box<PackStringTable>,

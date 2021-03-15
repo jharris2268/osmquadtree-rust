@@ -325,6 +325,7 @@ fn main() {
                 .arg(Arg::with_name("FIND_MINZOOM").short("-m").long("--minzoom").help("find minzoom"))
                 .arg(Arg::with_name("STYLE_NAME").short("-s").long("--style").takes_value(true).help("style json filename"))
                 .arg(Arg::with_name("MAX_MINZOOM").short("-M").long("--maxminzoom").takes_value(true).help("maximum minzoom value"))
+                .arg(Arg::with_name("SORT").short("-S").long("--short").help("sort out pbffile"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
         )
         .subcommand(
@@ -543,16 +544,25 @@ fn main() {
             get_i64(geom.value_of("MAX_MINZOOM")),
             value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
-        ("process_geometry_pbffile", Some(geom)) => process_geometry(
-            geom.value_of("INPUT").unwrap(),
-            OutputType::PbfFile(String::from(geom.value_of("OUTFN").unwrap())),
-            geom.value_of("FILTER"),
-            geom.value_of("TIMESTAMP"),
-            geom.is_present("FIND_MINZOOM"),
-            geom.value_of("STYLE_NAME"),
-            get_i64(geom.value_of("MAX_MINZOOM")),
-            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-        ),
+        ("process_geometry_pbffile", Some(geom)) => {
+            
+            let ot = if geom.is_present("SORT") {
+                OutputType::PbfFileSorted(String::from(geom.value_of("OUTFN").unwrap()))
+            } else {
+                OutputType::PbfFile(String::from(geom.value_of("OUTFN").unwrap()))
+            };
+            
+            process_geometry(
+                geom.value_of("INPUT").unwrap(),
+                ot,
+                geom.value_of("FILTER"),
+                geom.value_of("TIMESTAMP"),
+                geom.is_present("FIND_MINZOOM"),
+                geom.value_of("STYLE_NAME"),
+                get_i64(geom.value_of("MAX_MINZOOM")),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            )
+        },
         ("process_geometry_postgresqlnull", Some(geom)) => {
             let pc = PostgresqlConnection::Null;
             let po = if geom.is_present("EXTENDED") {

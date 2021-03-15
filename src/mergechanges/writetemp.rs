@@ -10,7 +10,7 @@ use crate::pbfformat::{read_all_blocks_parallel_with_progbar, FileBlock};
 use crate::sortblocks::{make_packprimblock_many, make_packprimblock_qtindex};
 use crate::sortblocks::{
     read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
-    write_tempfilesplit_locs, WriteTempData, WriteTempFile, WriteTempFileSplit, WriteTempWhich,
+    write_tempfilesplit_locs, WriteTempData, WriteTempFile, WriteTempFileSplit/*, WriteTempWhich*/,
 };
 use crate::sortblocks::{OtherData, TempData, Timings, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
@@ -256,16 +256,16 @@ pub fn write_temp_blocks(
     fsplit: i64,
     numchan: usize,
 ) -> Result<TempData> {
-    let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
-        Box::new(WriteTempWhich::Data(WriteTempData::new()))
+    let wt: Box<dyn CallFinish< CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>> = if tempfn == "NONE" {
+        Box::new(WriteTempData::new())
     } else {
         if fsplit == 0 {
-            Box::new(WriteTempWhich::File(WriteTempFile::new(tempfn.clone())))
+            Box::new(WriteTempFile::new(tempfn.clone()))
         } else {
-            Box::new(WriteTempWhich::Split(WriteTempFileSplit::new(
+            Box::new(WriteTempFileSplit::new(
                 tempfn.clone(),
                 fsplit,
-            )))
+            ))
         }
     };
 

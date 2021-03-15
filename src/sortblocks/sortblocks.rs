@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::Result;
 use std::sync::Arc;
 
@@ -6,7 +6,7 @@ use crate::elements::{Block, Element, Quadtree, WithQuadtree};
 use crate::sortblocks::QuadtreeTree;
 
 fn get_block<'a, B: Block>(
-    blocks: &'a mut HashMap<i64, B>,
+    blocks: &'a mut BTreeMap<i64, B>,
     groups: &'a QuadtreeTree,
     q: &Quadtree,
 ) -> &'a mut B {
@@ -23,7 +23,7 @@ fn get_block<'a, B: Block>(
 
 pub struct SortBlocks<BlockType: Block> {
     groups: Arc<QuadtreeTree>,
-    blocks: HashMap<i64, BlockType>,
+    blocks: BTreeMap<i64, BlockType>,
 }
 
 impl<'a, BlockType> SortBlocks<BlockType>
@@ -33,7 +33,7 @@ where
     pub fn new(groups: Arc<QuadtreeTree>) -> SortBlocks<BlockType> {
         SortBlocks {
             groups: groups,
-            blocks: HashMap::new(),
+            blocks: BTreeMap::new(),
         }
     }
 
@@ -46,39 +46,12 @@ where
         t.add_object(e)
     }
 
-    /*
-
-    fn add_node(&mut self, n: Node) {
-        let t = self.get_block(n.quadtree);
-        t.nodes.push(n);
-    }
-
-    fn add_way(&mut self, w: Way) {
-        let t = self.get_block(w.quadtree);
-        t.ways.push(w);
-    }
-
-    fn add_relation(&mut self, r: Relation) {
-        let t = self.get_block(r.quadtree);
-        t.relations.push(r);
-    }*/
-
     pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter) -> Result<()> {
         for o in bl {
             self.add_object(o)?;
         }
         Ok(())
-        /*
-
-        for n in bl.nodes {
-            self.add_node(n);
-        }
-        for w in bl.ways {
-            self.add_way(w);
-        }
-        for r in bl.relations {
-            self.add_relation(r);
-        }*/
+        
     }
 
     pub fn finish(&mut self) -> Vec<BlockType> {
@@ -87,7 +60,89 @@ where
             b.sort();
             bv.push(b);
         }
-        bv.sort_by_key(|b| b.get_quadtree().as_int());
+        //bv.sort_by_key(|b| b.get_quadtree().as_int());
         bv
     }
 }
+
+
+pub struct CollectTemp<B: Block> {
+    
+    limit: usize,
+    splitat: i64,
+    groups: Arc<QuadtreeTree>,
+    pending: BTreeMap<i64, B>,
+    qttoidx: BTreeMap<Quadtree, i64>,
+    
+}
+
+impl<'a, BlockType> CollectTemp<BlockType>
+where
+    BlockType: Block
+{
+    pub fn new(
+        limit: usize,
+        splitat: i64,
+        groups: Arc<QuadtreeTree>,
+    ) -> CollectTemp<BlockType> {
+        let mut qttoidx = BTreeMap::new();
+        let mut i = 0;
+        for (_, t) in groups.iter() {
+            qttoidx.insert(t.qt, i);
+            i += 1;
+        }
+        CollectTemp {
+            limit: limit,
+            splitat: splitat,
+            groups: groups,
+            qttoidx: qttoidx,
+            pending: BTreeMap::new(),
+        }
+    }
+
+    pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter) -> Result<Vec<(i64, BlockType)>> {
+        let mut mm = Vec::new();
+        for e in bl {
+            match self.add_object(e)? {
+                None => {},
+                Some(m) => mm.push(m)
+            }
+        }
+        Ok(mm)
+    }
+
+    fn get_block(&'a mut self, q: &Quadtree) -> (i64,&'a mut BlockType) {
+        let tq = self.groups.find(q).1.qt;
+        let i = self.qttoidx.get(&tq).unwrap();
+        let k = i / self.splitat;
+        if !self.pending.contains_key(&k) {
+            let t = BlockType::with_quadtree(Quadtree::empty());
+            self.pending.insert(k.clone(), t);
+        }
+        (k,self.pending.get_mut(&k).unwrap())
+    }
+
+    fn add_object(&mut self, n: Element) -> Result<Option<(i64,BlockType)>> {
+        let l=self.limit;
+        let (i,t) = self.get_block(n.get_quadtree());
+        t.add_object(n)?;
+        if t.weight() >= l {
+            return Ok(Some((i,std::mem::replace(t, BlockType::with_quadtree(Quadtree::empty())))));
+        }
+        Ok(None)
+    }
+
+    
+    pub fn finish(&mut self) -> Vec<(i64,BlockType)> {
+        let mut bv = Vec::new();
+        for (i, mut b) in std::mem::take(&mut self.pending) {
+            b.sort();
+            bv.push((i,b));
+        }
+        //bv.sort_by_key(|b| b.0);
+        bv
+    }
+    
+}
+
+
