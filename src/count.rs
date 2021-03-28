@@ -7,12 +7,12 @@ use crate::pbfformat::{
 
 use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
 
-use crate::callback::{CallFinish, Callback, CallbackMerge};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
 use crate::pbfformat::{
     make_convert_minimal_block, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
 };
-use crate::utils::{MergeTimings, ThreadTimer};
+use crate::utils::ThreadTimer;
 
 use crate::elements::{
     Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node, PrimitiveBlock,
@@ -626,7 +626,7 @@ impl CountChangeMinimal {
 
 impl CallFinish for CountChangeMinimal {
     type CallType = MinimalBlock;
-    type ReturnType = crate::utils::Timings<CountChange>;
+    type ReturnType = channelled_callbacks::Timings<CountChange>;
 
     fn call(&mut self, bl: MinimalBlock) {
         let tx = ThreadTimer::new();
@@ -658,7 +658,7 @@ impl CountPrim {
 
 impl CallFinish for CountPrim {
     type CallType = PrimitiveBlock;
-    type ReturnType = crate::utils::Timings<Count>;
+    type ReturnType = channelled_callbacks::Timings<Count>;
 
     fn call(&mut self, bl: PrimitiveBlock) {
         let tx = ThreadTimer::new();
@@ -690,7 +690,7 @@ impl CountMinimal {
 
 impl CallFinish for CountMinimal {
     type CallType = MinimalBlock;
-    type ReturnType = crate::utils::Timings<Count>;
+    type ReturnType = channelled_callbacks::Timings<Count>;
 
     fn call(&mut self, bl: MinimalBlock) {
         let tx = ThreadTimer::new();
@@ -790,7 +790,7 @@ pub fn run_count(
                 Box<
                     dyn CallFinish<
                         CallType = (usize, FileBlock),
-                        ReturnType = crate::utils::Timings<Count>,
+                        ReturnType = channelled_callbacks::Timings<Count>,
                     >,
                 >,
             > = Vec::new();
@@ -830,7 +830,7 @@ pub fn run_count(
             Box<
                 dyn CallFinish<
                     CallType = (usize, Vec<FileBlock>),
-                    ReturnType = crate::utils::Timings<Count>,
+                    ReturnType = channelled_callbacks::Timings<Count>,
                 >,
             >,
         > = Vec::new();

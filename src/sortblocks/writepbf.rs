@@ -4,12 +4,12 @@ use std::fs::File;
 use std::io;
 use std::io::Write;
 
-use crate::callback::CallFinish;
+use channelled_callbacks::{CallFinish, CallAll};
 use crate::elements::{Bbox, Block, PrimitiveBlock, Quadtree};
 use crate::pbfformat::pack_file_block;
 use crate::pbfformat::{make_header_block_stored_locs, HeaderType};
 
-use crate::utils::{CallAll, ThreadTimer};
+use crate::utils::{ThreadTimer};
 
 use crate::sortblocks::{OtherData, Timings};
 

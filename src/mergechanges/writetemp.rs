@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, CallAll};
 use crate::elements::{
     Bbox, Block, IdSet, IdSetAll, Node, PrimitiveBlock, Quadtree, Relation, Way, WithId,
 };
@@ -15,7 +15,7 @@ use crate::sortblocks::{
 use crate::sortblocks::{OtherData, TempData, Timings, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
 use crate::utils::{
-    parse_timestamp, CallAll, LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer,
+    parse_timestamp, LogTimes, ThreadTimer,
 };
 
 use std::collections::BTreeMap;

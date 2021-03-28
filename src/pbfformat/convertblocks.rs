@@ -1,8 +1,8 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::{CallFinish,CallAll, Timings};
 use crate::elements::{apply_change_minimal, combine_block_minimal, MinimalBlock};
 use crate::elements::{apply_change_primitive, combine_block_primitive, IdSet, PrimitiveBlock};
 use crate::pbfformat::FileBlock;
-use crate::utils::{CallAll, ThreadTimer, Timings};
+use crate::utils::{ThreadTimer};
 use std::io::Result;
 use std::marker::PhantomData;
 use std::sync::Arc;

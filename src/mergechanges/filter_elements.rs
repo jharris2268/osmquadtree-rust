@@ -1,11 +1,11 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{
     Bbox, ElementType, IdSet, IdSetBool, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay,
 };
 use crate::pbfformat::{
     make_read_minimal_blocks_combine_call_all, read_all_blocks_parallel_with_progbar, FileBlock,
 };
-use crate::utils::{as_int, MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
+use crate::utils::{as_int, ThreadTimer};
 use simple_protocolbuffers::{DeltaPackedInt, PackedInt};
 
 use crate::update::ParallelFileLocs;
@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{BufRead, /*Error,ErrorKind,*/ BufReader, Result};
 use std::sync::Arc;
 
-type Timings = crate::utils::Timings<Arc<dyn IdSet>>;
+type Timings = channelled_callbacks::Timings<Arc<dyn IdSet>>;
 
 use regex::Regex;
 const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$";

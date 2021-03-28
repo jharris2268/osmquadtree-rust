@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll,MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{ElementType, IdSet, MinimalBlock, Quadtree};
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
@@ -9,14 +9,14 @@ use simple_protocolbuffers::{
     pack_data, pack_delta_int, pack_value, un_zig_zag, zig_zag, DeltaPackedInt, IterTags, PbfTag,
 };
 
-use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
+use crate::utils::ThreadTimer;
 
 pub enum ResultType {
     NumTiles(usize),
     CheckIndexResult(Vec<Quadtree>),
 }
 
-type Timings = crate::utils::Timings<ResultType>;
+type Timings = channelled_callbacks::Timings<ResultType>;
 type CallFinishFileBlocks =
     Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>;
 

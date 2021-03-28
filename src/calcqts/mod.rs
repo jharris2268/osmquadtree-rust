@@ -41,7 +41,7 @@ pub enum OtherData {
     FirstWayTile(u64),
 }
 
-pub type Timings = crate::utils::Timings<OtherData>;
+pub type Timings = channelled_callbacks::Timings<OtherData>;
 
 pub type CallFinishFileBlocks =
-    Box<dyn crate::callback::CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>;
+    Box<dyn channelled_callbacks::CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>;

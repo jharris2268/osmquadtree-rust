@@ -1,8 +1,6 @@
 use crate::sortblocks::{QuadtreeTree, WriteTempData, WriteTempFile, WriteTempFileSplit, TempData,CollectTemp,SortBlocks,read_temp_data};
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
-use crate::utils::{
-    CallAll, MergeTimings, ReplaceNoneWithTimings, ThreadTimer,
-};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
+use crate::utils::ThreadTimer;
 use crate::pbfformat::{HeaderType, FileBlock, WriteFile, pack_file_block,};
 use crate::update::ParallelFileLocs;
 use crate::geometry::{GeometryBlock,CallFinishGeometryBlock,Timings,OtherData};

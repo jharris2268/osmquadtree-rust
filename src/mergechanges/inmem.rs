@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{Bbox, Block, IdSet, PrimitiveBlock};
 use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
@@ -6,12 +6,12 @@ use crate::pbfformat::HeaderType;
 use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock, ProgBarWrap};
 use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
-use crate::utils::{parse_timestamp, LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
+use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
 
 use std::io::Result;
 use std::sync::Arc;
 
-type Timings = crate::utils::Timings<PrimitiveBlock>;
+type Timings = channelled_callbacks::Timings<PrimitiveBlock>;
 
 struct CollectObjs {
     collected: Option<PrimitiveBlock>,

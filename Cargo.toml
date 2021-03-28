@@ -32,6 +32,7 @@ geos-sys = { version="2", features = ["v3_8_0"]}
 ureq="1.0"
 
 simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocolbuffers.git", branch = "main" }
+channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
 
 [profile.release]
 #debug = true

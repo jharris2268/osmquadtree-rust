@@ -3,7 +3,7 @@ use std::io;
 use std::io::Write;
 use std::sync::Arc;
 
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings,ReplaceNoneWithTimings};
 use crate::elements::PrimitiveBlock;
 
 use crate::pbfformat::HeaderType;
@@ -12,7 +12,7 @@ use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
-use crate::utils::{LogTimes, MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{LogTimes, Timer};
 
 use crate::sortblocks::sortblocks::SortBlocks;
 

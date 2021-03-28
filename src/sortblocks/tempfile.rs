@@ -4,7 +4,7 @@ use std::io;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::sync::Arc;
 
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{ PrimitiveBlock};
 
 use crate::pbfformat::HeaderType;
@@ -18,7 +18,7 @@ pub use crate::sortblocks::writepbf::{
 };
 use crate::sortblocks::{FileLocs, OtherData, QuadtreeTree, TempData, Timings};
 
-use crate::utils::{LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer, Timer};
+use crate::utils::{LogTimes, ThreadTimer, Timer};
 
 use crate::sortblocks::sortblocks::{SortBlocks,CollectTemp};
 use serde::{Deserialize, Serialize};
@@ -513,11 +513,11 @@ where
     }
 }
 
-pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = crate::utils::Timings<X>> + ?Sized, X: Sync+Send>(
+pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = channelled_callbacks::Timings<X>> + ?Sized, X: Sync+Send>(
     xx: TempData,
     mut out: Box<T>,
     remove_files: bool,
-) -> io::Result<crate::utils::Timings<X>> {
+) -> io::Result<channelled_callbacks::Timings<X>> {
     //let mut ct = Checktime::with_threshold(2.0);
 
     match xx {

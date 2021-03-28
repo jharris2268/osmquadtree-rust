@@ -1,4 +1,4 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::{Block, Element, Node, PrimitiveBlock, Quadtree};
 use crate::geometry::{GeometryStyle, LonLat, OtherData, Timings, WorkingBlock};
 use crate::utils::ThreadTimer;

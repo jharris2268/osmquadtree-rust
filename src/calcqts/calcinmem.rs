@@ -1,11 +1,11 @@
 use simple_protocolbuffers::{read_delta_packed_int, DeltaPackedInt, PackedInt};
 
-use crate::callback::{CallFinish, Callback, CallbackMerge};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
 use crate::elements::{Bbox, ElementType, MinimalBlock, Quadtree};
 use crate::pbfformat::make_convert_minimal_block_parts;
 use crate::pbfformat::{file_length, read_all_blocks_with_progbar};
 
-use crate::utils::MergeTimings;
+
 
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
 use crate::calcqts::write_quadtrees::{PackQuadtrees, WriteQuadTree};

@@ -10,13 +10,13 @@ use simple_protocolbuffers::{un_zig_zag, IterTags, PbfTag};
 
 use crate::pbfformat::{file_length, pack_file_block, ProgBarWrap, ReadFileBlocks};
 
-use crate::callback::{CallFinish, Callback, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackSync, CallAll, ReplaceNoneWithTimings};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::WriteFile;
 
-use crate::utils::{/*trim_memory,*/ CallAll, LogTimes, ReplaceNoneWithTimings, Timer};
+use crate::utils::{LogTimes, Timer};
 
 use crate::calcqts::expand_wayboxes::{WayBoxesSimple, WayBoxesSplit, WayBoxesVec};
 use crate::calcqts::node_waynodes::{

@@ -1,4 +1,4 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::{ElementType, Relation, Tag, Way};
 use crate::geometry::style::{OpType, RelationTagSpec};
 use crate::geometry::{GeometryStyle, OtherData, Timings, WorkingBlock};

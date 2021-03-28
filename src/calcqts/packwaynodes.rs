@@ -3,14 +3,14 @@ use simple_protocolbuffers::{
     PackedInt, PbfTag,
 };
 
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{MinimalBlock, Quadtree};
 use crate::pbfformat::{
     pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock, FileLocs,
     HeaderType, WriteFile,
 };
 
-use crate::utils::{MergeTimings, ReplaceNoneWithTimings, ThreadTimer};
+use crate::utils::ThreadTimer;
 
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
 use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings, WayNodeVals};

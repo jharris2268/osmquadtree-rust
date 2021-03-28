@@ -1,4 +1,4 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::Bbox;
 use crate::pbfformat::pack_file_block;
 use crate::pbfformat::{make_header_block, HeaderType};

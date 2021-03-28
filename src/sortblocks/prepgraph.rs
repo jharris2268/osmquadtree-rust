@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 use std::io::Result;
 
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
 use crate::sortblocks::{find_tree_groups, QuadtreeTree};
-use crate::utils::{CallAll, LogTimes, MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{LogTimes, Timer};
 
 use crate::sortblocks::{OtherData, Timings};
 

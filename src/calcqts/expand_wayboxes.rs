@@ -2,7 +2,7 @@ use crate::calcqts::node_waynodes::NodeWayNodeComb;
 use crate::calcqts::quadtree_store::{
     QuadtreeSimple, QuadtreeTileInt, WAY_SPLIT_MASK, WAY_SPLIT_SHIFT, WAY_SPLIT_VAL,
 };
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::utils::Timer;
 
 use crate::calcqts::{OtherData, Timings};

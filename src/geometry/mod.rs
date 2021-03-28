@@ -55,7 +55,7 @@ pub enum OtherData {
     TempData(TempData),
 }
 
-pub type Timings = crate::utils::Timings<OtherData>;
+pub type Timings = channelled_callbacks::Timings<OtherData>;
 
 pub type CallFinishGeometryBlock =
-    Box<dyn crate::callback::CallFinish<CallType = GeometryBlock, ReturnType = Timings>>;
+    Box<dyn channelled_callbacks::CallFinish<CallType = GeometryBlock, ReturnType = Timings>>;

@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, CallAll, ReplaceNoneWithTimings};
 use crate::geometry::postgresql::Connection;
 use crate::geometry::postgresql::{
     pack_geometry_block, prepare_tables, AllocFunc, PostgresqlConnection, PostgresqlOptions,
@@ -6,7 +6,7 @@ use crate::geometry::postgresql::{
 };
 use crate::geometry::{GeometryBlock, OtherData, Timings};
 use crate::pbfformat::{pack_file_block, HeaderType, WriteFile};
-use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, ThreadTimer, Timer};
+use crate::utils::{ThreadTimer, Timer};
 
 use simple_protocolbuffers::{pack_data, pack_value};
 

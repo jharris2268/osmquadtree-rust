@@ -1,4 +1,4 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::{Element, ElementType, Quadtree, Relation};
 use crate::geometry::elements::collect_rings;
 use crate::geometry::position::point_in_poly_xy;

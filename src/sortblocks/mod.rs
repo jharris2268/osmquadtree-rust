@@ -23,7 +23,7 @@ pub enum OtherData {
     AllBlocks(Vec<PrimitiveBlock>),
 }
 
-pub type Timings = crate::utils::Timings<OtherData>;
+pub type Timings = channelled_callbacks::Timings<OtherData>;
 
 pub use inmem::sort_blocks_inmem;
 pub use prepgraph::find_groups;

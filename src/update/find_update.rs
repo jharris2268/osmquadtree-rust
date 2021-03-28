@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings, Timings};
 use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
@@ -9,7 +9,7 @@ use crate::pbfformat::{
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
-use crate::utils::{MergeTimings, ThreadTimer, Timer, Timings};
+use crate::utils::{ThreadTimer, Timer};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

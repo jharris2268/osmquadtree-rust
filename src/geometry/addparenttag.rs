@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::{Node, Quadtree, Tag, Way};
 use crate::geometry::style::ParentTagSpec;
 use crate::geometry::{GeometryStyle, OtherData, Timings, WorkingBlock};

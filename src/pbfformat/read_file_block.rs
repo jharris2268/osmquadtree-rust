@@ -6,7 +6,7 @@ use std::io::{BufReader, Cursor, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use simple_protocolbuffers as spb;
 
 use crate::utils::Checktime;

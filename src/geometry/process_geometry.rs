@@ -14,9 +14,9 @@ use crate::geometry::{
 
 use crate::geometry::tempfile::{prep_write_geometry_pbffile, make_write_temp_geometry, write_temp_geometry};
 
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::utils::{
-    parse_timestamp, LogTimes, MergeTimings, ReplaceNoneWithTimings, ThreadTimer,
+    parse_timestamp, LogTimes, ThreadTimer,
 };
 
 use crate::elements::{Block, Quadtree};

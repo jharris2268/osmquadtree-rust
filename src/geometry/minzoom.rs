@@ -1,4 +1,4 @@
-use crate::callback::CallFinish;
+use channelled_callbacks::CallFinish;
 use crate::elements::{Tag, EARTH_WIDTH};
 use crate::geometry::default_minzoom_values::DEFAULT_MINZOOM_VALUES;
 use crate::geometry::{GeometryBlock, OtherData, Timings, WorkingBlock};

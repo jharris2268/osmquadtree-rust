@@ -8,10 +8,10 @@ use std::thread;
 use crate::elements::PrimitiveBlock;
 use crate::pbfformat::{FileBlock, ReadFileBlocks};
 
-use crate::callback::CallFinish;
+use channelled_callbacks::{CallFinish,CallAll};
 use crate::elements::{ElementType, Quadtree, QuadtreeBlock};
 
-use crate::utils::{CallAll, ThreadTimer};
+use crate::utils::ThreadTimer;
 
 use crate::sortblocks::Timings;
 

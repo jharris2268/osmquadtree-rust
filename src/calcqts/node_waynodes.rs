@@ -1,4 +1,4 @@
-use crate::callback::{CallFinish, Callback, CallbackMerge, CallbackSync};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{MinimalBlock, MinimalNode};
 use crate::pbfformat::{
     file_length, make_convert_minimal_block_parts, pack_file_block,
@@ -7,7 +7,7 @@ use crate::pbfformat::{
     ReadFileBlocks, WriteFile,
 };
 
-use crate::utils::{CallAll, MergeTimings, ReplaceNoneWithTimings, Timer};
+use crate::utils::{Timer};
 
 use std::fmt;
 use std::fs::File;
