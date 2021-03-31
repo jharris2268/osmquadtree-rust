@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Debug)]
-struct NodeCount {
+pub struct NodeCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -173,7 +173,7 @@ impl fmt::Display for NodeCount {
 }
 
 #[derive(Debug)]
-struct WayCount {
+pub struct WayCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -322,7 +322,7 @@ impl fmt::Display for WayCount {
 }
 
 #[derive(Debug)]
-struct RelationCount {
+pub struct RelationCount {
     num: i64,
     min_id: i64,
     max_id: i64,
@@ -452,7 +452,7 @@ trait CountBlocks {
 }
 
 #[derive(Debug)]
-struct Count {
+pub struct Count {
     pub node: NodeCount,
     pub way: WayCount,
     pub relation: RelationCount,
@@ -712,9 +712,7 @@ pub fn run_count(
     numchan: usize,
     filter_in: Option<&str>,
 ) -> Result<()> {
-    /*if prof.len()>0 {
-        PROFILER.lock().unwrap().start(prof.clone()).expect("couldn't start");
-    }*/
+    
     let filter = match filter_in {
         None => None,
         Some(s) => Some(Bbox::from_str(s)?),
