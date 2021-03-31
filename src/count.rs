@@ -446,7 +446,7 @@ impl fmt::Display for RelationCount {
     }
 }
 
-trait CountBlocks {
+pub trait CountBlocks {
     fn add_primitive(&mut self, bl: &PrimitiveBlock);
     fn add_minimal(&mut self, mb: &MinimalBlock);
 }
