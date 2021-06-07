@@ -30,15 +30,15 @@ use std::fmt;
 
 #[derive(Debug)]
 pub struct NodeCount {
-    num: i64,
-    min_id: i64,
-    max_id: i64,
-    min_ts: i64,
-    max_ts: i64,
-    min_lon: i32,
-    min_lat: i32,
-    max_lon: i32,
-    max_lat: i32,
+    pub num: i64,
+    pub min_id: i64,
+    pub max_id: i64,
+    pub min_ts: i64,
+    pub max_ts: i64,
+    pub min_lon: i32,
+    pub min_lat: i32,
+    pub max_lon: i32,
+    pub max_lat: i32,
 }
 impl NodeCount {
     pub fn new() -> NodeCount {
@@ -174,15 +174,15 @@ impl fmt::Display for NodeCount {
 
 #[derive(Debug)]
 pub struct WayCount {
-    num: i64,
-    min_id: i64,
-    max_id: i64,
-    min_ts: i64,
-    max_ts: i64,
-    num_refs: i64,
-    max_refs_len: i64,
-    min_ref: i64,
-    max_ref: i64,
+    pub num: i64,
+    pub min_id: i64,
+    pub max_id: i64,
+    pub min_ts: i64,
+    pub max_ts: i64,
+    pub num_refs: i64,
+    pub max_refs_len: i64,
+    pub min_ref: i64,
+    pub max_ref: i64,
 }
 
 impl WayCount {
@@ -323,14 +323,14 @@ impl fmt::Display for WayCount {
 
 #[derive(Debug)]
 pub struct RelationCount {
-    num: i64,
-    min_id: i64,
-    max_id: i64,
-    min_ts: i64,
-    max_ts: i64,
-    num_empties: i64,
-    num_mems: i64,
-    max_mems_len: i64,
+    pub num: i64,
+    pub min_id: i64,
+    pub max_id: i64,
+    pub min_ts: i64,
+    pub max_ts: i64,
+    pub num_empties: i64,
+    pub num_mems: i64,
+    pub max_mems_len: i64,
 }
 impl RelationCount {
     pub fn new() -> RelationCount {
