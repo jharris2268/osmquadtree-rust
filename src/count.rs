@@ -508,7 +508,7 @@ impl fmt::Display for Count {
 }
 
 #[derive(Debug)]
-struct CountChange {
+pub struct CountChange {
     pub node: BTreeMap<Changetype, NodeCount>,
     pub way: BTreeMap<Changetype, WayCount>,
     pub relation: BTreeMap<Changetype, RelationCount>,
@@ -706,12 +706,26 @@ impl CallFinish for CountMinimal {
     }
 }
 
-pub fn run_count(
-    fname: &str,
+pub enum CountAny {
+    Count(Count),
+    CountChange(CountChange),
+}
+
+impl fmt::Display for CountAny {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CountAny::Count(c) => c.fmt(f),
+            CountAny::CountChange(c) => c.fmt(f)
+        }
+    }
+}       
+        
+    
+pub fn call_count(fname: &str,
     use_primitive: bool,
     numchan: usize,
     filter_in: Option<&str>,
-) -> Result<()> {
+) -> Result<CountAny> {
     
     let filter = match filter_in {
         None => None,
@@ -726,7 +740,7 @@ pub fn run_count(
         let data = read_xml_change(&mut fbuf).expect("failed to read osc");
 
         cn.add_changeblock(&data);
-        println!("{}", cn);
+        Ok(CountAny::CountChange(cn))
     } else if fname.ends_with(".osc.gz") {
         let mut cn = CountChange::new();
         let fbuf = BufReader::with_capacity(1024 * 1024, f);
@@ -735,7 +749,7 @@ pub fn run_count(
         let data = read_xml_change(&mut gzbuf).expect("failed to read osc");
 
         cn.add_changeblock(&data);
-        println!("{}", cn);
+        Ok(CountAny::CountChange(cn))
     } else if fname.ends_with(".pbfc") {
         let pb = ProgBarWrap::new_filebytes(file_length(fname));
         pb.set_message(&format!("count change blocks minimal {}, numchan=1", fname));
@@ -747,7 +761,7 @@ pub fn run_count(
         pb.finish();
         let cn = std::mem::take(&mut a.others).pop().unwrap().1;
 
-        println!("{}", cn);
+        Ok(CountAny::CountChange(cn))
     //println!("{:?}", cn.relation.get(&Changetype::Create));
     } else if std::fs::metadata(fname)
         .expect("failed to open file")
@@ -820,7 +834,7 @@ pub fn run_count(
                 cc.add_other(&x);
             }
         }
-        println!("{}", cc);
+        Ok(CountAny::Count(cc))
     } else {
         let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, None).expect("?");
 
@@ -864,7 +878,23 @@ pub fn run_count(
             cc.add_other(y);
         }
 
-        println!("{}", cc);
+        Ok(CountAny::Count(cc))
     }
+    
+}
+
+    
+
+pub fn run_count(
+    fname: &str,
+    use_primitive: bool,
+    numchan: usize,
+    filter_in: Option<&str>,
+) -> Result<()> {
+    
+    
+    println!("{}", call_count(fname,use_primitive, numchan, filter_in)?);
     Ok(())
 }
+    
+    
