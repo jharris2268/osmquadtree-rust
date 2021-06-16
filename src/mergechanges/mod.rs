@@ -6,3 +6,5 @@ pub use crate::mergechanges::inmem::{make_write_file, read_filter, run_mergechan
 pub use crate::mergechanges::writetemp::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
 };
+
+pub use crate::mergechanges::filter_elements::Poly;
