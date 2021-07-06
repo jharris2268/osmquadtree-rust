@@ -7,4 +7,4 @@ pub use crate::mergechanges::writetemp::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
 };
 
-pub use crate::mergechanges::filter_elements::Poly;
+pub use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly};

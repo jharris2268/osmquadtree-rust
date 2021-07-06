@@ -362,7 +362,7 @@ pub fn run_mergechanges_sort(
     let ids: Arc<dyn IdSet> = match filter {
         Some(_) => {
             if filter_objs {
-                let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+                let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
                 tx.add("prep_bbox_filter");
                 println!("have: {}", ids);
                 Arc::from(ids)
@@ -549,7 +549,7 @@ pub fn run_mergechanges(
 
     let ids: Arc<dyn IdSet> = match (filter_objs, filter) {
         (true, Some(_)) => {
-            let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+            let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
             tx.add("prep_bbox_filter");
             println!("have: {}", ids);
             Arc::from(ids)

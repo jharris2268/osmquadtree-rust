@@ -234,7 +234,7 @@ pub fn run_mergechanges_sort_inmem(
 
     let ids: Arc<dyn IdSet> = match filter {
         Some(_) => {
-            let ids = prep_bbox_filter(&mut pfilelocs, bbox.clone(), poly, numchan)?;
+            let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
             tx.add("prep_bbox_filter");
             println!("have: {}", ids);
             Arc::from(ids)

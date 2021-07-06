@@ -19,7 +19,7 @@ type Timings = channelled_callbacks::Timings<Arc<dyn IdSet>>;
 use regex::Regex;
 const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$";
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Poly {
     vertsx: Vec<f64>,
     vertsy: Vec<f64>,
@@ -141,10 +141,10 @@ fn has_node<T: IdSet>(idset: &Box<T>, w: &MinimalWay) -> bool {
 }
 
 impl FilterObjs {
-    pub fn new(bbox: Bbox, poly: Option<Poly>) -> FilterObjs {
+    pub fn new(bbox: &Bbox, poly: &Option<Poly>) -> FilterObjs {
         FilterObjs {
-            bbox: bbox,
-            poly: poly,
+            bbox: bbox.clone(),
+            poly: poly.clone(),
             idset: Some(Box::new(IdSetBool::new())),
             tm: 0.0,
             pending_rels: Vec::new(),
@@ -288,8 +288,8 @@ impl CallFinish for FilterObjs {
 
 pub fn prep_bbox_filter(
     pfilelocs: &mut ParallelFileLocs,
-    bbox: Bbox,
-    poly: Option<Poly>,
+    bbox: &Bbox,
+    poly: &Option<Poly>,
     numchan: usize,
 ) -> Result<Arc<dyn IdSet>> {
     /*let mut pb = ProgBarWrap::new(100);
