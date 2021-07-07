@@ -1,6 +1,6 @@
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{
-    Bbox, ElementType, IdSet, IdSetBool, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay,
+    Bbox, ElementType, IdSet, IdSetAll, IdSetSet, IdSetBool, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay,
 };
 use crate::pbfformat::{
     make_read_minimal_blocks_combine_call_all, read_all_blocks_parallel_with_progbar, FileBlock,
@@ -21,8 +21,8 @@ const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$"
 
 #[derive(Debug,Clone)]
 pub struct Poly {
-    vertsx: Vec<f64>,
-    vertsy: Vec<f64>,
+    pub vertsx: Vec<f64>,
+    pub vertsy: Vec<f64>,
 }
 
 impl Poly {
@@ -123,15 +123,77 @@ impl Poly {
     }
 }
 
+
+pub enum IdSetEither {
+    Set(IdSetSet),
+    Bool(IdSetBool),
+    All(IdSetAll)
+}
+
+impl IdSet for IdSetEither {
+    fn contains(&self, t: ElementType, i: i64) -> bool {
+        match self {
+            IdSetEither::Set(ref s) => s.contains(t,i),
+            IdSetEither::Bool(ref b) => b.contains(t,i),
+            IdSetEither::All(ref a) => a.contains(t,i),
+        }
+    }
+}    
+use std::fmt::Display;
+impl Display for IdSetEither {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IdSetEither::Set(ref s) => write!(f, "{}", s),
+            IdSetEither::Bool(ref b) => write!(f, "{}", b),
+            IdSetEither::All(ref a) => write!(f, "{}", a)
+        }
+    }
+}
+    
+    
+impl IdSetEither {    
+    fn add_node(&mut self, i: i64) {
+        match self {
+            IdSetEither::Set(ref mut s) =>  {s.nodes.insert(i);},
+            IdSetEither::Bool(ref mut b) => {b.nodes.insert(i);},
+            IdSetEither::All(ref _a) => {},
+        }
+    }
+    fn add_exnode(&mut self, i: i64) {
+        match self {
+            IdSetEither::Set(ref mut s) =>  {s.exnodes.insert(i);},
+            IdSetEither::Bool(ref mut b) => {b.exnodes.insert(i);},
+            IdSetEither::All(ref _a) => {},
+        }
+    }
+    fn add_way(&mut self, i: i64) {
+        match self {
+            IdSetEither::Set(ref mut s) =>  {s.ways.insert(i);},
+            IdSetEither::Bool(ref mut b) => {b.ways.insert(i);},
+            IdSetEither::All(ref _a) => {}
+        }
+    }
+    fn add_relation(&mut self, i: i64) {
+        match self {
+            IdSetEither::Set(ref mut s) =>  {s.relations.insert(i);},
+            IdSetEither::Bool(ref mut b) => {b.relations.insert(i);},
+            IdSetEither::All(ref _a) => {}
+        }
+    }
+}    
+    
+    
+
+
 struct FilterObjs {
     bbox: Bbox,
     poly: Option<Poly>,
-    idset: Option<Box<IdSetBool>>,
+    idset: IdSetEither,
     pending_rels: Vec<MinimalRelation>,
     tm: f64,
 }
 
-fn has_node<T: IdSet>(idset: &Box<T>, w: &MinimalWay) -> bool {
+fn has_node<T: IdSet>(idset: &T, w: &MinimalWay) -> bool {
     for rf in DeltaPackedInt::new(&w.refs_data) {
         if idset.contains(ElementType::Node, rf) {
             return true;
@@ -141,19 +203,24 @@ fn has_node<T: IdSet>(idset: &Box<T>, w: &MinimalWay) -> bool {
 }
 
 impl FilterObjs {
-    pub fn new(bbox: &Bbox, poly: &Option<Poly>) -> FilterObjs {
+    pub fn new(bbox: &Bbox, poly: &Option<Poly>, bool_idset: bool) -> FilterObjs {
+        let ids = if bool_idset {
+            IdSetEither::Bool(IdSetBool::new())
+        } else {
+            IdSetEither::Set(IdSetSet::new())
+        };
         FilterObjs {
             bbox: bbox.clone(),
             poly: poly.clone(),
-            idset: Some(Box::new(IdSetBool::new())),
+            idset: ids,
             tm: 0.0,
             pending_rels: Vec::new(),
         }
     }
 
-    fn get_idset<'a>(&'a mut self) -> &'a mut Box<IdSetBool> {
+    /*fn get_idset<'a>(&'a mut self) -> &'a mut Box<IdSetBool> {
         self.idset.as_mut().unwrap()
-    }
+    }*/
 
     fn check_block(&mut self, mb: MinimalBlock) {
         let qb = mb.quadtree.as_bbox(0.05);
@@ -179,13 +246,15 @@ impl FilterObjs {
     }
     fn add_all(&mut self, mb: MinimalBlock) {
         for n in mb.nodes {
-            self.get_idset().nodes.insert(n.id);
+            //self.get_idset().nodes.insert(n.id);
+            self.idset.add_node(n.id)
         }
         for w in mb.ways {
             self.add_way(&w);
         }
         for r in mb.relations {
-            self.get_idset().relations.insert(r.id);
+            //self.get_idset().relations.insert(r.id);
+            self.idset.add_relation(r.id)
         }
     }
 
@@ -201,22 +270,27 @@ impl FilterObjs {
 
     fn check_node(&mut self, n: &MinimalNode) {
         if self.check_pt(n.lon, n.lat) {
-            self.get_idset().nodes.insert(n.id);
+            //self.get_idset().nodes.insert(n.id);
+            self.idset.add_node(n.id)
         }
     }
 
     fn check_way(&mut self, w: &MinimalWay) {
-        if has_node(self.get_idset(), w) {
+        if has_node(&self.idset, w) {
             self.add_way(w);
         }
     }
     fn add_way(&mut self, w: &MinimalWay) {
-        self.get_idset().ways.insert(w.id);
+        //self.get_idset().ways.insert(w.id);
+        self.idset.add_way(w.id);
 
         for n in DeltaPackedInt::new(&w.refs_data) {
-            if !self.get_idset().nodes.contains(&n) {
-                self.get_idset().exnodes.insert(n);
+            if !self.idset.contains(ElementType::Node, n) {
+                self.idset.add_exnode(n);
             }
+            /*if !self.get_idset().nodes.contains(&n) {
+                self.get_idset().exnodes.insert(n);
+            }*/
         }
     }
 
@@ -230,8 +304,9 @@ impl FilterObjs {
                 hasr = true;
             }
             if !justr || ty == ElementType::Relation {
-                if self.get_idset().contains(ty, rf) {
-                    self.get_idset().relations.insert(r.id);
+                if self.idset.contains(ty, rf) {
+                    //self.get_idset().relations.insert(r.id);
+                    self.idset.add_node(r.id);
                     return (true, false);
                 }
             }
@@ -240,11 +315,22 @@ impl FilterObjs {
     }
 
     fn check_pending_relations(&mut self) {
-        let exn = std::mem::take(&mut self.get_idset().exnodes);
-        let ii = self.get_idset();
-        for e in exn {
-            ii.nodes.insert(e);
-        }
+        
+        match &mut self.idset {
+            IdSetEither::Bool(ii) => {
+                let exn = std::mem::take(&mut ii.exnodes);
+                for e in exn {
+                    ii.nodes.insert(e);
+                }
+            },
+            IdSetEither::Set(ii) => {
+                let exn = std::mem::take(&mut ii.exnodes);
+                for e in exn {
+                    ii.nodes.insert(e);
+                }
+            },
+            IdSetEither::All(_) => {}
+        };
 
         let mut relrels = Vec::new();
         for r in std::mem::take(&mut self.pending_rels) {
@@ -279,7 +365,7 @@ impl CallFinish for FilterObjs {
         self.check_pending_relations();
         tm.add("FilterBBox::finish", tx.since());
 
-        let aa: Arc<IdSetBool> = Arc::from(std::mem::take(&mut self.idset).unwrap());
+        let aa: Arc<dyn IdSet> = Arc::from(std::mem::replace(&mut self.idset, IdSetEither::All(IdSetAll())));
 
         tm.add_other("idset", aa);
         Ok(tm)
@@ -296,7 +382,7 @@ pub fn prep_bbox_filter(
     pb.set_range(100);
     pb.set_message("prep_bbox_filter");*/
 
-    let fb = Box::new(FilterObjs::new(bbox, poly));
+    let fb = Box::new(FilterObjs::new(bbox, poly, pfilelocs.2 > 512*1024*1024));
 
     let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
         if numchan == 0 {
