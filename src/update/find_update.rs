@@ -470,6 +470,9 @@ fn calc_qts(
         if r.changetype != Changetype::Delete {
             if r.members.is_empty() {
                 orig_data.set_relation(&r.id, Quadtree::new(0));
+            } else if r.members.len() == 1 && r.members[0].mem_type == ElementType::Relation && r.members[0].mem_ref == r.id {
+                println!("circular relation {}", r.id);
+                orig_data.set_relation(&r.id, Quadtree::new(0));
             } else {
                 let mut qt = Quadtree::empty();
                 for m in r.members.iter() {
@@ -503,6 +506,8 @@ fn calc_qts(
                 }
                 None => {
                     if i == 4 {
+                        
+                        
                         println!(
                             "missing member {:?} {} for relation {}",
                             ElementType::Relation,
@@ -526,13 +531,13 @@ fn calc_qts(
 
         let a = orig_data.get_alloc(&ElementType::Node, &n.id);
 
-        match (n.changetype, a) {
-            (Changetype::Normal, Some(alloc)) => {
-                if n.quadtree == q.unwrap() {
+        match (n.changetype, a, q) {
+            (Changetype::Normal, Some(alloc), Some(q)) => {
+                if n.quadtree == q {
                     unneeded_extra_nodes += 1;
                 } else {
                     let mut n2 = n.clone();
-                    n2.quadtree = q.unwrap();
+                    n2.quadtree = q;
                     n2.changetype = Changetype::Unchanged;
                     res.add_node(na.unwrap(), n2);
 
@@ -545,17 +550,17 @@ fn calc_qts(
                     }
                 }
             }
-            (Changetype::Delete, Some(alloc)) => {
+            (Changetype::Delete, Some(alloc), _) => {
                 let mut n2 = n.clone();
                 n2.quadtree = Quadtree::new(0);
                 res.add_node(alloc, n2);
             }
-            (Changetype::Delete, None) => {
+            (Changetype::Delete, None, _) => {
                 create_delete += 1;
             }
-            (Changetype::Modify, Some(alloc)) => {
+            (Changetype::Modify, Some(alloc), Some(q)) => {
                 let mut n2 = n.clone();
-                n2.quadtree = q.unwrap();
+                n2.quadtree = q;
                 res.add_node(na.unwrap(), n2);
                 if na.unwrap() != alloc {
                     let mut n3 = n.clone();
@@ -565,13 +570,13 @@ fn calc_qts(
                     res.add_node(alloc, n3);
                 }
             }
-            (Changetype::Modify, None) | (Changetype::Create, None) => {
+            (Changetype::Modify, None, Some(q)) | (Changetype::Create, None, Some(q)) => {
                 let mut n2 = n.clone();
-                n2.quadtree = q.unwrap();
+                n2.quadtree = q;
                 res.add_node(na.unwrap(), n2);
             }
-            (rt, ra) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?}", rt, ra, n, q, na);
+            (rt, ra, rq) => {
+                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, n, q, na);
             }
         }
     }
@@ -583,18 +588,18 @@ fn calc_qts(
 
         let a = orig_data.get_alloc(&ElementType::Way, &w.id);
 
-        match (w.changetype, a) {
-            (Changetype::Delete, Some(alloc)) => {
+        match (w.changetype, a, q) {
+            (Changetype::Delete, Some(alloc), _) => {
                 let mut w2 = w.clone();
                 w2.quadtree = Quadtree::new(0);
                 res.add_way(alloc, w2);
             }
-            (Changetype::Delete, None) => {
+            (Changetype::Delete, None, _) => {
                 create_delete += 1;
             }
-            (Changetype::Modify, Some(alloc)) => {
+            (Changetype::Modify, Some(alloc), Some(q)) => {
                 let mut w2 = w.clone();
-                w2.quadtree = q.unwrap();
+                w2.quadtree = q;
                 res.add_way(na.unwrap(), w2);
                 if na.unwrap() != alloc {
                     let mut w3 = w.clone();
@@ -604,13 +609,13 @@ fn calc_qts(
                     res.add_way(alloc, w3);
                 }
             }
-            (Changetype::Modify, None) | (Changetype::Create, None) => {
+            (Changetype::Modify, None, Some(q)) | (Changetype::Create, None, Some(q)) => {
                 let mut w2 = w.clone();
-                w2.quadtree = q.unwrap();
+                w2.quadtree = q;
                 res.add_way(na.unwrap(), w2);
             }
-            (rt, ra) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?}", rt, ra, w, q, na);
+            (rt, ra, rq) => {
+                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, w, q, na);
             }
         }
     }
@@ -621,18 +626,18 @@ fn calc_qts(
 
         let a = orig_data.get_alloc(&ElementType::Relation, &r.id);
 
-        match (r.changetype, a) {
-            (Changetype::Delete, Some(alloc)) => {
+        match (r.changetype, a, q) {
+            (Changetype::Delete, Some(alloc), _) => {
                 let mut r2 = r.clone();
                 r2.quadtree = Quadtree::new(0);
                 res.add_relation(alloc, r2);
             }
-            (Changetype::Delete, None) => {
+            (Changetype::Delete, None, _) => {
                 create_delete += 1;
             }
-            (Changetype::Modify, Some(alloc)) => {
+            (Changetype::Modify, Some(alloc), Some(q)) => {
                 let mut r2 = r.clone();
-                r2.quadtree = q.unwrap();
+                r2.quadtree = q;
                 res.add_relation(na.unwrap(), r2);
                 if na.unwrap() != alloc {
                     let mut r3 = r.clone();
@@ -642,13 +647,13 @@ fn calc_qts(
                     res.add_relation(alloc, r3);
                 }
             }
-            (Changetype::Modify, None) | (Changetype::Create, None) => {
+            (Changetype::Modify, None, Some(q)) | (Changetype::Create, None, Some(q)) => {
                 let mut r2 = r.clone();
-                r2.quadtree = q.unwrap();
+                r2.quadtree = q;
                 res.add_relation(na.unwrap(), r2);
             }
-            (rt, ra) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?}", rt, ra, r, q, na);
+            (rt, ra, rq) => {
+                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, r, q, na);
             }
         }
     }
