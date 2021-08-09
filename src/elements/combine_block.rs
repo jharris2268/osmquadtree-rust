@@ -5,7 +5,8 @@ use std::cmp::Ordering;
 
 trait WithIdAndChangetype {
     fn get_id(&self) -> i64;
-    fn get_changetype(&mut self) -> &mut Changetype;
+    fn get_changetype(&self) -> Changetype;
+    fn set_changetype(&mut self, c: Changetype);
 }
 
 impl WithIdAndChangetype for Node {
@@ -13,8 +14,12 @@ impl WithIdAndChangetype for Node {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 impl WithIdAndChangetype for Way {
@@ -22,8 +27,11 @@ impl WithIdAndChangetype for Way {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 
@@ -32,8 +40,12 @@ impl WithIdAndChangetype for Relation {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 
@@ -42,8 +54,12 @@ impl WithIdAndChangetype for MinimalNode {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 impl WithIdAndChangetype for MinimalWay {
@@ -51,8 +67,12 @@ impl WithIdAndChangetype for MinimalWay {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 
@@ -61,8 +81,12 @@ impl WithIdAndChangetype for MinimalRelation {
         self.id
     }
 
-    fn get_changetype(&mut self) -> &mut Changetype {
-        &mut self.changetype
+    fn get_changetype(&self) -> Changetype {
+        self.changetype
+    }
+    
+    fn set_changetype(&mut self, c: Changetype) {
+        self.changetype = c;
     }
 }
 
@@ -109,6 +133,51 @@ fn combine<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Vec<T> 
     res
 }
 
+
+fn combine_clone<T: WithIdAndChangetype + Ord + Clone>(left: &[T], right: &[T]) -> Vec<T> {
+    let mut res = Vec::new();
+
+    let mut left_iter = left.into_iter();
+    let mut right_iter = right.into_iter();
+
+    let mut left_curr = left_iter.next();
+    let mut right_curr = right_iter.next();
+
+    while !(left_curr == None && right_curr == None) {
+        if left_curr == None {
+            res.push(right_curr.unwrap().clone());
+            right_curr = right_iter.next();
+        } else if right_curr == None {
+            res.push(left_curr.unwrap().clone());
+            left_curr = left_iter.next();
+        } else {
+            match left_curr
+                .as_ref()
+                .unwrap()
+                .get_id()
+                .cmp(&right_curr.as_ref().unwrap().get_id())
+            {
+                Ordering::Less => {
+                    res.push(left_curr.unwrap().clone());
+                    left_curr = left_iter.next();
+                }
+                Ordering::Equal => {
+                    left_curr = left_iter.next();
+                    res.push(right_curr.unwrap().clone());
+                    right_curr = right_iter.next();
+                }
+                Ordering::Greater => {
+                    res.push(right_curr.unwrap().clone());
+                    right_curr = right_iter.next();
+                }
+            }
+        }
+    }
+
+    res
+}
+
+
 fn check_changetype<T: WithIdAndChangetype>(o: &mut T) -> bool {
     match o.get_changetype() {
         Changetype::Normal => {
@@ -122,8 +191,28 @@ fn check_changetype<T: WithIdAndChangetype>(o: &mut T) -> bool {
         }
         _ => {}
     }
-    *o.get_changetype() = Changetype::Normal;
+    o.set_changetype(Changetype::Normal);
     true
+}
+
+fn check_changetype_clone<T: WithIdAndChangetype + Clone>(o: &T) -> Option<T> {
+    match o.get_changetype() {
+        Changetype::Normal => {
+            Some(o.clone())
+        }
+        Changetype::Delete => {
+            None
+        }
+        Changetype::Remove => {
+            None
+        }
+        _ => {
+            let mut n = o.clone();
+            n.set_changetype(Changetype::Normal);
+            Some(n)
+        }
+    }
+    
 }
 
 fn check_changetype_add<T: WithIdAndChangetype>(res: &mut Vec<T>, obj: &mut Option<T>) {
@@ -132,6 +221,17 @@ fn check_changetype_add<T: WithIdAndChangetype>(res: &mut Vec<T>, obj: &mut Opti
         res.push(r);
     }
 }
+
+fn check_changetype_clone_add<T: WithIdAndChangetype+Clone>(res: &mut Vec<T>, obj: &Option<&T>) {
+    
+    match check_changetype_clone(obj.unwrap()) {
+        Some(r) => { res.push(r); },
+        None => {}
+        
+    }
+}
+
+
 
 fn apply_change<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Vec<T> {
     let mut res = Vec::new();
@@ -176,6 +276,49 @@ fn apply_change<T: WithIdAndChangetype + Ord>(left: Vec<T>, right: Vec<T>) -> Ve
     res
 }
 
+fn apply_change_clone<T: WithIdAndChangetype + Ord + Clone>(left: &[T], right: &[T]) -> Vec<T> {
+    let mut res = Vec::new();
+
+    let mut left_iter = left.into_iter();
+    let mut right_iter = right.into_iter();
+
+    let mut left_curr = left_iter.next();
+    let mut right_curr = right_iter.next();
+
+    while !(left_curr == None && right_curr == None) {
+        if left_curr == None {
+            check_changetype_clone_add(&mut res, &right_curr);
+            right_curr = right_iter.next();
+        } else if right_curr == None {
+            check_changetype_clone_add(&mut res, &left_curr);
+            left_curr = left_iter.next();
+        } else {
+            match left_curr
+                .as_ref()
+                .unwrap()
+                .get_id()
+                .cmp(&right_curr.as_ref().unwrap().get_id())
+            {
+                Ordering::Less => {
+                    check_changetype_clone_add(&mut res, &left_curr);
+                    left_curr = left_iter.next();
+                }
+                Ordering::Equal => {
+                    left_curr = left_iter.next();
+                    check_changetype_clone_add(&mut res, &right_curr);
+                    right_curr = right_iter.next();
+                }
+                Ordering::Greater => {
+                    check_changetype_clone_add(&mut res, &right_curr);
+                    right_curr = right_iter.next();
+                }
+            }
+        }
+    }
+
+    res
+}
+
 pub fn combine_block_primitive(
     mut left: PrimitiveBlock,
     mut right: PrimitiveBlock,
@@ -192,9 +335,29 @@ pub fn combine_block_primitive(
         std::mem::take(&mut left.relations),
         std::mem::take(&mut right.relations),
     );
-
+    
+    left.end_date = right.end_date;
+    
     left
 }
+
+pub fn combine_block_primitive_clone(
+    left: &PrimitiveBlock,
+    right: &PrimitiveBlock,
+) -> PrimitiveBlock {
+    
+    let mut res = PrimitiveBlock::new(left.index, left.location);
+    res.quadtree = left.quadtree.clone();
+    res.start_date = left.start_date;
+    res.end_date = right.end_date;
+    
+    
+    res.nodes = combine_clone(&left.nodes, &right.nodes);
+    res.ways = combine_clone(&left.ways, &right.ways);
+    res.relations = combine_clone(&left.relations, &right.relations);
+    res
+}
+
 
 pub fn combine_block_minimal(mut left: MinimalBlock, mut right: MinimalBlock) -> MinimalBlock {
     left.nodes = combine(
@@ -209,7 +372,7 @@ pub fn combine_block_minimal(mut left: MinimalBlock, mut right: MinimalBlock) ->
         std::mem::take(&mut left.relations),
         std::mem::take(&mut right.relations),
     );
-
+    left.end_date = right.end_date;
     left
 }
 
@@ -229,10 +392,29 @@ pub fn apply_change_primitive(
         std::mem::take(&mut left.relations),
         std::mem::take(&mut right.relations),
     );
-
+    left.end_date = right.end_date;
     left
 }
 
+pub fn apply_change_primitive_clone(
+    left: &PrimitiveBlock,
+    right: &PrimitiveBlock,
+) -> PrimitiveBlock {
+    
+    let mut res = PrimitiveBlock::new(left.index, left.location);
+    res.quadtree = left.quadtree.clone();
+    res.start_date = left.start_date;
+    res.end_date = right.end_date;
+    
+    
+    res.nodes = apply_change_clone(&left.nodes, &right.nodes);
+    res.ways = apply_change_clone(&left.ways, &right.ways);
+    res.relations = apply_change_clone(&left.relations, &right.relations);
+    res
+}
+    
+    
+    
 pub fn apply_change_minimal(mut left: MinimalBlock, mut right: MinimalBlock) -> MinimalBlock {
     left.nodes = apply_change(
         std::mem::take(&mut left.nodes),
@@ -246,7 +428,7 @@ pub fn apply_change_minimal(mut left: MinimalBlock, mut right: MinimalBlock) -> 
         std::mem::take(&mut left.relations),
         std::mem::take(&mut right.relations),
     );
-
+    left.end_date = right.end_date;
     left
 }
 

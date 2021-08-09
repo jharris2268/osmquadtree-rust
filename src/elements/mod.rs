@@ -14,7 +14,7 @@ mod way;
 
 pub use combine_block::{
     apply_change_minimal, apply_change_primitive, combine_block_minimal, combine_block_primitive,
-    merge_changes_minimal, merge_changes_primitive,
+    merge_changes_minimal, merge_changes_primitive, combine_block_primitive_clone, apply_change_primitive_clone
 };
 
 pub use idset::{IdSet, IdSetAll, IdSetBool, IdSetSet};
