@@ -6,7 +6,7 @@ fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64) * 1.0 + (dur.subsec_nanos() as f64) * 0.000000001
 }
 
-pub(crate) struct Timer(std::time::SystemTime);
+pub struct Timer(std::time::SystemTime);
 
 impl Timer {
     pub fn new() -> Timer {
@@ -58,7 +58,7 @@ impl fmt::Display for LogTimes {
     }
 }
 
-pub(crate) struct ThreadTimer(cpu_time::ThreadTime);
+pub struct ThreadTimer(cpu_time::ThreadTime);
 
 impl ThreadTimer {
     pub fn new() -> ThreadTimer {
