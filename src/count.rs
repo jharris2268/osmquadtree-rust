@@ -2,7 +2,7 @@ use std::fs::File;
 
 use crate::pbfformat::{
     file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock,
-    ProgBarWrap,
+    //ProgBarWrap,
 };
 
 use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
@@ -751,14 +751,17 @@ pub fn call_count(fname: &str,
         cn.add_changeblock(&data);
         Ok(CountAny::CountChange(cn))
     } else if fname.ends_with(".pbfc") {
-        let pb = ProgBarWrap::new_filebytes(file_length(fname));
-        pb.set_message(&format!("count change blocks minimal {}, numchan=1", fname));
+        //let pb = ProgBarWrap::new_filebytes(file_length(fname));
+        
+        crate::logging::messenger().start_progress_bytes(&format!("count change blocks minimal {}, numchan=1", fname), file_length(fname));
+        
+        //pb.set_message(&format!("count change blocks minimal {}, numchan=1", fname));
 
         let mut fbuf = BufReader::new(f);
         let cc = Box::new(CountChangeMinimal::new());
         let cn = Box::new(Callback::new(make_convert_minimal_block(true, cc)));
-        let (mut a, _) = read_all_blocks_prog_fpos(&mut fbuf, cn, &pb);
-        pb.finish();
+        let (mut a, _) = read_all_blocks_prog_fpos(&mut fbuf, cn);
+        
         let cn = std::mem::take(&mut a.others).pop().unwrap().1;
 
         Ok(CountAny::CountChange(cn))
@@ -770,23 +773,27 @@ pub fn call_count(fname: &str,
     {
         let mut cc = Count::new();
 
-        let pb = ProgBarWrap::new_filebytes(file_length(fname));
+        //let pb = ProgBarWrap::new_filebytes(file_length(fname));
+        
 
         if numchan == 0 {
             let mut fbuf = BufReader::new(f);
 
             let (a, _) = if use_primitive {
-                pb.set_message(&format!("count blocks primitive {}, numchan=0", fname));
+                //pb.set_message(&format!("count blocks primitive {}, numchan=0", fname),);
+                crate::logging::messenger().start_progress_bytes(&format!("count blocks primitive {}, numchan=0", fname), file_length(fname));
+                
                 let cm = Box::new(CountPrim::new());
                 let cc = make_convert_primitive_block(false, cm);
-                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
+                read_all_blocks_prog_fpos(&mut fbuf, cc)
             } else {
-                pb.set_message(&format!("count blocks minimal {}, numchan=0", fname));
+                //pb.set_message(&format!("count blocks minimal {}, numchan=0", fname));
+                crate::logging::messenger().start_progress_bytes(&format!("count blocks minimal {}, numchan=0", fname), file_length(fname));
                 let cm = Box::new(CountMinimal::new());
                 let cc = make_convert_minimal_block(false, cm);
-                read_all_blocks_prog_fpos(&mut fbuf, cc, &pb)
+                read_all_blocks_prog_fpos(&mut fbuf, cc)
             };
-            pb.finish();
+            //pb.finish();
             cc.add_other(&a.others[0].1);
 
         //cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, fname, minimal, false);
@@ -796,6 +803,12 @@ pub fn call_count(fname: &str,
                 "numchan must be between 0 and 8",
             ));
         } else {
+            crate::logging::messenger().start_progress_bytes(
+                &format!(
+                        "count blocks {} {}, numchan={}",
+                        (if use_primitive { "primitive" } else { "minimal"} ), fname, numchan
+                    ),file_length(fname));
+            
             let mut fbuf = f;
 
             let mut ccs: Vec<
@@ -808,19 +821,13 @@ pub fn call_count(fname: &str,
             > = Vec::new();
             for _ in 0..numchan {
                 if use_primitive {
-                    pb.set_message(&format!(
-                        "count blocks primitive {}, numchan={}",
-                        fname, numchan
-                    ));
+                    
                     let cm = Box::new(CountPrim::new());
                     ccs.push(Box::new(Callback::new(make_convert_primitive_block(
                         false, cm,
                     ))));
                 } else {
-                    pb.set_message(&format!(
-                        "count blocks minimal {}, numchan={}",
-                        fname, numchan
-                    ));
+                    
                     let cm = Box::new(CountMinimal::new());
                     ccs.push(Box::new(Callback::new(make_convert_minimal_block(
                         false, cm,
@@ -828,8 +835,8 @@ pub fn call_count(fname: &str,
                 }
             }
             let cm = Box::new(CallbackMerge::new(ccs, Box::new(MergeTimings::new())));
-            let (a, _) = read_all_blocks_prog_fpos(&mut fbuf, cm, &pb);
-            pb.finish();
+            let (a, _) = read_all_blocks_prog_fpos(&mut fbuf, cm);
+            //pb.finish();
             for (_, x) in a.others {
                 cc.add_other(&x);
             }

@@ -11,3 +11,4 @@ pub mod update;
 
 pub mod geometry;
 
+pub mod logging;

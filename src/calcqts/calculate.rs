@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use simple_protocolbuffers::{un_zig_zag, IterTags, PbfTag};
 
-use crate::pbfformat::{file_length, pack_file_block, ProgBarWrap, ReadFileBlocks};
+use crate::pbfformat::{file_length, pack_file_block, ReadFileBlocks};
 
 use channelled_callbacks::{CallFinish, Callback, CallbackSync, CallAll, ReplaceNoneWithTimings};
 use crate::elements::Quadtree;
@@ -33,17 +33,21 @@ use crate::calcqts::quadtree_store::{
 use crate::calcqts::write_quadtrees::{PackQuadtrees, WrapWriteFile, WriteQuadTree};
 use crate::calcqts::{run_calcqts_inmem, NodeWayNodes, OtherData, Timings};
 
+use crate::logging::messenger;
+    
+
 fn calc_way_quadtrees_simple(
     nodewaynodes: NodeWayNodes,
     qt_level: usize,
     qt_buffer: f64,
-    numchan: usize,
+    numchan: usize
 ) -> Box<QuadtreeSimple> {
     let wb = Box::new(WayBoxesSimple::new(qt_level, qt_buffer));
 
     let t = read_nodewaynodes(nodewaynodes, wb, 0, 0, "calc_way_quadtrees_simple", numchan);
 
-    println!("calc_way_quadtrees_simple {}", t);
+    //println!("calc_way_quadtrees_simple {}", t);
+    messenger().message(&format!("calc_way_quadtrees_simple {}", t));
     let mut o: Option<Box<QuadtreeSimple>> = None;
     for (_, b) in t.others {
         match b {
@@ -58,7 +62,7 @@ fn calc_and_write_qts(
     wf: Arc<Mutex<Box<WrapWriteFile>>>,
     tts: BTreeMap<i64, Box<WayBoxesVec>>,
     qt_level: usize,
-    qt_buffer: f64,
+    qt_buffer: f64
 ) -> usize {
     let wfp = CallbackSync::new(Box::new(DontFinishArc::new(wf)), 4);
     let mut v = Vec::new();
@@ -73,26 +77,34 @@ fn calc_and_write_qts(
             }),
         )))));
     }
-
+    
+    messenger().start_progress_percent(&format!(
+        "calc quadtrees {} tiles [{}mb]",
+        tts.len(),
+        tts.len() * WAY_SPLIT_VAL / 1024 / 1024
+    ));
+    /*
     let mut pg = ProgBarWrap::new(100);
     pg.set_range(100);
     pg.set_message(&format!(
         "calc quadtrees {} tiles [{}mb]",
         tts.len(),
         tts.len() * WAY_SPLIT_VAL / 1024 / 1024
-    ));
+    ));*/
     let mut i = 0;
     let pf = 100.0 / (tts.len() as f64);
     for (_, t) in tts {
-        pg.prog((i as f64) * pf);
-
+        //pg.prog((i as f64) * pf);
+        messenger().progress_percent((i as f64) * pf);
         v[i % 4].call(t);
         i += 1;
     }
     for mut vi in v {
         vi.finish().expect("?");
     }
-    pg.finish();
+    //pg.finish();
+    messenger().finish_progress_percent();
+    
     i
 }
 struct StoreQtTile {
@@ -114,7 +126,7 @@ fn calc_and_store_qts(
     qts: Arc<Mutex<Box<QuadtreeSplit>>>,
     tts: BTreeMap<i64, Box<WayBoxesVec>>,
     qt_level: usize,
-    qt_buffer: f64,
+    qt_buffer: f64
 ) -> usize {
     let wfp = CallbackSync::new(Box::new(StoreQtTile { qts: qts }), 4);
     let mut v = Vec::new();
@@ -126,14 +138,14 @@ fn calc_and_store_qts(
             Box::new(move |mut t: Box<WayBoxesVec>| t.calculate_tile(qt_level, qt_buffer)),
         )))));
     }
-
-    let mut pg = ProgBarWrap::new(100);
-    pg.set_range(100);
-    pg.set_message("calc quadtrees");
+    messenger().start_progress_percent("calc quadtrees");
+    
     let mut i = 0;
     let pf = 100.0 / (tts.len() as f64);
     for (_, t) in tts {
-        pg.prog((i as f64) * pf);
+        
+        messenger().progress_percent((i as f64) * pf);
+        
 
         v[i % 4].call(t);
         i += 1;
@@ -141,7 +153,7 @@ fn calc_and_store_qts(
     for mut vi in v {
         vi.finish().expect("?");
     }
-    pg.finish();
+    messenger().finish_progress_percent();
     i
 }
 
@@ -152,7 +164,7 @@ fn calc_way_quadtrees_split_part(
     wf: Arc<Mutex<Box<WrapWriteFile>>>,
     qt_level: usize,
     qt_buffer: f64,
-    numchan: usize,
+    numchan: usize
 ) -> usize {
     let wb = Box::new(WayBoxesSplit::new());
 
@@ -185,7 +197,7 @@ fn calc_way_quadtrees_split_part_inmem(
     qts: Arc<Mutex<Box<QuadtreeSplit>>>,
     qt_level: usize,
     qt_buffer: f64,
-    numchan: usize,
+    numchan: usize
 ) -> usize {
     let wb = Box::new(WayBoxesSplit::new());
 
@@ -217,7 +229,7 @@ fn calc_way_quadtrees_split(
     outfn: &str,
     qt_level: usize,
     qt_buffer: f64,
-    numchan: usize,
+    numchan: usize
 ) -> Box<QuadtreeSplit> {
     let tempfn = format!("{}-wayqts", outfn);
     let wf = Arc::new(Mutex::new(Box::new(WrapWriteFile::new(WriteFile::new(
@@ -235,7 +247,7 @@ fn calc_way_quadtrees_split(
             wf.clone(),
             qt_level,
             qt_buffer,
-            numchan,
+            numchan
         );
         //trim_memory();
     }
@@ -248,7 +260,7 @@ fn calc_way_quadtrees_split_inmem(
     nodewaynodes: NodeWayNodes,
     qt_level: usize,
     qt_buffer: f64,
-    numchan: usize,
+    numchan: usize
 ) -> Box<QuadtreeSplit> {
     let qts = Arc::new(Mutex::new(Box::new(QuadtreeSplit::new())));
 
@@ -261,7 +273,7 @@ fn calc_way_quadtrees_split_inmem(
             qts.clone(),
             qt_level,
             qt_buffer,
-            numchan,
+            numchan
         );
         //trim_memory();
     }
@@ -640,7 +652,9 @@ fn calc_quadtrees_simple(
     }
 
     println!("expecting {} rel nodes qts", nqts.len());
-
+    
+    
+    
     let qts = calc_way_quadtrees_simple(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
         as Box<dyn QuadtreeGetSet>;
     println!("have {} way quadtrees", qts.len());
@@ -671,7 +685,7 @@ fn calc_quadtrees_flatvec(
     lt: &mut LogTimes,
 ) {
     //trim_memory();
-
+    
     let qts = if qinmem {
         calc_way_quadtrees_split_inmem(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
             as Box<dyn QuadtreeGetSet>

@@ -278,7 +278,7 @@ where
 pub fn read_all_blocks_prog_fpos<R: Read, T, U>(
     fobj: &mut R,
     mut pp: Box<T>,
-    pb: &ProgBarWrap,
+    //pb: &ProgBarWrap,
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -287,10 +287,12 @@ where
     let ct = Checktime::new();
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        pb.prog(fb.pos as f64);
+        //pb.prog(fb.pos as f64);
+        crate::logging::messenger().progress_bytes(fb.pos);
         pp.call((i, fb));
     }
-    pb.finish();
+    //pb.finish();
+    crate::logging::messenger().finish_progress_bytes();
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
@@ -319,13 +321,14 @@ where
     U: Send + Sync + 'static,
 {
     let fl = file_length(fname);
-    let pb = ProgBarWrap::new_filebytes(fl);
-    pb.set_message(msg);
+    //let pb = ProgBarWrap::new_filebytes(fl);
+    //pb.set_message(msg);
+    crate::logging::messenger().start_progress_bytes(msg, fl);
 
     let fobj = File::open(fname).expect("failed to open file");
     let mut fbuf = BufReader::new(fobj);
 
-    read_all_blocks_prog_fpos(&mut fbuf, pp, &pb)
+    read_all_blocks_prog_fpos(&mut fbuf, pp)
 }
 
 pub fn read_all_blocks_with_progbar_stop<T, U>(

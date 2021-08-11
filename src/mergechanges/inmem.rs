@@ -1,5 +1,5 @@
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
-use crate::elements::{Bbox, Block, IdSet, PrimitiveBlock};
+use crate::elements::{Bbox, Block, IdSet, IdSetAll, PrimitiveBlock};
 use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
@@ -218,6 +218,7 @@ pub fn run_mergechanges_sort_inmem(
     inprfx: &str,
     outfn: &str,
     filter: Option<&str>,
+    filterobjs: bool,
     timestamp: Option<&str>,
     numchan: usize,
 ) -> Result<()> {
@@ -232,17 +233,24 @@ pub fn run_mergechanges_sort_inmem(
     let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()), timestamp)?;
     tx.add("get_file_locs");
 
-    let ids: Arc<dyn IdSet> = match filter {
-        Some(_) => {
-            let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
-            tx.add("prep_bbox_filter");
-            println!("have: {}", ids);
-            Arc::from(ids)
-        }
-        None => {
-            panic!("must have a filter");
-        }
-    };
+    let ids: Arc<dyn IdSet> = 
+        if filterobjs {
+            match filter {
+                Some(_) => {
+                    let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
+                    tx.add("prep_bbox_filter");
+                    println!("have: {}", ids);
+                    Arc::from(ids)
+                }
+                None => {
+                    panic!("must have a filter");
+                }
+            }
+        } else {
+            
+            Arc::new(IdSetAll())
+        };
+
 
     let pb = collect_blocks_filtered(&mut pfilelocs, ids.clone(), numchan)?;
     tx.add("collect_blocks_filtered");

@@ -1,5 +1,5 @@
 extern crate clap;
-
+extern crate lazy_static;
 use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
@@ -18,7 +18,99 @@ use osmquadtree::mergechanges::{
 };
 
 use std::io::{Error, ErrorKind, Result};
-use std::sync::Arc;
+use std::sync::{Arc,RwLock};
+
+
+use indicatif::{ProgressBar, ProgressStyle};
+
+pub struct MessengerDefault {
+    
+    pb: Arc<RwLock<Option<ProgressBar>>>
+}
+    
+impl MessengerDefault {
+    
+    pub fn new() -> MessengerDefault {
+        
+        MessengerDefault{ pb: Arc::new(RwLock::new(None)) }
+    }
+    
+    
+}
+
+impl osmquadtree::logging::Messenger for MessengerDefault {
+    
+    
+    fn message(&self, message: &str) {
+        
+        println!("{}", message);
+    }
+    
+    fn start_progress_percent(&self, message: &str) {
+        let pb = ProgressBar::new(1000);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
+            .progress_chars("#>-"));
+        pb.set_message(message);
+        
+        
+        *self.pb.write().unwrap() = Some(pb);
+        
+        
+    }
+    
+    
+    fn progress_percent(&self, percent: f64) {
+        
+        match *self.pb.read().unwrap() {
+            Some(ref pb) => { pb.set_position((percent*10.0) as u64); },
+            None => {}
+        }
+        
+    }
+    
+    fn finish_progress_percent(&self) {
+        match *self.pb.read().unwrap() {
+            Some(ref pb) => { pb.finish(); },
+            None => {}
+        }
+        *self.pb.write().unwrap() = None;
+    }
+    
+    
+    fn start_progress_bytes(&self, message: &str, total_bytes: u64) {
+        let pb = ProgressBar::new(total_bytes);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {bytes} / {total_bytes} ({eta_precise}) {msg}")
+            .progress_chars("#>-"));
+        
+        pb.set_message(message);
+        
+        *self.pb.write().unwrap() = Some(pb);
+    }
+    fn progress_bytes(&self, bytes: u64) {
+        
+        match *self.pb.read().unwrap() {
+            Some(ref pb) => { pb.set_position(bytes); },
+            None => {}
+        }
+        
+    }
+    fn finish_progress_bytes(&self) {
+        
+        
+        match *self.pb.read().unwrap() {
+            Some(ref pb) => { pb.finish(); },
+            None => {}
+        }
+        *self.pb.write().unwrap() = None;
+    }
+    
+    
+}
+    
+
+
 
 fn run_sortblocks(
     infn: &str,
@@ -130,6 +222,10 @@ const NUMCHAN_DEFAULT: usize = 4;
 
 fn main() {
     // basic app information
+    let msg = Box::new(MessengerDefault::new());
+    osmquadtree::logging::set_boxed_messenger(msg).expect("!!");
+    
+    
     let app = App::new("osmquadtree")
         .version("0.1")
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -247,6 +343,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
 
@@ -487,6 +584,7 @@ fn main() {
             filter.value_of("INPUT").unwrap(),
             filter.value_of("OUTFN").unwrap(),
             filter.value_of("FILTER"),
+            filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
