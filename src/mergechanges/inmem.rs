@@ -187,11 +187,11 @@ pub fn read_filter(filter: Option<&str>) -> Result<(Bbox, Option<Poly>)> {
 
 pub fn make_write_file(
     outfn: &str,
-    bbox: Bbox,
+    bbox: &Bbox,
     block_size: usize,
     numchan: usize,
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>> {
-    let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(&bbox)));
+    let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(bbox)));
 
     let pack: Box<
         dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>,
@@ -253,7 +253,7 @@ pub fn run_mergechanges_sort_inmem(
         pb.relations.len()
     );
 
-    let mut gb = make_write_file(outfn, bbox, 8000, numchan);
+    let mut gb = make_write_file(outfn, &bbox, 8000, numchan);
     gb.call(pb);
     let tm = gb.finish()?;
     tx.add("write");

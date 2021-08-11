@@ -437,7 +437,7 @@ pub fn run_mergechanges_sort(
         }
     }
 
-    let wf = make_write_file(outfn, bbox, 8000, numchan);
+    let wf = make_write_file(outfn, &bbox, 8000, numchan);
 
     let res = if numchan == 0 {
         read_temp_data(
@@ -489,7 +489,7 @@ pub fn run_mergechanges_sort_from_existing(
 
     tx.add("load filelocs");
 
-    let wf = make_write_file(outfn, bbox, 8000, numchan);
+    let wf = make_write_file(outfn, &bbox, 8000, numchan);
 
     let res = if numchan == 0 {
         read_temp_data(
