@@ -34,7 +34,7 @@ use crate::calcqts::write_quadtrees::{PackQuadtrees, WrapWriteFile, WriteQuadTre
 use crate::calcqts::{run_calcqts_inmem, NodeWayNodes, OtherData, Timings};
 
 use crate::logging::messenger;
-    
+use crate::{message,progress_percent};
 
 fn calc_way_quadtrees_simple(
     nodewaynodes: NodeWayNodes,
@@ -46,7 +46,7 @@ fn calc_way_quadtrees_simple(
 
     let t = read_nodewaynodes(nodewaynodes, wb, 0, 0, "calc_way_quadtrees_simple", numchan);
 
-    //println!("calc_way_quadtrees_simple {}", t);
+    //message!("calc_way_quadtrees_simple {}", t);
     messenger().message(&format!("calc_way_quadtrees_simple {}", t));
     let mut o: Option<Box<QuadtreeSimple>> = None;
     for (_, b) in t.others {
@@ -78,32 +78,25 @@ fn calc_and_write_qts(
         )))));
     }
     
-    messenger().start_progress_percent(&format!(
+    let pg = progress_percent!(&format!(
         "calc quadtrees {} tiles [{}mb]",
         tts.len(),
         tts.len() * WAY_SPLIT_VAL / 1024 / 1024
     ));
-    /*
-    let mut pg = ProgBarWrap::new(100);
-    pg.set_range(100);
-    pg.set_message(&format!(
-        "calc quadtrees {} tiles [{}mb]",
-        tts.len(),
-        tts.len() * WAY_SPLIT_VAL / 1024 / 1024
-    ));*/
+    
     let mut i = 0;
     let pf = 100.0 / (tts.len() as f64);
     for (_, t) in tts {
         //pg.prog((i as f64) * pf);
-        messenger().progress_percent((i as f64) * pf);
+        pg.progress_percent((i as f64) * pf);
         v[i % 4].call(t);
         i += 1;
     }
     for mut vi in v {
         vi.finish().expect("?");
     }
-    //pg.finish();
-    messenger().finish_progress_percent();
+    pg.finish();
+    
     
     i
 }
@@ -138,13 +131,14 @@ fn calc_and_store_qts(
             Box::new(move |mut t: Box<WayBoxesVec>| t.calculate_tile(qt_level, qt_buffer)),
         )))));
     }
-    messenger().start_progress_percent("calc quadtrees");
+    let pg = messenger().start_progress_percent("calc quadtrees");
     
     let mut i = 0;
     let pf = 100.0 / (tts.len() as f64);
     for (_, t) in tts {
         
-        messenger().progress_percent((i as f64) * pf);
+        //messenger().progress_percent((i as f64) * pf);
+        pg.progress_percent((i as f64) * pf);
         
 
         v[i % 4].call(t);
@@ -153,7 +147,8 @@ fn calc_and_store_qts(
     for mut vi in v {
         vi.finish().expect("?");
     }
-    messenger().finish_progress_percent();
+    pg.finish();
+    //messenger().finish_progress_percent();
     i
 }
 
@@ -398,7 +393,7 @@ where
                 for wi in n.ways {
                     match self.wayqts.as_ref().unwrap().get(wi) {
                         None => {
-                            println!("missing way {} for node {}", wi, n.id)
+                            message!("missing way {} for node {}", wi, n.id)
                         }
                         Some(qi) => {
                             q = q.common(&qi);
@@ -564,7 +559,7 @@ fn find_node_quadtrees_flatvec(
         numchan,
     );
 
-    println!("find_node_quadtrees_flatvec {}", t);
+    message!("find_node_quadtrees_flatvec {}", t);
     let mut a: Option<Box<WriteQuadTree>> = None;
     let mut b: Option<Box<dyn QuadtreeGetSet>> = None;
     let mut c: Option<Box<QuadtreeSimple>> = None;
@@ -607,7 +602,7 @@ fn find_node_quadtrees_simple(
         numchan,
     );
 
-    println!("find_node_quadtrees_simple {}", t);
+    message!("find_node_quadtrees_simple {}", t);
     let mut a: Option<Box<WriteQuadTree>> = None;
     let mut b: Option<Box<dyn QuadtreeGetSet>> = None;
     let mut c: Option<Box<QuadtreeSimple>> = None;
@@ -651,13 +646,13 @@ fn calc_quadtrees_simple(
         nqts.set(*b, Quadtree::new(-1));
     }
 
-    println!("expecting {} rel nodes qts", nqts.len());
+    message!("expecting {} rel nodes qts", nqts.len());
     
     
     
     let qts = calc_way_quadtrees_simple(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
         as Box<dyn QuadtreeGetSet>;
-    println!("have {} way quadtrees", qts.len());
+    message!("have {} way quadtrees", qts.len());
     lt.add("calc_way_quadtrees_simple");
     let writeqts = Box::new(WriteQuadTree::new(outfn));
     let (writeqts, qts, nqts) = find_node_quadtrees_simple(
@@ -694,7 +689,7 @@ fn calc_quadtrees_flatvec(
             as Box<dyn QuadtreeGetSet>
     };
     lt.add("calc_way_quadtrees_split");
-    println!("have {} way quadtrees", qts.len());
+    message!("have {} way quadtrees", qts.len());
     let relmfn = format!("{}-relmems", &outfn);
 
     let nqts = match &relmems {
@@ -705,7 +700,7 @@ fn calc_quadtrees_flatvec(
         }
     };
 
-    println!("expecting {} rel nodes qts", nqts.len());
+    message!("expecting {} rel nodes qts", nqts.len());
     lt.add("prep_relation_node_vals");
     let writeqts = Box::new(WriteQuadTree::new(outfn));
     let (writeqts, qts, nqts) = find_node_quadtrees_flatvec(
@@ -744,13 +739,13 @@ fn write_ways_rels(
     nqts: Box<QuadtreeSimple>,
     relmems: RelMems,
 ) {
-    println!("write {} way qts", qts.len());
+    message!("write {} way qts", qts.len());
     let mut allqts = PackQuadtrees::new(writeqts, 50000);
     for (w, q) in qts.items() {
         allqts.add_way(w, q);
     }
 
-    println!("prep rel qts");
+    message!("prep rel qts");
     let mut rqts = QuadtreeSimple::new();
 
     for (a, c) in &relmems.nodes {
@@ -759,12 +754,12 @@ fn write_ways_rels(
                 rqts.expand(*a, q);
             }
             None => {
-                println!("missing node {}", *c);
+                message!("missing node {}", *c);
             }
         }
     }
 
-    println!("have {} rel qts", rqts.len());
+    message!("have {} rel qts", rqts.len());
 
     let mut nmw = 0;
     for (a, c) in &relmems.ways {
@@ -774,28 +769,28 @@ fn write_ways_rels(
             }
             None => {
                 if nmw < 5 || (nmw % 18451) == 0 {
-                    println!("missing way {}: {} for {}", nmw, *c, *a);
+                    message!("missing way {}: {} for {}", nmw, *c, *a);
                 }
                 nmw += 1;
             }
         }
     }
-    println!("missing {} ways", nmw);
-    println!("have {} rel qts", rqts.len());
-    println!("and {} empty rels", relmems.empty_rels.len());
+    message!("missing {} ways", nmw);
+    message!("have {} rel qts", rqts.len());
+    message!("and {} empty rels", relmems.empty_rels.len());
     for r in &relmems.empty_rels {
         rqts.expand(*r, Quadtree::new(0));
     }
 
-    println!("and {} rel rels", relmems.relations.len());
+    message!("and {} rel rels", relmems.relations.len());
     let mut sn = 0;
     for i in 0..5 {
         for (a, b) in &relmems.relations {
             match rqts.get(*b) {
                 None => {
                     if i == 4 {
-                        //println!("no rel??");
-                        println!("{} missing rel {} for {}", sn, b, a);
+                        //message!("no rel??");
+                        message!("{} missing rel {} for {}", sn, b, a);
                         sn += 1;
                         rqts.expand(*a, Quadtree::new(0));
                     }
@@ -806,9 +801,9 @@ fn write_ways_rels(
             }
         }
     }
-    println!("{} missing parent rels?", sn);
+    message!("{} missing parent rels?", sn);
 
-    println!("have {} rel qts", rqts.len());
+    message!("have {} rel qts", rqts.len());
     let mut nneg = 0;
     for (r, q) in rqts.items() {
         if q.as_int() < 0 {
@@ -818,7 +813,7 @@ fn write_ways_rels(
             allqts.add_relation(r, q);
         }
     }
-    println!("replaced {} neg qt rels with 0", nneg);
+    message!("replaced {} neg qt rels with 0", nneg);
     allqts.finish();
 }
 
@@ -830,7 +825,7 @@ fn load_relmems(relmfn: &str, load_nodes: bool, load_others: bool) -> RelMems {
         relmems.unpack(&fb.data(), load_nodes, load_others);
     }
 
-    println!("read relmems: {}", relmems);
+    message!("read relmems: {}", relmems);
     relmems
 }
 
@@ -868,7 +863,7 @@ pub fn run_calcqts_load_existing(
     let nqts = prep_relation_node_vals(&relmems);
     drop(relmems);
 
-    println!("expecting {} rel nodes qts", nqts.len());
+    message!("expecting {} rel nodes qts", nqts.len());
     lt.add("prep_relation_node_vals");
 
     let nodewaynodes = NodeWayNodes::Seperate(
@@ -896,7 +891,7 @@ pub fn run_calcqts_load_existing(
     let qts = calc_way_quadtrees_split_inmem(nodewaynodes.clone(), qt_level, qt_buffer, numchan)
         as Box<dyn QuadtreeGetSet>;
 
-    println!("have {} way quadtrees", qts.len());
+    message!("have {} way quadtrees", qts.len());
 
     let writeqts = Box::new(WriteQuadTree::new(&outfn));
     let (writeqts, qts, nqts) = find_node_quadtrees_flatvec(
@@ -912,7 +907,7 @@ pub fn run_calcqts_load_existing(
     let relmems = load_relmems(&relmfn, true, true);
     write_ways_rels(writeqts, qts, nqts, relmems);
     */
-    println!("{}", lt);
+    message!("{}", lt);
     Ok(())
 }
 
@@ -932,12 +927,12 @@ pub fn run_calcqts_prelim(fname: &str, outfn: Option<&str>, numchan: usize) -> R
     let relmfn = format!("{}-relmems", &outfn);
     write_relmems(relmems, &relmfn)?;
 
-    println!("stop reading {} after {}", &fname, first_waytile_pos + 1);
+    message!("stop reading {} after {}", &fname, first_waytile_pos + 1);
 
     write_waynode_sorted_resort(waynodevals, outfn);
     lt.add("write_waynode_sorted_resort");
 
-    println!("{}", lt);
+    message!("{}", lt);
     Ok(())
 }
 
@@ -1010,7 +1005,7 @@ pub fn run_calcqts(
 
     lt.add("prep_way_nodes");
 
-    println!("stop reading {} after {}", &fname, first_waytile_pos + 1);
+    message!("stop reading {} after {}", &fname, first_waytile_pos + 1);
 
     //trim_memory();
     if use_simple {
@@ -1046,6 +1041,6 @@ pub fn run_calcqts(
             &mut lt,
         );
     }
-    println!("{}", lt);
+    message!("{}", lt);
     Ok(())
 }

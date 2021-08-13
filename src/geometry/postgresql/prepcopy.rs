@@ -725,8 +725,8 @@ pub fn pack_geometry_block<W: Write, A: Fn(&GeometryType) -> Vec<usize> + ?Sized
                 }
                 //Err(_) => { errs+=1; }
                 Err(e) => {
-                    println!("{:?}", e);
-                    panic!("");
+                    
+                    panic!("{:?}", e);
                 }
             }
         }

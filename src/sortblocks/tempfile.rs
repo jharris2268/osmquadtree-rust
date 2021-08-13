@@ -10,7 +10,7 @@ use crate::elements::{ PrimitiveBlock};
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks_with_progbar, read_file_block_with_pos,
-    unpack_file_block, FileBlock, ProgBarWrap,
+    unpack_file_block, FileBlock,
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{
@@ -19,7 +19,7 @@ pub use crate::sortblocks::writepbf::{
 use crate::sortblocks::{FileLocs, OtherData, QuadtreeTree, TempData, Timings};
 
 use crate::utils::{LogTimes, ThreadTimer, Timer};
-
+use crate::{message,progress_bytes};
 use crate::sortblocks::sortblocks::{SortBlocks,CollectTemp};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -417,7 +417,7 @@ fn write_temp_blocks(
         &format!("write_temp_blocks to {}, numchan={}", tempfn, numchan),
     );
 
-    println!("write_temp_blocks {} {}", res, d);
+    message!("write_temp_blocks {} {}", res, d);
     //let mut groups: Option<Box<QuadtreeTree>> = None;
     let mut td: Option<TempData> = None;
     for (_, b) in std::mem::take(&mut res.others) {
@@ -526,8 +526,8 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                 .iter()
                 .map(|(_, x)| x.iter().map(|y| y.len() as u64).sum::<u64>())
                 .sum::<u64>();
-            let prog = ProgBarWrap::new_filebytes(tbl);
-            prog.set_message("read tempblocks from memory");
+            let prog = progress_bytes!("read tempblocks from memory", tbl);
+            
             let mut tl = 0;
             for (a, t) in tb {
                 let mut mm = Vec::new();
@@ -537,7 +537,7 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                     mm.push(unpack_file_block(0, &x)?);
                 }
 
-                prog.prog(tl as f64);
+                prog.progress_bytes(tl as u64);
                 out.call((a, mm));
             }
             prog.finish();
@@ -545,8 +545,8 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
         }
         TempData::TempFile((fname, locs)) => {
             let tbl = file_length(&fname);
-            let prog = ProgBarWrap::new_filebytes(tbl);
-            prog.set_message(&format!("read temp blocks from {}", fname));
+            let prog = progress_bytes!(&format!("read temp blocks from {}", fname), tbl);
+            
 
             let mut tl = 0;
             let mut fbuf = BufReader::new(File::open(&fname)?);
@@ -565,8 +565,7 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                 tbl += file_length(f);
             }
 
-            let prog = ProgBarWrap::new_filebytes(tbl);
-            prog.set_message(&format!("read temp blocks from {} files", parts.len()));
+            let prog = progress_bytes!(&format!("read temp blocks from {} files", parts.len()),tbl);
 
             let mut tl = 0;
             for (_, f, locs) in parts {
@@ -589,7 +588,7 @@ fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ 
     locs: Vec<(i64, Vec<(u64, u64)>)>,
     split_size: u64,
     tl: &mut u64,
-    prog: &ProgBarWrap,
+    prog: &Box<dyn crate::logging::ProgressBytes>,
     out: &mut Box<T>,
 ) -> io::Result<()> {
     let mut curr = Vec::new();
@@ -600,7 +599,7 @@ fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ 
         if curr_len >= split_size {
             for (k, (fbs, ll)) in read_blocks_parts(fbuf, &curr)? {
                 *tl += ll;
-                prog.prog(*tl as f64);
+                prog.progress_bytes(*tl);
                 out.call((k, fbs));
             }
             curr.clear();
@@ -610,7 +609,7 @@ fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ 
     if curr_len > 0 {
         for (k, (fbs, ll)) in read_blocks_parts(fbuf, &curr)? {
             *tl += ll;
-            prog.prog(*tl as f64);
+            prog.progress_bytes(*tl);
             out.call((k, fbs));
         }
     }
@@ -681,7 +680,7 @@ fn write_blocks_from_temp(
         read_temp_data(xx, cq, !keep_temps)
     }?;
 
-    println!("{}", t);
+    message!("{}", t);
     Ok(())
 }
 
@@ -760,7 +759,7 @@ pub fn sort_blocks(
     keep_temps: bool,
     lt: &mut LogTimes,
 ) -> io::Result<()> {
-    println!(
+    message!(
         "sort_blocks({},{},{},{},{},{},{},{},{},{})",
         infn,
         qtsfn,
@@ -793,7 +792,7 @@ pub fn sort_blocks(
         TempData::TempFile((fname, locs)) => {
             let nl: usize = locs.iter().map(|(_, y)| y.len()).sum();
             let nb: u64 = locs.iter().map(|(_, y)| y).flatten().map(|(_, b)| b).sum();
-            println!(
+            message!(
                 "temp file {}, {} tiles {} locs {} bytes",
                 fname,
                 locs.len(),
@@ -807,7 +806,7 @@ pub fn sort_blocks(
         TempData::TempBlocks(data) => {
             let nl: usize = data.iter().map(|(_, y)| y.len()).sum();
             let nb: usize = data.iter().map(|(_, y)| y).flatten().map(|x| x.len()).sum();
-            println!(
+            message!(
                 "temp blocks {} tiles, {} blobs {} bytes",
                 data.len(),
                 nl,
@@ -830,7 +829,7 @@ pub fn sort_blocks(
                 .flatten()
                 .map(|(_, b)| b)
                 .sum();
-            println!(
+            message!(
                 "temp files {} files, {} tiles {} locs {} bytes",
                 parts.len(),
                 nk,

@@ -107,7 +107,7 @@ impl HeaderBlock {
                         std::str::from_utf8(d).expect("!")
                     ))?;
                 }
-                _ => println!("?? {:?}", x),
+                _ => { return Err(Error::new(ErrorKind::Other, format!("?? {:?}", x))); },
             }
         }
         Ok(res)

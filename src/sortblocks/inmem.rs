@@ -13,7 +13,7 @@ use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
 use crate::utils::{LogTimes, Timer};
-
+use crate::message;
 use crate::sortblocks::sortblocks::SortBlocks;
 
 struct CollectBlocks {
@@ -85,7 +85,7 @@ fn get_blocks(
             _ => {}
         }
     }
-    println!(
+    message!(
         "\n{:8.3}s Total, {} [{} blocks]",
         d,
         res,
@@ -123,7 +123,7 @@ fn write_blocks(
         b.end_date = timestamp;
         wq.call(b);
     }
-    println!("{}", wq.finish()?);
+    message!("{}", wq.finish()?);
     Ok(())
 }
 
@@ -142,13 +142,13 @@ pub fn sort_blocks_inmem(
         writeln!(&outf, "{};{};{}", g.qt, g.weight, g.total)?;
     }
 
-    println!(
+    message!(
         "call get_blocks({}, {}, {}, {})",
         infn, qtsfn, groups, numchan
     );
     let blocks = get_blocks(infn, qtsfn, groups, numchan)?;
     lt.add("read data");
-    println!(
+    message!(
         "call write_blocks({}, {}, {}, {})",
         outfn,
         blocks.len(),

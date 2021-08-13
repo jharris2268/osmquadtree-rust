@@ -5,6 +5,7 @@ use crate::pbfformat::{pack_file_block, HeaderType};
 
 
 use crate::calcqts::{OtherData, Timings};
+use crate::message;
 
 use std::io::Result;
 
@@ -140,7 +141,7 @@ impl CallFinish for WriteQuadTree {
         }
 
         //let x = self.out.finish()?;
-        println!("{} written, [{} bytes]", self.numwritten, byteswritten);
+        message!("{} written, [{} bytes]", self.numwritten, byteswritten);
 
         Ok(r)
     }

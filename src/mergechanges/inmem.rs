@@ -3,11 +3,11 @@ use crate::elements::{Bbox, Block, IdSet, IdSetAll, PrimitiveBlock};
 use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
-use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock, ProgBarWrap};
+use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock};
 use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
 use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
-
+use crate::{message,progress_percent};
 use std::io::Result;
 use std::sync::Arc;
 
@@ -61,9 +61,7 @@ pub fn collect_blocks_filtered(
     ids: Arc<dyn IdSet>,
     numchan: usize,
 ) -> Result<PrimitiveBlock> {
-    let mut pb = ProgBarWrap::new(100);
-    pb.set_range(100);
-    pb.set_message("merge blocks");
+    let pb = progress_percent!("merge blocks");
 
     let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
         if numchan == 0 {
@@ -82,8 +80,8 @@ pub fn collect_blocks_filtered(
             Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())))
         };
 
-    let (tm, _) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, conv, &pb);
-    pb.finish();
+    let (tm, _) = read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, conv, pb);
+    //pb.finish();
 
     let mut res = PrimitiveBlock::new(0, 0);
     for (_, x) in tm.others {
@@ -159,7 +157,7 @@ where
                 .call(std::mem::replace(&mut self.curr, PrimitiveBlock::new(0, 0)));
         }
         self.tm += tx.since();
-        //println!("filtered {} rels", nr);
+        //message!("filtered {} rels", nr);
         let mut tms = self.out.finish()?;
         tms.add("GroupTiles", self.tm);
         Ok(tms)
@@ -239,7 +237,7 @@ pub fn run_mergechanges_sort_inmem(
                 Some(_) => {
                     let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
                     tx.add("prep_bbox_filter");
-                    println!("have: {}", ids);
+                    message!("have: {}", ids);
                     Arc::from(ids)
                 }
                 None => {
@@ -254,7 +252,7 @@ pub fn run_mergechanges_sort_inmem(
 
     let pb = collect_blocks_filtered(&mut pfilelocs, ids.clone(), numchan)?;
     tx.add("collect_blocks_filtered");
-    println!(
+    message!(
         "have {} nodes, {} ways, {} relations",
         pb.nodes.len(),
         pb.ways.len(),
@@ -265,7 +263,7 @@ pub fn run_mergechanges_sort_inmem(
     gb.call(pb);
     let tm = gb.finish()?;
     tx.add("write");
-    println!("{}", tm);
-    println!("{}", tx);
+    message!("{}", tm);
+    message!("{}", tx);
     Ok(())
 }

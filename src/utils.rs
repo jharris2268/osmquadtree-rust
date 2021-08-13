@@ -1,6 +1,6 @@
 use std::fmt;
 use std::io::{Error, ErrorKind, Result};
-
+use crate::message;
 
 fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64) * 1.0 + (dur.subsec_nanos() as f64) * 0.000000001
@@ -121,7 +121,7 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
             return Ok(tm.timestamp());
         }
         Err(e) => {
-            println!("{:?}", e)
+            message!("{:?}", e)
         }
     }
     return Err(Error::new(

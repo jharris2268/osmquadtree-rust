@@ -4,7 +4,8 @@ use std::io;
 use std::iter::Iterator;
 
 use crate::elements::Quadtree;
-use crate::pbfformat::ProgBarWrap;
+use crate::progress_percent;
+
 
 #[derive(Copy, Clone)]
 pub struct QuadtreeTreeItem {
@@ -353,9 +354,7 @@ pub fn find_tree_groups(
     target: i64,
     absmintarget: i64,
 ) -> io::Result<Box<QuadtreeTree>> {
-    let mut pb = ProgBarWrap::new(100);
-    pb.set_message("find_tree_groups");
-    pb.set_range(100);
+    let pb = progress_percent!("find_tree_groups");
     let pf = 100.0 / (tree.total_weight() as f64);
 
     let mut res = Box::new(QuadtreeTree::new());
@@ -365,7 +364,7 @@ pub fn find_tree_groups(
 
     let mut all = Vec::new();
     while tree.total_weight() > 0 {
-        pb.prog(100.0 - pf * (tree.total_weight() as f64));
+        pb.progress_percent(100.0 - pf * (tree.total_weight() as f64));
         let vv = find_within(&tree, mintarget, maxtarget, absmintarget);
 
         if vv.is_empty() {
@@ -384,7 +383,7 @@ pub fn find_tree_groups(
     all.sort();
     for (a, b) in all {
         if b >= (u32::MAX as i64) {
-            println!("add {} {}??", a, b);
+            panic!("can't add {} to {}??", a, b);
         }
         res.add(&a, b as u32);
     }

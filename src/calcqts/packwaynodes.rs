@@ -11,7 +11,7 @@ use crate::pbfformat::{
 };
 
 use crate::utils::ThreadTimer;
-
+use crate::message;
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
 use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings, WayNodeVals};
 
@@ -547,7 +547,7 @@ where
                 .expect("failed to read block");
 
             if !mb.ways.is_empty() && self.first_waytile_pos.is_none() {
-                //println!("\nfound {} ways @ {}", mb.ways.len(), fb.pos);
+                //message!("\nfound {} ways @ {}", mb.ways.len(), fb.pos);
                 self.first_waytile_pos = Some(fb.pos)
             }
 
@@ -679,7 +679,7 @@ fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals, u64) {
 }
 
 pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals, u64)> {
-    println!("prep_way_nodes({},{})", infn, numchan);
+    message!("prep_way_nodes({},{})", infn, numchan);
 
     let (split, limit) = (1 << 22, 1 << 14);
 
@@ -703,7 +703,7 @@ pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVal
         }
     };
     let (tt, _) = read_all_blocks_with_progbar(infn, pwn, &progmsg);
-    println!("{}", tt);
+    message!("{}", tt);
     Ok(get_relmems_waynodes(tt))
 }
 pub fn prep_way_nodes_tempfile(
@@ -711,7 +711,7 @@ pub fn prep_way_nodes_tempfile(
     outfn: &str,
     numchan: usize,
 ) -> Result<(RelMems, WayNodeVals, u64)> {
-    println!("prep_way_nodes_tempfile({},{},{})", infn, outfn, numchan);
+    message!("prep_way_nodes_tempfile({},{},{})", infn, outfn, numchan);
 
     let (split, limit) = (1 << 24, 1 << 16);
 
@@ -743,6 +743,6 @@ pub fn prep_way_nodes_tempfile(
         }
     };
     let (tt, _) = read_all_blocks_with_progbar(infn, pwn, &progmsg);
-    println!("{}", tt);
+    message!("{}", tt);
     Ok(get_relmems_waynodes(tt))
 }

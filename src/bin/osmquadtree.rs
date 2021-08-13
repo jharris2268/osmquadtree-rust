@@ -1,5 +1,5 @@
 extern crate clap;
-extern crate lazy_static;
+
 use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use osmquadtree::count::run_count;
@@ -16,69 +16,22 @@ use osmquadtree::mergechanges::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
     run_mergechanges_sort_inmem,
 };
-
+use osmquadtree::message;
 use std::io::{Error, ErrorKind, Result};
-use std::sync::{Arc,RwLock};
+use std::sync::Arc;
 
 
 use indicatif::{ProgressBar, ProgressStyle};
+use osmquadtree::logging::{ProgressBytes,ProgressPercent,Messenger};
 
-pub struct MessengerDefault {
-    
-    pb: Arc<RwLock<Option<ProgressBar>>>
-}
-    
-impl MessengerDefault {
-    
-    pub fn new() -> MessengerDefault {
-        
-        MessengerDefault{ pb: Arc::new(RwLock::new(None)) }
-    }
-    
-    
+
+
+pub struct ProgressBytesDefault {
+    pb: ProgressBar
 }
 
-impl osmquadtree::logging::Messenger for MessengerDefault {
-    
-    
-    fn message(&self, message: &str) {
-        
-        println!("{}", message);
-    }
-    
-    fn start_progress_percent(&self, message: &str) {
-        let pb = ProgressBar::new(1000);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
-            .progress_chars("#>-"));
-        pb.set_message(message);
-        
-        
-        *self.pb.write().unwrap() = Some(pb);
-        
-        
-    }
-    
-    
-    fn progress_percent(&self, percent: f64) {
-        
-        match *self.pb.read().unwrap() {
-            Some(ref pb) => { pb.set_position((percent*10.0) as u64); },
-            None => {}
-        }
-        
-    }
-    
-    fn finish_progress_percent(&self) {
-        match *self.pb.read().unwrap() {
-            Some(ref pb) => { pb.finish(); },
-            None => {}
-        }
-        *self.pb.write().unwrap() = None;
-    }
-    
-    
-    fn start_progress_bytes(&self, message: &str, total_bytes: u64) {
+impl ProgressBytesDefault {
+    pub fn new(message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
         let pb = ProgressBar::new(total_bytes);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {bytes} / {total_bytes} ({eta_precise}) {msg}")
@@ -86,27 +39,94 @@ impl osmquadtree::logging::Messenger for MessengerDefault {
         
         pb.set_message(message);
         
-        *self.pb.write().unwrap() = Some(pb);
+        Box::new(ProgressBytesDefault{pb: pb})
     }
+}
+
+impl ProgressBytes for ProgressBytesDefault {
+    fn change_message(&self, new_message: &str) {
+        self.pb.set_message(new_message);
+    }
+    
+    
     fn progress_bytes(&self, bytes: u64) {
         
-        match *self.pb.read().unwrap() {
-            Some(ref pb) => { pb.set_position(bytes); },
-            None => {}
-        }
+        self.pb.set_position(bytes);
         
     }
-    fn finish_progress_bytes(&self) {
+    fn finish(&self) {
         
+        self.pb.finish();
         
-        match *self.pb.read().unwrap() {
-            Some(ref pb) => { pb.finish(); },
-            None => {}
-        }
-        *self.pb.write().unwrap() = None;
+    }
+}
+
+pub struct ProgressPercentDefault {
+    pb: ProgressBar
+}
+
+impl ProgressPercentDefault {
+    pub fn new(message: &str) -> Box<dyn ProgressPercent> {
+                
+        let pb = ProgressBar::new(1000);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
+            .progress_chars("#>-"));
+        pb.set_message(message);
+        
+        Box::new(ProgressPercentDefault{pb: pb})
+    }
+}
+
+impl ProgressPercent for ProgressPercentDefault {
+    fn change_message(&self, new_message: &str) {
+        self.pb.set_message(new_message);
+    }
+    
+    fn progress_percent(&self, percent: f64) {
+        
+        self.pb.set_position((percent*10.0) as u64);
+        
+    }
+    fn finish(&self) {
+        
+        self.pb.finish();
+        
+    }
+}
+pub struct MessengerDefault;
+    
+impl MessengerDefault {
+    
+    pub fn new() -> MessengerDefault {
+        
+        MessengerDefault
     }
     
     
+}
+
+impl Messenger for MessengerDefault {
+    
+    
+    fn message(&self, message: &str) {
+        let lns = message.split("\n");
+        for (i,l) in lns.enumerate() {
+            println!("{} {}", (if i==0 { "MSG:" } else { "    "}), l);
+        }
+    }
+    
+    fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent> {
+        
+        ProgressPercentDefault::new(message)
+    }
+    fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
+        
+        ProgressBytesDefault::new(message, total_bytes)
+    }
+    
+        
+        
 }
     
 
@@ -161,7 +181,7 @@ fn run_sortblocks(
         &qtsfn, numchan, maxdepth, target, mintarget, &mut lt,
     )?);
 
-    println!("groups: {} {}", groups.len(), groups.total_weight());
+    message!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
         limit = 30000000usize / (groups.len() / (splitat as usize));
         if tempinmem {
@@ -176,7 +196,7 @@ fn run_sortblocks(
             timestamp, keep_temps, &mut lt,
         )?;
     }
-    println!("{}", lt);
+    message!("{}", lt);
     Ok(())
 }
 
@@ -746,10 +766,10 @@ fn main() {
     match res {
         Ok(()) => {}
         Err(err) => {
-            println!("FAILED: {}", err);
-            println!("{}", String::from_utf8(help).unwrap());
+            message!("FAILED: {}", err);
+            message!("{}", String::from_utf8(help).unwrap());
         }
     }
 
-    //println!("count: {:?}", matches);
+    //message!("count: {:?}", matches);
 }

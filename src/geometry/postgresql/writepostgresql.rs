@@ -7,7 +7,7 @@ use crate::geometry::postgresql::{
 use crate::geometry::{GeometryBlock, OtherData, Timings};
 use crate::pbfformat::{pack_file_block, HeaderType, WriteFile};
 use crate::utils::{ThreadTimer, Timer};
-
+use crate::message;
 use simple_protocolbuffers::{pack_data, pack_value};
 
 use serde::Serialize;
@@ -309,9 +309,9 @@ impl WritePostgresData {
 
         for (i, qu) in before.iter().enumerate() {
             let tx = Timer::new();
-            print!("{} {:100.100} ", i, qu);
+            message!("{} {:100.100} ", i, qu);
             conn.execute(&qu)?;
-            println!(": {:.1}s", tx.since());
+            message!(": {:.1}s", tx.since());
         }
         let wpg = Box::new(WritePostgresData::new(conn, copy, exec_after, after));
         if newthread {
@@ -363,7 +363,7 @@ impl CallFinish for WritePostgresData {
         if self.exec_after {
             for (i, qu) in self.after.iter().enumerate() {
                 let tx = Timer::new();
-                print!("{} {:100.100} ", i, qu);
+                message!("{} {:100.100} ", i, qu);
                 std::io::stdout().flush().unwrap();
 
                 match conn.execute(&qu) {
@@ -372,12 +372,12 @@ impl CallFinish for WritePostgresData {
                         print!(" FAILED {:?}", e);
                     }
                 };
-                println!(": {:.1}s", tx.since());
+                message!(": {:.1}s", tx.since());
             }
         } else {
-            println!("indices:");
+            message!("indices:");
             for a in &self.after {
-                println!("{};", a);
+                message!("{};", a);
             }
         }
         tm.add("WritePostgresData::finish", txx.since());

@@ -6,6 +6,7 @@ use crate::geometry::{
     ComplicatedPolygonGeometry, GeometryStyle, OtherData, PolygonPart, Ring, RingPart, Timings,
     WorkingBlock,
 };
+use crate::message;
 use crate::utils::ThreadTimer;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -234,7 +235,7 @@ impl MultiPolygons {
                                     }
                                 }
                                 None => {
-                                    //println!("way object {} never added? [{:?}]", m.mem_ref, p.0);
+                                    //message!("way object {} never added? [{:?}]", m.mem_ref, p.0);
                                     self.wnas += 1;
                                     p.0.remove(&rel.id);
                                 }
@@ -361,11 +362,11 @@ impl MultiPolygons {
         for w in finished_ways {
             match self.pending_ways.remove_entry(&w) {
                 None => {
-                    println!("\nway not added {}\n", w);
+                    message!("\nway not added {}\n", w);
                 }
                 Some(pw) => match pw.1 .1 {
                     None => {
-                        println!("way not found.. {}", w);
+                        message!("way not found.. {}", w);
                     }
                     Some(_) => {
                         ways_finished += 1;
@@ -415,11 +416,11 @@ impl MultiPolygons {
         for w in finished_ways {
             match self.pending_ways.remove_entry(&w) {
                 None => {
-                    println!("\nway not added {}\n", w);
+                    message!("\nway not added {}\n", w);
                 }
                 Some(pw) => match pw.1 .1 {
                     None => {
-                        println!("way not found.. {}", w);
+                        message!("way not found.. {}", w);
                     }
                     Some(_) => {}
                 },

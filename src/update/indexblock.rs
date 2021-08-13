@@ -2,9 +2,9 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, Ca
 use crate::elements::{ElementType, IdSet, MinimalBlock, Quadtree};
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
-    read_all_blocks_with_progbar, FileBlock, ProgBarWrap,
+    read_all_blocks_with_progbar, FileBlock,
 };
-
+use crate::logging::ProgressPercent;
 use simple_protocolbuffers::{
     pack_data, pack_delta_int, pack_value, un_zig_zag, zig_zag, DeltaPackedInt, IterTags, PbfTag,
 };
@@ -215,7 +215,7 @@ pub fn check_index_file(
     indexfn: &str,
     idset: Arc<dyn IdSet>,
     numchan: usize,
-    pb: Option<&ProgBarWrap>,
+    pb: Option<(&Box<dyn ProgressPercent>,f64,f64)>
 ) -> Result<(Vec<Quadtree>, f64)> {
     let ca: CallFinishFileBlocks = if numchan == 0 {
         let ci = Box::new(CheckIndexFile::new(idset));
@@ -233,11 +233,11 @@ pub fn check_index_file(
 
     let (tm, x) = match pb {
         None => read_all_blocks(indexfn, ca),
-        Some(pb) => {
+        Some((pb,start_pc,end_pc)) => {
             let flen = file_length(indexfn);
             let f = File::open(indexfn).expect("fail");
             let mut fbuf = BufReader::new(f);
-            read_all_blocks_prog(&mut fbuf, flen, ca, pb, 100.0)
+            read_all_blocks_prog(&mut fbuf, flen, ca, pb, start_pc,end_pc)
         }
     };
 

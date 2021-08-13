@@ -7,7 +7,7 @@ use crate::elements::QuadtreeBlock;
 use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
 use crate::sortblocks::{find_tree_groups, QuadtreeTree};
 use crate::utils::{LogTimes, Timer};
-
+use crate::message;
 use crate::sortblocks::{OtherData, Timings};
 
 struct AddAll {
@@ -128,7 +128,7 @@ pub fn find_groups(
 
     let (mut t, _) = read_all_blocks_with_progbar(qtsfn, cc, "prepare quadtreetree");
 
-    println!("{}", t);
+    message!("{}", t);
 
     let mut tree: Option<Box<QuadtreeTree>> = None;
     for (_, b) in std::mem::take(&mut t.others) {
@@ -141,7 +141,7 @@ pub fn find_groups(
     }
 
     let tree = tree.unwrap();
-    println!("{}", tree);
+    message!("{}", tree);
     lt.add("prep tree");
     let res = find_tree_groups(tree, target, mintarget)?;
     lt.add("find groups");

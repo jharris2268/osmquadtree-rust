@@ -3,10 +3,10 @@ use crate::elements::{MinimalBlock, MinimalNode};
 use crate::pbfformat::{
     file_length, make_convert_minimal_block_parts, pack_file_block,
     read_all_blocks_parallel_with_progbar, read_all_blocks_with_progbar_stop,
-    read_file_block_with_pos, unpack_file_block, FileBlock, HeaderType, ProgBarWrap,
+    read_file_block_with_pos, unpack_file_block, FileBlock, HeaderType,
     ReadFileBlocks, WriteFile,
 };
-
+use crate::{message,progress_percent};
 use crate::utils::{Timer};
 
 use std::fmt;
@@ -101,7 +101,7 @@ pub fn write_waynode_sorted_resort(waynodevals: WayNodeVals, outfn: &str) -> Str
 
     let t = read_waynodevals(waynodevals, vvm).expect("?");
 
-    println!("{}", t);
+    message!("{}", t);
     waynodesfn
 }
 
@@ -111,17 +111,15 @@ fn read_waynodevals<T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType
 ) -> Result<Timings> {
     match waynodevals {
         WayNodeVals::PackedInMem(ww) => {
-            let mut pg = ProgBarWrap::new(100);
-            pg.set_range(100);
-            pg.set_message("write_waynode_sorted_resort");
-
+            let pg = progress_percent!("write_waynode_sorted_resort");
+            
             let pf = 100.0 / (ww.len() as f64);
             let mut i = 0.0;
 
             let mut curr = 0;
             let mut xx = Vec::new();
             for (a, b) in ww {
-                pg.prog(pf * i);
+                pg.progress_percent(pf * i);
                 if a != curr {
                     if !xx.is_empty() {
                         vvm.call((curr as usize, xx));
@@ -578,7 +576,7 @@ pub fn write_nodewaynode_file(nodewaynodes: NodeWayNodes, outfn: &str) -> NodeWa
             _ => {}
         }
     }
-    println!("write_nodewaynodevals: {}, {} bytes", t, nt);
+    message!("write_nodewaynodevals: {}, {} bytes", t, nt);
     NodeWayNodes::Combined(waynodesfn)
 }
 

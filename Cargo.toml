@@ -35,7 +35,7 @@ simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocol
 channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
 
 
-lazy_static = "1.4"
+#lazy_static = "1.4"
 
 [profile.release]
 #debug = true

@@ -18,7 +18,7 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, Me
 use crate::utils::{
     parse_timestamp, LogTimes, ThreadTimer,
 };
-
+use crate::message;
 use crate::elements::{Block, Quadtree};
 use crate::mergechanges::read_filter;
 
@@ -344,7 +344,7 @@ pub fn process_geometry(
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
 
-    println!("bbox={}, poly={:?}", bbox, poly);
+    message!("bbox={}, poly={:?}", bbox, poly);
 
     tx.add("read filter");
     let timestamp = match timestamp {
@@ -366,7 +366,7 @@ pub fn process_geometry(
     }
 
     let minzoom: Option<MinZoomSpec> = if find_minzoom {
-        println!("MinZoomSpec::default({}, {:?})", 5.0, max_minzoom);
+        message!("MinZoomSpec::default({}, {:?})", 5.0, max_minzoom);
         Some(MinZoomSpec::default(5.0, max_minzoom))
     } else {
         
@@ -492,18 +492,18 @@ pub fn process_geometry(
 
     tx.add("process_geometry");
 
-    println!("{}", tm);
+    message!("{}", tm);
     let mut all_tiles = BTreeMap::new();
     let mut tempdata: Option<TempData> = None;
     for (w, x) in tm.others {
         match x {
             OtherData::Messages(mm) => {
                 for m in mm {
-                    println!("{}: {}", w, m);
+                    message!("{}: {}", w, m);
                 }
             }
             OtherData::Errors(ee) => {
-                println!("{}: {} errors", w, ee.len());
+                message!("{}: {} errors", w, ee.len());
             }
             OtherData::GeometryBlocks(tiles) => {
                 all_tiles.extend(tiles);
@@ -535,6 +535,6 @@ pub fn process_geometry(
     }
     
 
-    println!("{}", tx);
+    message!("{}", tx);
     Ok(())
 }

@@ -13,7 +13,7 @@ use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings};
 
 use std::collections::BTreeMap;
 use std::io::{Error, ErrorKind, Result};
-
+use crate::message;
 pub struct CollectedData {
     pub nodes: BTreeMap<i64, (i32, i32)>,
     pub ways: BTreeMap<i64, Vec<i64>>,
@@ -124,7 +124,7 @@ pub fn run_calcqts_inmem(
         rd
     };
 
-    println!(
+    message!(
         "have {} nodes, {} ways, {} relations",
         data.nodes.len(),
         data.ways.len(),
@@ -148,7 +148,7 @@ pub fn run_calcqts_inmem(
         let q = Quadtree::calculate(&bx, qt_level, qt_buffer);
         wayqts.set(*w, q);
     }
-    println!("calculated {} way qts", wayqts.len());
+    message!("calculated {} way qts", wayqts.len());
 
     let mut nodeqts = QuadtreeSimple::new();
 
@@ -158,7 +158,7 @@ pub fn run_calcqts_inmem(
             nodeqts.expand(*r, q);
         }
     }
-    println!("calculated {} node qts from way qts", nodeqts.len());
+    message!("calculated {} node qts from way qts", nodeqts.len());
 
     for (n, (ln, lt)) in &data.nodes {
         if !nodeqts.has_value(*n) {
@@ -167,7 +167,7 @@ pub fn run_calcqts_inmem(
         }
     }
 
-    println!("have {} node qts", nodeqts.len());
+    message!("have {} node qts", nodeqts.len());
 
     let mut relrels = Vec::new();
 
@@ -209,7 +209,7 @@ pub fn run_calcqts_inmem(
         }
     }
 
-    println!("have {} relqts", relqts.len());
+    message!("have {} relqts", relqts.len());
 
     let writeqts = Box::new(WriteQuadTree::new(outfn));
 

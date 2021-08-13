@@ -17,6 +17,7 @@ use crate::update::{get_file_locs, ParallelFileLocs};
 use crate::utils::{
     parse_timestamp, LogTimes, ThreadTimer,
 };
+use crate::message;
 
 use std::collections::BTreeMap;
 use std::io::{Error, ErrorKind, Result};
@@ -302,7 +303,7 @@ pub fn write_temp_blocks(
             //read_all_blocks_parallel_prog(&mut pfilelocs.0, &pfilelocs.1, pc, &prog)
         };
     //prog.finish();
-    //println!("write_temp_blocks {} {}", res, d);
+    //message!("write_temp_blocks {} {}", res, d);
 
     let msg = format!("write_temp_blocks to {}, numchan={}", tempfn, numchan);
     let mut res = read_all_blocks_parallel_with_progbar(
@@ -348,7 +349,7 @@ pub fn run_mergechanges_sort(
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
 
-    println!("bbox={}, poly={:?}", bbox, poly);
+    message!("bbox={}, poly={:?}", bbox, poly);
 
     tx.add("read filter");
     let timestamp = match timestamp {
@@ -364,7 +365,7 @@ pub fn run_mergechanges_sort(
             if filter_objs {
                 let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
                 tx.add("prep_bbox_filter");
-                println!("have: {}", ids);
+                message!("have: {}", ids);
                 Arc::from(ids)
             } else {
                 Arc::new(IdSetAll())
@@ -402,7 +403,7 @@ pub fn run_mergechanges_sort(
     tx.add("write_temp_blocks");
     match &temps {
         TempData::TempFile((a, b)) => {
-            println!(
+            message!(
                 "wrote {} / {} blocks to {}",
                 b.len(),
                 b.iter().map(|(_, p)| { p.len() }).sum::<usize>(),
@@ -413,14 +414,14 @@ pub fn run_mergechanges_sort(
             }
         }
         TempData::TempBlocks(bl) => {
-            println!(
+            message!(
                 "have {} / {} temp blocks",
                 bl.len(),
                 bl.iter().map(|(_, p)| { p.len() }).sum::<usize>()
             );
         }
         TempData::TempFileSplit(parts) => {
-            println!(
+            message!(
                 "wrote {} files / {} blocks to {}-part-?.pbf",
                 parts.len(),
                 parts
@@ -464,11 +465,11 @@ pub fn run_mergechanges_sort(
             !keep_temps,
         )?
     };
-    println!("{}", res);
+    message!("{}", res);
 
     tx.add("write final");
 
-    println!("{}", tx);
+    message!("{}", tx);
 
     Ok(())
 }
@@ -516,11 +517,11 @@ pub fn run_mergechanges_sort_from_existing(
             false,
         )?
     };
-    println!("{}", res);
+    message!("{}", res);
 
     tx.add("write final");
 
-    println!("{}", tx);
+    message!("{}", tx);
 
     Ok(())
 }
@@ -536,7 +537,7 @@ pub fn run_mergechanges(
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
 
-    println!("bbox={}, poly={:?}", bbox, poly);
+    message!("bbox={}, poly={:?}", bbox, poly);
 
     tx.add("read filter");
     let timestamp = match timestamp {
@@ -551,7 +552,7 @@ pub fn run_mergechanges(
         (true, Some(_)) => {
             let ids = prep_bbox_filter(&mut pfilelocs, &bbox, &poly, numchan)?;
             tx.add("prep_bbox_filter");
-            println!("have: {}", ids);
+            message!("have: {}", ids);
             Arc::from(ids)
         }
         _ => Arc::new(IdSetAll()),
@@ -595,6 +596,6 @@ pub fn run_mergechanges(
     prog.finish();*/
     tx.add("write merged blocks");
 
-    println!("{}\n{}", tm, tx);
+    message!("{}\n{}", tm, tx);
     Ok(())
 }

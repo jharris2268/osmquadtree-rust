@@ -5,6 +5,7 @@ use crate::elements::{Bbox, Quadtree};
 use crate::pbfformat::HeaderBlock;
 use crate::pbfformat::{file_position, read_file_block};
 use crate::utils::parse_timestamp;
+use crate::message;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Result};
@@ -170,7 +171,7 @@ pub fn get_file_locs(
         locsv.push((a, c));
     }
 
-    println!(
+    message!(
         "{} files, {} / {} tiles, {:0.1} mb",
         fbufs.len(),
         locsv.len(),

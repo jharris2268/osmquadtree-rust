@@ -4,13 +4,13 @@ use crate::elements::{
 };
 use crate::pbfformat::{
     pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos, FileBlock, HeaderBlock,
-    ProgBarWrap,
 };
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
 use crate::utils::{ThreadTimer, Timer};
-
+use crate::{message,progress_percent};
+use crate::logging::{ProgressPercent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::File;
@@ -243,7 +243,9 @@ fn read_change_tiles(
     tiles: &BTreeSet<Quadtree>,
     idset: Arc<IdSetSet>,
     numchan: usize,
-    pb: &ProgBarWrap,
+    pb: &Box<dyn ProgressPercent>,
+    start_percent: f64,
+    end_percent: f64
 ) -> std::io::Result<(OrigData, f64)> {
     let ischange = fname.ends_with(".pbfc");
     let mut file = File::open(fname)?;
@@ -264,7 +266,7 @@ fn read_change_tiles(
     }
     let (mut tm, b) = if numchan == 0 {
         let convert = Box::new(ReadPB::new(ischange, idset));
-        read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb)
+        read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb, start_percent, end_percent)
     } else {
         let mut convs: Vec<
             Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<OrigData>>>,
@@ -276,7 +278,7 @@ fn read_change_tiles(
             )))));
         }
         let convsm = Box::new(CallbackMerge::new(convs, Box::new(MergeTimings::new())));
-        read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb)
+        read_all_blocks_locs_prog(&mut file, fname, locs, convsm, pb, start_percent, end_percent)
     };
 
     let mut tls = tm.others.pop().unwrap().1;
@@ -296,35 +298,33 @@ fn collect_existing(
     let mut total_scan = 0.0;
     let mut total_read = 0.0;
 
-    let mut pb = ProgBarWrap::new(147 + 388 + (filelist.len() as u64 - 1) * 2);
 
+    let pf = 100.0 / (147 + 388 + (filelist.len() as u64 - 1) * 2) as f64;
+    let pb = progress_percent!(&format!("read from {} files", filelist.len()));
+    
+    
+    
     for (i, fle) in filelist.iter().enumerate() {
         let nc = if i == 0 { numchan } else { 1 };
 
         let fnameidx = format!("{}{}-index.pbf", prfx, fle.filename);
 
-        if i == 0 {
-            pb.set_range(147);
+        let (start_percent, mid_percent, end_percent) = if i == 0 {
+            (0.0, 147.0 * pf, 535.0 * pf)
         } else {
-            pb.set_range(1);
-        }
-        pb.set_message(&format!("check_index {}", fnameidx));
-
-        let (a, c) = check_index_file(&fnameidx, idset.clone(), nc, Some(&pb))?;
+            ((533 + 2*i) as f64 * pf, (534 + 2*i) as f64 * pf, (535 + 2*i) as f64 * pf)
+        };
+        let (a, c) = check_index_file(&fnameidx, idset.clone(), nc, Some((&pb, start_percent, mid_percent)))?;
         total_scan += c;
-
+        
         let mut ctiles = BTreeSet::new();
         ctiles.extend(a);
 
         let fname = format!("{}{}", prfx, fle.filename);
-        if i == 0 {
-            pb.set_range(388);
-        } else {
-            pb.set_range(1);
-        }
-        pb.set_message(&format!("{}: {} tiles", &fname, ctiles.len()));
-
-        let (bb, t) = read_change_tiles(&fname, &ctiles, idset.clone(), nc, &pb)?;
+        
+        let (bb, t) = read_change_tiles(&fname, &ctiles, idset.clone(), nc, &pb, mid_percent, end_percent)?;
+        
+        
         total_read += t;
         origdata.extend(bb);
     }
@@ -423,7 +423,7 @@ fn calc_qts(
                 match changeblock.nodes.get(&r) {
                     Some(n) => {
                         if n.changetype == Changetype::Delete {
-                            println!(
+                            message!(
                                 "[{}] missing node deleted {:?} from {}",
                                 missing_nodes,
                                 n,
@@ -438,7 +438,7 @@ fn calc_qts(
                         }
                     }
                     None => {
-                        println!("[{}] missing node {} from {:?}", missing_nodes, r, w);
+                        message!("[{}] missing node {} from {:?}", missing_nodes, r, w);
                         missing_nodes += 1;
                         if missing_nodes > MISSING_NODES_LIMIT {
                             return Err(Error::new(ErrorKind::Other, "too many missing nodes"));
@@ -471,7 +471,7 @@ fn calc_qts(
             if r.members.is_empty() {
                 orig_data.set_relation(&r.id, Quadtree::new(0));
             } else if r.members.len() == 1 && r.members[0].mem_type == ElementType::Relation && r.members[0].mem_ref == r.id {
-                println!("circular relation {}", r.id);
+                message!("circular relation {}", r.id);
                 orig_data.set_relation(&r.id, Quadtree::new(0));
             } else {
                 let mut qt = Quadtree::empty();
@@ -484,7 +484,7 @@ fn calc_qts(
                                 qt = qt.common(&q);
                             }
                             None => {
-                                println!(
+                                message!(
                                     "missing member {:?} {} for relation {}",
                                     m.mem_type, m.mem_ref, r.id
                                 );
@@ -508,7 +508,7 @@ fn calc_qts(
                     if i == 4 {
                         
                         
-                        println!(
+                        message!(
                             "missing member {:?} {} for relation {}",
                             ElementType::Relation,
                             b,
@@ -576,7 +576,7 @@ fn calc_qts(
                 res.add_node(na.unwrap(), n2);
             }
             (rt, ra, rq) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, n, q, na);
+                message!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, n, q, na);
             }
         }
     }
@@ -615,7 +615,7 @@ fn calc_qts(
                 res.add_way(na.unwrap(), w2);
             }
             (rt, ra, rq) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, w, q, na);
+                message!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, w, q, na);
             }
         }
     }
@@ -653,12 +653,12 @@ fn calc_qts(
                 res.add_relation(na.unwrap(), r2);
             }
             (rt, ra, rq) => {
-                println!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, r, q, na);
+                message!("dont understand {} {:?} {:?} {:?} {:?} {:?}", rt, ra, rq, r, q, na);
             }
         }
     }
 
-    println!(
+    message!(
         "{} unneeded extra nodes, {} create_delete",
         unneeded_extra_nodes, create_delete
     );
@@ -689,7 +689,7 @@ fn prep_idset(changeblock: &ChangeBlock) -> Arc<IdSetSet> {
     for (_, n) in changeblock.nodes.iter() {
         idset.nodes.insert(n.id);
     }
-    println!("{}", idset);
+    message!("{}", idset);
     for (_, w) in changeblock.ways.iter() {
         idset.ways.insert(w.id);
         for n in w.refs.iter() {
@@ -699,7 +699,7 @@ fn prep_idset(changeblock: &ChangeBlock) -> Arc<IdSetSet> {
             }
         }
     }
-    println!("{}", idset);
+    message!("{}", idset);
 
     for (_, r) in changeblock.relations.iter() {
         idset.relations.insert(r.id);
@@ -717,7 +717,7 @@ fn prep_idset(changeblock: &ChangeBlock) -> Arc<IdSetSet> {
             }
         }
     }
-    println!("{}", idset);
+    message!("{}", idset);
     Arc::<IdSetSet>::from(idset)
 }
 
@@ -749,7 +749,7 @@ pub fn find_update(
     let (mut orig_data, _, _) = collect_existing(prfx, filelist, idset, numchan)?;
 
     let c = tx.since();
-    println!("{}", orig_data);
+    message!("{}", orig_data);
 
     let on = std::mem::take(&mut orig_data.othernodes);
     for (a, b) in on {
@@ -766,12 +766,12 @@ pub fn find_update(
 
     let tree = prep_tree(prfx, filelist)?;
     let e = tx.since();
-    println!("{}", tree);
+    message!("{}", tree);
 
     let tiles = calc_qts(&changeblock, &mut orig_data, &tree, 18, 0.05, prev_ts, ts)?;
     let f = tx.since();
 
-    println!(
+    message!(
         "{} tiles, {} objs",
         tiles.len(),
         tiles.iter().map(|(_, b)| { b.nodes.len() }).sum::<usize>()
@@ -787,7 +787,7 @@ pub fn find_update(
 
     let g = tx.since();
 
-    println!("read xml: {:5.1}s\nprep_idset: {:5.1}s\ncollect_existing: {:5.1}s\nextend nodes: {:5.1}s\nprep_tree: {:5.1}s\ncalc_qts: {:5.1}s\npack and write{:5.1}s\nTOTAL: {:5.1}s",a,b-a,c-b,d-c,e-d,f-e,g-f,g);
+    message!("read xml: {:5.1}s\nprep_idset: {:5.1}s\ncollect_existing: {:5.1}s\nextend nodes: {:5.1}s\nprep_tree: {:5.1}s\ncalc_qts: {:5.1}s\npack and write{:5.1}s\nTOTAL: {:5.1}s",a,b-a,c-b,d-c,e-d,f-e,g-f,g);
 
     Ok((tx.since(), tiles.len()))
 }

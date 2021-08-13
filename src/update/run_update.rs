@@ -2,7 +2,7 @@ use crate::update::{find_update, read_filelist, write_filelist, write_index_file
 use crate::utils::{
     date_string, parse_timestamp, timestamp_string, timestamp_string_alt, LogTimes,
 };
-
+use crate::message;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result, Write};
@@ -48,7 +48,7 @@ fn fetch_new_diffs(
 ) -> Result<()> {
     let (state, timestamp) = get_state(source_prfx, None)?;
 
-    println!(
+    message!(
         "lastest state {} {}, current diff {}, add {}",
         state,
         timestamp,
@@ -230,7 +230,7 @@ pub fn run_update_initial(
     let num_tiles = write_index_file(&infn2, &outfn, numchan);
 
     let settings = Settings::new(initial_state, &diffs_location);
-    println!("{:?}", settings);
+    message!("{:?}", settings);
     settings.write(prfx);
 
     write_filelist(
@@ -263,7 +263,7 @@ pub fn run_update(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Re
     if limit > 0 && to_update.len() > limit {
         to_update = to_update[..limit].to_vec();
     }
-    println!(
+    message!(
         "have {} in filelist, {} to update",
         filelist.len(),
         to_update.len()
@@ -272,7 +272,7 @@ pub fn run_update(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Re
     if !to_update.is_empty() {
         for (chgfn, state, ts) in to_update {
             let fname = format!("{}{}.pbfc", date_string(ts), suffix);
-            println!(
+            message!(
                 "call find_update('{}',{} entries,'{}', {}, {}, {}, {})",
                 prfx,
                 filelist.len(),
@@ -298,6 +298,6 @@ pub fn run_update(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Re
             write_filelist(prfx, &filelist);
         }
     }
-    println!("{}", logtimes);
+    message!("{}", logtimes);
     Ok(())
 }

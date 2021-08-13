@@ -10,7 +10,7 @@ use crate::calcqts::{OtherData, Timings};
 use crate::elements::{Bbox, Quadtree, QuadtreeBlock};
 use std::collections::BTreeMap;
 use std::io::Result;
-
+use crate::message;
 pub struct WayBoxesSimple {
     boxes: BTreeMap<i64, Bbox>,
     tm: f64,
@@ -141,7 +141,7 @@ impl WayBoxesVec {
             }
         }
         if t.len() != self.c {
-            println!(
+            message!(
                 "?? tile {} {} != {}",
                 self.off >> WAY_SPLIT_SHIFT,
                 self.c,
@@ -169,7 +169,7 @@ impl WayBoxesVec {
             }
         }
         if t.count != self.c {
-            println!(
+            message!(
                 "?? tile {} {} != {}",
                 self.off >> WAY_SPLIT_SHIFT,
                 self.c,

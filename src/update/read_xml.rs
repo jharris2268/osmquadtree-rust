@@ -3,7 +3,7 @@ use std::io::{BufRead, Error, ErrorKind, Result};
 
 use crate::elements::{Changetype, ElementType, Info, Member, Node, Relation, Tag, Way};
 use crate::utils::{as_int, Checktime};
-
+use crate::message;
 use chrono::NaiveDateTime;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
@@ -11,20 +11,19 @@ use quick_xml::Reader;
 const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
 fn read_timestamp(ts: &str) -> Result<i64> {
-    //println!("ts: {}, TIMEFORMAT: {}, TIMEFORMAT_ALT: {}", ts, TIMEFORMAT, TIMEFORMAT_ALT);
+    //message!("ts: {}, TIMEFORMAT: {}, TIMEFORMAT_ALT: {}", ts, TIMEFORMAT, TIMEFORMAT_ALT);
     match NaiveDateTime::parse_from_str(ts, TIMEFORMAT) {
         Ok(tm) => {
-            return Ok(tm.timestamp());
+            Ok(tm.timestamp())
         }
-        Err(e) => {
-            println!("{:?}", e)
+        Err(_) => {
+            Err(Error::new(
+                ErrorKind::Other,
+                format!("timestamp {} not in format \"{}\"", ts, TIMEFORMAT),
+            ))
         }
     }
 
-    return Err(Error::new(
-        ErrorKind::Other,
-        format!("timestamp not in format \"{}\"", TIMEFORMAT),
-    ));
 }
 
 fn ele_str(w: &str, e: &BytesStart) -> quick_xml::Result<String> {
@@ -642,7 +641,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
             Ok(Event::Start(ref e)) => {
                 match cktm.checktime() {
                     Some(d) => {
-                        println!(
+                        message!(
                             "{:5.1}s {} {}",
                             d,
                             reader.buffer_position(),
@@ -686,7 +685,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
             Ok(Event::Empty(ref e)) => {
                 match cktm.checktime() {
                     Some(d) => {
-                        println!(
+                        message!(
                             "{:5.1}s {} {}",
                             d,
                             reader.buffer_position(),
@@ -777,7 +776,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
         }
         buf.clear();
     }
-    println!(
+    message!(
         "{:5.1}s: {} nodes, {} ways, {} relations",
         cktm.gettime(),
         res.nodes.len(),

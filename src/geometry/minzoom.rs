@@ -5,6 +5,7 @@ use crate::geometry::{GeometryBlock, OtherData, Timings, WorkingBlock};
 use crate::utils::ThreadTimer;
 use std::collections::BTreeMap;
 use std::io::{Error, ErrorKind, Read, Result};
+use crate::message;
 
 fn get_type(t: &str, line: &usize) -> Result<usize> {
     if t == "0" {
@@ -116,7 +117,7 @@ impl MinZoomSpec {
 
                     if typ == 0 {
                         if &key[0..4] == "addr" {
-                            println!("{},{},{},{}", key, val, zoom, table);
+                            message!("{},{},{},{}", key, val, zoom, table);
                         }
                         res.points.insert(Tag::new(key, val), (zoom, table));
                     } else if typ == 1 {

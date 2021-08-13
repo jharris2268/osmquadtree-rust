@@ -64,35 +64,121 @@ pub fn messenger() -> &'static dyn Messenger {
     }
 }
 
+pub trait ProgressBytes {
+    fn change_message(&self, new_message: &str);
+    fn progress_bytes(&self, bytes: u64);
+    fn finish(&self);
+}
+
+pub trait ProgressPercent {
+    fn change_message(&self, new_message: &str);
+    fn progress_percent(&self, percent: f64);
+    fn finish(&self);
+}
+
+pub struct ProgressPercentPartial<'a, T: ProgressPercent + ?Sized> {
+    inner: &'a Box<T>,
+    start: f64,
+    end: f64
+    
+}
+
+impl<'a, T> ProgressPercent for ProgressPercentPartial<'a, T> 
+    where T: ProgressPercent + ?Sized {
+        
+    fn change_message(&self, new_message: &str) { self.inner.change_message(new_message); }
+    fn progress_percent(&self, percent: f64) {
+        self.inner.progress_percent(percent * (self.end-self.start) + self.start);
+    }
+    fn finish(&self) {}
+    
+}
+
+impl<'a, T> ProgressPercentPartial<'a, T>
+    where T: ProgressPercent + ?Sized {
+
+    pub fn new(inner: &'a Box<T>, start: f64, end: f64) -> ProgressPercentPartial<'a, T> {
+        ProgressPercentPartial{inner, start, end}
+    }
+}
+
 
 pub trait Messenger {
     fn message(&self, message: &str);
     
-    fn start_progress_bytes(&self, message: &str, total_bytes: u64);
-    fn progress_bytes(&self, bytes: u64);
-    fn finish_progress_bytes(&self);
+    fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes>;
+    //fn progress_bytes(&self, bytes: u64);
+    //fn finish_progress_bytes(&self);
     
     
-    fn start_progress_percent(&self, message: &str);
-    fn progress_percent(&self, percent: f64);
-    fn finish_progress_percent(&self);
+    fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent>;
+    //fn progress_percent(&self, percent: f64);
+    //fn finish_progress_percent(&self);
 }
+
+struct NopProgressBytes;
+
+impl ProgressBytes for NopProgressBytes {
+    fn change_message(&self, _new_message: &str) {}
+    fn progress_bytes(&self, _bytes: u64) {}
+    fn finish(&self) {}
+}
+
+struct NopProgressPercent;
+impl ProgressPercent for NopProgressPercent {
+    fn change_message(&self, _new_message: &str) {}
+    fn progress_percent(&self, _percent: f64) {}
+    fn finish(&self) {}
+}
+
 
 
 struct NopMessenger;
 impl Messenger for NopMessenger {
     fn message(&self, _message: &str) {}
     
-    fn start_progress_bytes(&self, _message: &str, _total_bytes: u64) {}
-    fn progress_bytes(&self, _bytes: u64) {}
-    fn finish_progress_bytes(&self) {}
+    fn start_progress_bytes(&self, _message: &str, _total_bytes: u64) -> Box<dyn ProgressBytes> {
+        Box::new(NopProgressBytes)
+    }
+    //fn progress_bytes(&self, _bytes: u64) {}
+    //fn finish_progress_bytes(&self) {}
     
     
-    fn start_progress_percent(&self, _message: &str) {}
-    fn progress_percent(&self, _percent: f64) {}
-    fn finish_progress_percent(&self) {}
+    fn start_progress_percent(&self, _message: &str)  -> Box<dyn ProgressPercent> {
+        Box::new(NopProgressPercent)
+    }
+    //fn progress_percent(&self, _percent: f64) {}
+    //fn finish_progress_percent(&self) {}
 }
 
 
+#[macro_export]
+macro_rules! message {
+    ($($arg:tt)+) => ({
+        $crate::logging::messenger().message(
+                &format!($($arg)+),
+            );
+        
+    });
+    
+}
+
+#[macro_export]
+macro_rules! progress_bytes {
+    ($msg:expr, $total_bytes:expr) => ({
+        $crate::logging::messenger().start_progress_bytes($msg, $total_bytes)
+        
+    });
+    
+}
+
+#[macro_export]
+macro_rules! progress_percent {
+    ($msg:expr) => ({
+        $crate::logging::messenger().start_progress_percent($msg)
+        
+    });
+    
+}
 
     

@@ -10,7 +10,9 @@ use channelled_callbacks::CallFinish;
 use simple_protocolbuffers as spb;
 
 use crate::utils::Checktime;
-use indicatif::{ProgressBar, ProgressStyle};
+use crate::logging::{ProgressPercent,ProgressBytes};
+use crate::{progress_bytes};
+//use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn read_file_data<R: Read>(file: &mut R, nbytes: u64) -> io::Result<Vec<u8>> {
     let mut res = vec![0u8; nbytes as usize];
@@ -88,7 +90,7 @@ pub fn read_file_block_with_pos<F: Read>(
         match tg {
             spb::PbfTag::Value(3, v) => ln = v,
             spb::PbfTag::Data(1, d) => fb.block_type = std::str::from_utf8(&d).unwrap().to_string(),
-            _ => println!("?? {:?}", tg),
+            _ => { return Err(Error::new(ErrorKind::Other, format!("?? wrong tag @ {} {:?}", pos, tg))); },
         }
     }
     fb.len = 4 + l + ln;
@@ -101,7 +103,7 @@ pub fn read_file_block_with_pos<F: Read>(
             spb::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
             spb::PbfTag::Value(2, _) => fb.is_comp = true,
             spb::PbfTag::Data(3, d) => fb.data_raw = d.to_vec(),
-            _ => println!("?? {:?}", tg),
+            _ => { return Err(Error::new(ErrorKind::Other, format!("?? wrong tag @ {} {:?}", pos, tg))); },
         }
     }
 
@@ -201,7 +203,7 @@ where
                         //at end of file
                     }
                     _ => {
-                        println!("failed to read {}", err);
+                        panic!("failed to read {}", err);
                     }
                 }
                 None
@@ -252,8 +254,9 @@ pub fn read_all_blocks_prog<R: Read, T, U>(
     fobj: &mut R,
     flen: u64,
     mut pp: Box<T>,
-    pb: &ProgBarWrap,
-    pfs: f64,
+    pb: &Box<dyn ProgressPercent>,
+    start_percent: f64,
+    end_percent: f64
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -261,24 +264,25 @@ where
 {
     let ct = Checktime::new();
 
-    let pf = pfs / (flen as f64);
+    let pf = (end_percent-start_percent) / (flen as f64);
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        pb.prog((fb.pos as f64) * pf);
+        pb.progress_percent((fb.pos as f64) * pf + start_percent);
 
         pp.call((i, fb));
     }
-    pb.prog(pfs);
+    pb.progress_percent(end_percent);
     let r = pp.finish().expect("finish failed");
 
-    pb.prog(100.0);
+    
     (r, ct.gettime())
 }
 
 pub fn read_all_blocks_prog_fpos<R: Read, T, U>(
     fobj: &mut R,
     mut pp: Box<T>,
-    //pb: &ProgBarWrap,
+    pg: Box<dyn ProgressBytes>
+    
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -287,12 +291,12 @@ where
     let ct = Checktime::new();
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
-        //pb.prog(fb.pos as f64);
-        crate::logging::messenger().progress_bytes(fb.pos);
+        
+        pg.progress_bytes(fb.pos);
         pp.call((i, fb));
     }
-    //pb.finish();
-    crate::logging::messenger().finish_progress_bytes();
+    
+    pg.finish();
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
@@ -300,7 +304,7 @@ pub fn read_all_blocks_prog_fpos_stop<R: Read, T, U>(
     fobj: &mut R,
     stop_at: u64,
     mut pp: Box<T>,
-    pb: &ProgBarWrap,
+    pb: Box<dyn ProgressBytes>,
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -308,7 +312,7 @@ where
 {
     let ct = Checktime::new();
     for (i, fb) in ReadFileBlocks::new_at_start_with_stop(fobj, stop_at).enumerate() {
-        pb.prog(fb.pos as f64);
+        pb.progress_bytes(fb.pos);
         pp.call((i, fb));
     }
     pb.finish();
@@ -323,12 +327,12 @@ where
     let fl = file_length(fname);
     //let pb = ProgBarWrap::new_filebytes(fl);
     //pb.set_message(msg);
-    crate::logging::messenger().start_progress_bytes(msg, fl);
+    let pg = progress_bytes!(msg, fl);
 
     let fobj = File::open(fname).expect("failed to open file");
     let mut fbuf = BufReader::new(fobj);
 
-    read_all_blocks_prog_fpos(&mut fbuf, pp)
+    read_all_blocks_prog_fpos(&mut fbuf, pp, pg)
 }
 
 pub fn read_all_blocks_with_progbar_stop<T, U>(
@@ -341,15 +345,15 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    let pb = ProgBarWrap::new_filebytes(stop_after);
-    pb.set_message(msg);
+    let pb = progress_bytes!(msg, stop_after);
+    
 
     let fobj = File::open(fname).expect("failed to open file");
     let mut fbuf = BufReader::new(fobj);
 
-    read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, &pb)
+    read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, pb)
 }
-
+/*
 pub struct ProgBarWrap {
     start: u64,
     end: u64,
@@ -405,13 +409,15 @@ impl ProgBarWrap {
         self.pb.finish();
     }
 }
-
+*/
 pub fn read_all_blocks_locs_prog<R, T, U>(
     fobj: &mut R,
     fname: &str,
     locs: Vec<u64>,
     mut pp: Box<T>,
-    pb: &ProgBarWrap,
+    pb: &Box<dyn ProgressPercent>,
+    start_percent: f64,
+    end_percent: f64
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
@@ -420,7 +426,7 @@ where
 {
     let ct = Checktime::new();
 
-    let pf = 100.0 / (locs.len() as f64);
+    let pf = (end_percent-start_percent) / (locs.len() as f64);
 
     for (i, l) in locs.iter().enumerate() {
         fobj.seek(SeekFrom::Start(*l))
@@ -428,11 +434,11 @@ where
         let (_, fb) = read_file_block_with_pos(fobj, *l)
             .expect(&format!("failed to read {} @ {}", fname, *l));
 
-        pb.prog(((i + 1) as f64) * pf);
+        pb.progress_percent(((i + 1) as f64) * pf + start_percent);
 
         pp.call((i, fb));
     }
-    pb.prog(100.0);
+    pb.progress_percent(end_percent);
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
@@ -440,7 +446,7 @@ pub fn read_all_blocks_parallel_prog<T, U, F, Q>(
     fbufs: &mut Vec<F>,
     locs: &Vec<(Q, Vec<(usize, u64)>)>,
     mut pp: Box<T>,
-    pb: &ProgBarWrap,
+    pb: Box<dyn ProgressPercent>,
 ) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = U> + ?Sized,
@@ -470,11 +476,11 @@ where
             fposes[*a] = x;
         }
 
-        pb.prog(((j + 1) as f64) * pf);
+        pb.progress_percent(((j + 1) as f64) * pf);
 
         pp.call((j, fbs));
     }
-    pb.prog(100.0);
+    pb.finish();
     (pp.finish().expect("finish failed"), ct.gettime())
 }
 
@@ -495,8 +501,8 @@ where
         fposes.push(file_position(f).expect("!"));
     }
 
-    let pb = ProgBarWrap::new_filebytes(total_len);
-    pb.set_message(msg);
+    let pb = progress_bytes!(msg,total_len);
+    
 
     let mut pos = 0;
     for (j, (_, ll)) in locs.iter().enumerate() {
@@ -517,7 +523,7 @@ where
             pos += x - *b;
         }
 
-        pb.prog(pos as f64);
+        pb.progress_bytes(pos);
 
         pp.call((j, fbs));
     }

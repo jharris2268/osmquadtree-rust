@@ -5,7 +5,7 @@ use crate::pbfformat::{HeaderType, FileBlock, WriteFile, pack_file_block,};
 use crate::update::ParallelFileLocs;
 use crate::geometry::{GeometryBlock,CallFinishGeometryBlock,Timings,OtherData};
 use crate::elements::{Bbox,};
-
+use crate::message;
 use std::io::Result;
 use std::sync::Arc;
 
@@ -120,7 +120,7 @@ impl<T> CallFinish for WrapWriteTemp<T>
                 crate::sortblocks::OtherData::TempData(td) => {
                     res.add_other(&a,OtherData::TempData(td));
                 },
-                _ => { println!("!! {}", a); }
+                _ => { message!("!! {}", a); }
             }
         }
         Ok(res)
@@ -316,7 +316,7 @@ pub(crate) fn write_temp_geometry(outfn: &str, bbox: &Bbox, tempdata: TempData, 
     
     let t = read_temp_data(tempdata, cq, true)?;
     
-    println!("{}", t);
+    message!("{}", t);
     Ok(())
     
 }
