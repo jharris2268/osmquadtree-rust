@@ -248,9 +248,19 @@ pub fn run_mergechanges_sort_inmem(
             
             Arc::new(IdSetAll())
         };
+    
+    call_mergechanges_sort_inmem(&mut pfilelocs, outfn, ids, &bbox, tx, numchan)
+}
 
+pub fn call_mergechanges_sort_inmem(
+    pfilelocs: &mut ParallelFileLocs,
+    outfn: &str,
+    ids: Arc<dyn IdSet>,
+    bbox: &Bbox,
+    mut tx: LogTimes,
+    numchan: usize) -> Result<()> {
 
-    let pb = collect_blocks_filtered(&mut pfilelocs, ids.clone(), numchan)?;
+    let pb = collect_blocks_filtered(pfilelocs, ids.clone(), numchan)?;
     tx.add("collect_blocks_filtered");
     message!(
         "have {} nodes, {} ways, {} relations",

@@ -22,7 +22,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use simple_protocolbuffers::read_delta_packed_int;
 
-use crate::utils::timestamp_string;
+use crate::utils::{parse_timestamp,timestamp_string};
 
 use crate::message;
 
@@ -726,6 +726,7 @@ pub fn call_count(fname: &str,
     use_primitive: bool,
     numchan: usize,
     filter_in: Option<&str>,
+    tstamp: Option<&str>,
 ) -> Result<CountAny> {
     
     let filter = match filter_in {
@@ -767,7 +768,7 @@ pub fn call_count(fname: &str,
     } else if std::fs::metadata(fname)
         .expect("failed to open file")
         .is_file()
-        && filter.is_none()
+        && filter.is_none() && tstamp.is_none()
     {
         let mut cc = Count::new();
 
@@ -839,7 +840,13 @@ pub fn call_count(fname: &str,
         }
         Ok(CountAny::Count(cc))
     } else {
-        let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, None).expect("?");
+        
+        let tstamp = match tstamp {
+            Some(t) => Some(parse_timestamp(t)?),
+            None => None,
+        };
+        
+        let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, tstamp).expect("?");
 
         let mut pps: Vec<
             Box<
@@ -893,11 +900,12 @@ pub fn run_count(
     use_primitive: bool,
     numchan: usize,
     filter_in: Option<&str>,
+    tstamp: Option<&str>
 ) -> Result<()> {
     
     
     //crate::logging::messenger().message(&format!("{}", call_count(fname,use_primitive, numchan, filter_in)?));
-    message!("{}", call_count(fname,use_primitive, numchan, filter_in)?);
+    message!("{}", call_count(fname,use_primitive, numchan, filter_in, tstamp)?);
     Ok(())
 }
     

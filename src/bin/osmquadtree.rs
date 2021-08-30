@@ -255,8 +255,10 @@ fn main() {
                 .about("uses osmquadtree to read an open street map pbf file and report basic information")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("PRIMITIVE").short("-p").long("--primitive").help("reads full primitiveblock data"))
-                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
+                .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
         )
         .subcommand(
             SubCommand::with_name("calcqts")
@@ -294,7 +296,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("specify output filename, defaults to <INPUT>-blocks.pbf"))
-                .arg(Arg::with_name("QT_MAX_LEVEL").short("-q").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
+                .arg(Arg::with_name("QT_MAX_LEVEL").short("-l").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("TARGET").short("-t").long("--target").takes_value(true).help("block target size, defaults to 40000"))
                 .arg(Arg::with_name("MIN_TARGET").short("-m").long("--min_target").takes_value(true).help("block min target size, defaults to TARGET/2"))
 
@@ -308,7 +310,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").takes_value(true).help("specify output filename, defaults to <INPUT>-blocks.pbf"))
-                .arg(Arg::with_name("QT_MAX_LEVEL").short("-q").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
+                .arg(Arg::with_name("QT_MAX_LEVEL").short("-l").long("--qt_max_level").takes_value(true).help("maximum qt level, defaults to 17"))
                 .arg(Arg::with_name("TARGET").short("-t").long("--target").takes_value(true).help("block target size, defaults to 40000"))
                 .arg(Arg::with_name("MIN_TARGET").short("-m").long("--min_target").takes_value(true).help("block min target size, defaults to TARGET/2"))
 
@@ -393,7 +395,7 @@ fn main() {
                 .about("prep_bbox_filter")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
-                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
+                .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
@@ -513,6 +515,7 @@ fn main() {
             count.is_present("PRIMITIVE"),
             value_t!(count, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             count.value_of("FILTER"),
+            count.value_of("TIMESTAMP"),
         ),
         ("calcqts", Some(calcqts)) => {
             run_calcqts(

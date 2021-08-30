@@ -46,7 +46,8 @@ impl FileBlock {
 
         let mut comp = Vec::new();
         let mut xx = ZlibDecoder::new(&self.data_raw[..]);
-        xx.read_to_end(&mut comp).unwrap();
+        
+        xx.read_to_end(&mut comp).expect(&format!("failed to decompress data at pos {}", self.pos));
         comp
     }
 }

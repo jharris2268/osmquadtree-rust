@@ -24,6 +24,37 @@ use crate::sortblocks::sortblocks::{SortBlocks,CollectTemp};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+
+pub struct WriteTempNull;
+
+impl WriteTempNull {
+    pub fn new() -> WriteTempNull {
+        WriteTempNull
+    }
+}
+
+impl CallFinish for WriteTempNull {
+    
+    type CallType = Vec<(i64, Vec<u8>)>;
+    type ReturnType = Timings;
+
+    fn call(&mut self, _temps: Vec<(i64, Vec<u8>)>) {
+        
+    }
+
+    fn finish(&mut self) -> io::Result<Timings> {
+        let mut tms = Timings::new();
+        tms.add_other("tempdata", OtherData::TempData(TempData::Null));
+        Ok(tms)
+        
+    }
+}
+
+    
+        
+    
+    
+
 pub struct WriteTempData {
     tempd: BTreeMap<i64, Vec<Vec<u8>>>,
     tm: f64,
@@ -364,17 +395,20 @@ fn write_temp_blocks(
         }
     };*/
     
-    let wt: Box<dyn CallFinish<CallType = Vec<(i64,Vec<u8>)>, ReturnType = Timings>> = if tempfn == "NONE" {
-        Box::new(WriteTempData::new())
-    } else {
-        if flen < 2 * 1024 * 1024 * 1024 {
-            Box::new(WriteTempFile::new(tempfn))
+    let wt: Box<dyn CallFinish<CallType = Vec<(i64,Vec<u8>)>, ReturnType = Timings>> = 
+        if tempfn == "NONE" {
+            Box::new(WriteTempData::new())
+        } else if tempfn == "NULL" {
+            Box::new(WriteTempNull::new())
         } else {
-            let nsp = (flen / (1 * 1024 * 1024 * 1024)) as i64;
-            let sp = groups.len() as i64 / splitat / nsp;
-            Box::new(WriteTempFileSplit::new(tempfn, sp))
-        }
-    };
+            if flen < 2 * 1024 * 1024 * 1024 {
+                Box::new(WriteTempFile::new(tempfn))
+            } else {
+                let nsp = (flen / (1 * 1024 * 1024 * 1024)) as i64;
+                let sp = groups.len() as i64 / splitat / nsp;
+                Box::new(WriteTempFileSplit::new(tempfn, sp))
+            }
+        };
 
     let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
         == 0
@@ -521,6 +555,11 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
     //let mut ct = Checktime::with_threshold(2.0);
 
     match xx {
+        TempData::Null => {
+            message!("nothing to read!");
+            out.finish()
+        },
+        
         TempData::TempBlocks(tb) => {
             let tbl = tb
                 .iter()
@@ -789,6 +828,12 @@ pub fn sort_blocks(
     )?;
 
     match &xx {
+        TempData::Null => {
+            message!("TempData::Null");
+            
+        },
+        
+        
         TempData::TempFile((fname, locs)) => {
             let nl: usize = locs.iter().map(|(_, y)| y.len()).sum();
             let nb: u64 = locs.iter().map(|(_, y)| y).flatten().map(|(_, b)| b).sum();

@@ -402,6 +402,9 @@ where
                 }
                 q
             };
+            if q.as_int()<0 {
+                message!("\n\n?? node {} {} {} qt {}??\n\n", n.id, n.lon, n.lat, q.as_int());
+            }
             self.nodeqts.as_mut().unwrap().expand_if_present(n.id, &q);
             //bl.add_node(n.id,q);
             self.curr.add_node(n.id, q);
@@ -983,15 +986,15 @@ pub fn run_calcqts(
     if use_simple && fl > 8192 {
         return Err(Error::new(
             ErrorKind::Other,
-            "run_calcqts use_simple=true only suitable for pbf files smaller than 8gb",
+            "run_calcqts mode = SIMPLE only suitable for pbf files smaller than 8gb",
         ));
     }
-    if !use_simple && fl < 2048 {
+    /*if !use_simple && fl < 2048 {
         return Err(Error::new(
             ErrorKind::Other,
-            "run_calcqts use_simple=false has no advantages for pbf files larger than 2gb",
+            "run_calcqts mode = FLATVEC has no advantages for pbf files smaller than 2gb",
         ));
-    }
+    }*/
     let relmfn = format!("{}-relmems", &outfn);
 
     let (relmems, waynodevals, first_waytile_pos) = if fl > 20480 {

@@ -164,7 +164,15 @@ impl WayBoxesVec {
                     maxlevel,
                     buffer,
                 );
-
+                if q.as_int()<0 {
+                    message!("\n\n?? way {} [{} {} {} {}] qt {}??\n\n", 
+                    (self.off >> WAY_SPLIT_SHIFT)+i as i64,
+                    self.minlon[i],
+                    self.minlat[i],
+                    self.maxlon[i],
+                    self.maxlat[i],
+                    q.as_int());
+                }
                 t.set(i, q.as_int());
             }
         }

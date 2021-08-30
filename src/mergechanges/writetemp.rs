@@ -10,7 +10,7 @@ use crate::pbfformat::{read_all_blocks_parallel_with_progbar, FileBlock};
 use crate::sortblocks::{make_packprimblock_many, make_packprimblock_qtindex};
 use crate::sortblocks::{
     read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
-    write_tempfilesplit_locs, WriteTempData, WriteTempFile, WriteTempFileSplit/*, WriteTempWhich*/,
+    write_tempfilesplit_locs, WriteTempData, WriteTempFile, WriteTempFileSplit, WriteTempNull
 };
 use crate::sortblocks::{OtherData, TempData, Timings, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
@@ -257,18 +257,21 @@ pub fn write_temp_blocks(
     fsplit: i64,
     numchan: usize,
 ) -> Result<TempData> {
-    let wt: Box<dyn CallFinish< CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>> = if tempfn == "NONE" {
-        Box::new(WriteTempData::new())
-    } else {
-        if fsplit == 0 {
-            Box::new(WriteTempFile::new(tempfn.clone()))
+    let wt: Box<dyn CallFinish< CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>> = 
+        if tempfn == "NONE" {
+            Box::new(WriteTempData::new())
+        } else if tempfn == "NULL" {
+            Box::new(WriteTempNull::new())
         } else {
-            Box::new(WriteTempFileSplit::new(
-                tempfn.clone(),
-                fsplit,
-            ))
-        }
-    };
+            if fsplit == 0 {
+                Box::new(WriteTempFile::new(tempfn.clone()))
+            } else {
+                Box::new(WriteTempFileSplit::new(
+                    tempfn.clone(),
+                    fsplit,
+                ))
+            }
+        };
 
     /*let mut prog = ProgBarWrap::new(100);
     prog.set_range(100);
@@ -382,7 +385,7 @@ pub fn run_mergechanges_sort(
     };
 
     let mut limit = 1500000;
-    if tempfn == "NONE" {
+    if tempfn == "NONE" || tempfn == "NULL" {
         limit = 200;
     }
     let fsplit = if filter.is_none() || pfilelocs.2 > 4 * 1024 * 1024 * 1024 {
@@ -391,10 +394,26 @@ pub fn run_mergechanges_sort(
         0
     };
 
+    call_mergechanges_sort(&mut pfilelocs, outfn, &tempfn, limit, fsplit, ids, &bbox, keep_temps, tx, numchan)
+}
+
+pub fn call_mergechanges_sort(
+    pfilelocs: &mut ParallelFileLocs,
+    outfn: &str,
+    tempfn: &str,
+    limit: usize,
+    fsplit: i64,
+    ids: Arc<dyn IdSet>,
+    bbox: &Bbox,
+    keep_temps: bool,
+    mut tx: LogTimes,
+    numchan: usize) -> Result<()> {
+
+
     let temps = write_temp_blocks(
-        &mut pfilelocs,
+        pfilelocs,
         ids.clone(),
-        &tempfn,
+        tempfn,
         limit,
         (1i64 << 21, 1i64 << 18, 1i64 << 17),
         fsplit,
@@ -402,6 +421,10 @@ pub fn run_mergechanges_sort(
     )?;
     tx.add("write_temp_blocks");
     match &temps {
+        TempData::Null => {
+            message!("TempData::Null");
+            
+        },
         TempData::TempFile((a, b)) => {
             message!(
                 "wrote {} / {} blocks to {}",
@@ -438,7 +461,7 @@ pub fn run_mergechanges_sort(
         }
     }
 
-    let wf = make_write_file(outfn, &bbox, 8000, numchan);
+    let wf = make_write_file(outfn, bbox, 8000, numchan);
 
     let res = if numchan == 0 {
         read_temp_data(
@@ -557,8 +580,19 @@ pub fn run_mergechanges(
         }
         _ => Arc::new(IdSetAll()),
     };
+    
+    call_mergechanges(&mut pfilelocs, outfn, ids, &bbox, tx, numchan)
+}
 
-    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
+pub fn call_mergechanges(
+    pfilelocs: &mut ParallelFileLocs,
+    outfn: &str,
+    ids: Arc<dyn IdSet>,
+    bbox: &Bbox,
+    mut tx: LogTimes,
+    numchan: usize) -> Result<()> {
+    
+    let wf = Box::new(WriteFile::with_bbox(&outfn, HeaderType::ExternalLocs, Some(bbox)));
 
     let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
         if numchan == 0 {
