@@ -7,6 +7,7 @@ pub use crate::pbfformat::convertblocks::{
     make_convert_minimal_block, make_convert_minimal_block_parts, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
     make_read_primitive_blocks_combine_call_all_idset,
+    read_primitive_blocks_combine, read_minimal_blocks_combine
 };
 
 pub use crate::pbfformat::header_block::{
