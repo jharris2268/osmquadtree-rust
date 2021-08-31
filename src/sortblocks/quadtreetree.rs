@@ -99,6 +99,11 @@ impl<'a> QuadtreeTree {
     }
 
     pub fn len(&self) -> usize {
+        self.items.len()
+    
+    }
+    
+    pub fn num_entries(&self) -> usize {
         self.count
     }
 
