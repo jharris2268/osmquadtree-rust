@@ -14,7 +14,7 @@ use crate::pbfformat::{
 use crate::utils::ThreadTimer;
 
 use crate::elements::{
-    Bbox, Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node, PrimitiveBlock,
+    Changetype, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay, Node, PrimitiveBlock,
     Relation, Way,
 };
 use std::io::BufReader;
@@ -729,9 +729,14 @@ pub fn call_count(fname: &str,
     tstamp: Option<&str>,
 ) -> Result<CountAny> {
     
+    
+    
     let filter = match filter_in {
         None => None,
-        Some(s) => Some(Bbox::from_str(s)?),
+        Some(s) => {
+            let (bbox, _) = crate::mergechanges::read_filter(Some(s))?;
+            Some(bbox)
+        }
     };
 
     let f = File::open(fname).expect("file not present");

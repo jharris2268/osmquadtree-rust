@@ -17,52 +17,82 @@ use std::sync::Arc;
 type Timings = channelled_callbacks::Timings<Arc<dyn IdSet>>;
 
 use regex::Regex;
-const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$";
+//const REGEX_STR: &str = r"^\s*(\-?\d\.\d+E[-|+]\d+)\s+(\-?\d\.\d+E[-|+]\d+)\s*$";
+//const REGEX_STR: &str = r"^\s*(\-?\d*\.\d+(E[-|+]\d+)?)\s+(\-?\d*\.\d+(E[-|+]\d+)?)\s*$";
+
 
 #[derive(Debug,Clone)]
 pub struct Poly {
     pub vertsx: Vec<f64>,
     pub vertsy: Vec<f64>,
+    pub name: String,
 }
 
 impl Poly {
-    pub fn new(vertsx: Vec<f64>, vertsy: Vec<f64>) -> Poly {
+    pub fn new(vertsx: Vec<f64>, vertsy: Vec<f64>, name: String) -> Poly {
         Poly {
             vertsx: vertsx,
             vertsy: vertsy,
+            name: name
         }
     }
 
     pub fn from_file(fname: &str) -> Result<Poly> {
-        let re = Regex::new(REGEX_STR).unwrap();
+        //let re = Regex::new(REGEX_STR).unwrap();
+        let re_name = Regex::new(r"[a-z]+").unwrap();
         let mut vertsx = Vec::new();
         let mut vertsy = Vec::new();
+        let mut name=String::from("");
         for ln in BufReader::new(File::open(fname)?).lines() {
-            let ln = ln?;
+            let ln_trim = ln?.trim().to_string();
+            let ln_parts = ln_trim.split_whitespace().collect::<Vec<&str>>();
+            if ln_parts.len() == 1 {
+                if ln_parts[0] == "1" || ln_parts[0] == "END" {
+                        //pass
+                } else if re_name.is_match(&ln_parts[0]) {
+                    
+                    name = ln_parts[0].to_string();
+                } else {
+                    println!("!!!: {:?}", ln_parts);
+                }
+                
+            } else if ln_parts.len() == 2 {
+                let lon = ln_parts[0].parse().expect(&format!("?? {:?}", ln_parts[0]));
+                let lat = ln_parts[1].parse().expect(&format!("?? {:?}", ln_parts[1]));
+                vertsx.push(lon);
+                vertsy.push(lat);
+            } else {
+                
+                println!("!!!: {:?}", ln_parts);
+            }
+            /*
             let caps = re.captures(&ln);
             match caps {
                 None => {
-                    if ln == "1" || ln == "none" || ln == "END" {
+                    if ln == "1" || ln == "END" {
                         //pass
+                    } else if re_name.is_match(&ln) {
+                        
+                        name = ln.to_string();
                     } else {
                         println!("!!!: {}", ln);
                     }
                 }
                 Some(cp) => {
-                    if cp.len() != 3 {
-                        /*println!("?? {}", ln);*/
+                    if cp.len() != 5 {
+                        println!("?? {} {}", cp.len(), ln);
                     } else {
-                        let ln = cp.get(1).unwrap().as_str().parse().unwrap();
-                        let lt = cp.get(2).unwrap().as_str().parse().unwrap();
+                        let ln = cp.get(1).unwrap().as_str().parse().expect(&format!("?? {:?}", cp.get(1).unwrap().as_str()));
+                        let lt = cp.get(2).unwrap().as_str().parse().expect(&format!("?? {:?}", cp.get(2).unwrap().as_str()));
 
                         /*println!("found {} & {}", ln, lt);*/
                         vertsx.push(ln);
                         vertsy.push(lt);
                     }
                 }
-            }
+            }*/
         }
-        Ok(Poly::new(vertsx, vertsy))
+        Ok(Poly::new(vertsx, vertsy, name))
         //Err(Error::new(ErrorKind::Other,"not impl"))
     }
 
