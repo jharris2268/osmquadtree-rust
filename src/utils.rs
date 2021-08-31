@@ -107,7 +107,7 @@ use chrono::NaiveDateTime;
 
 const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 const TIMEFORMAT_ALT: &str = "%Y-%m-%dT%H-%M-%S";
-
+const DATEFORMAT: &str = "%Y%m%d";
 pub fn parse_timestamp(ts: &str) -> Result<i64> {
     match NaiveDateTime::parse_from_str(ts, TIMEFORMAT) {
         Ok(tm) => {
@@ -124,26 +124,36 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
             message!("{:?}", e)
         }
     }
+    
+    match NaiveDateTime::parse_from_str(ts, DATEFORMAT) {
+        Ok(tm) => {
+            return Ok(tm.timestamp());
+        }
+        Err(e) => {
+            message!("{:?}", e)
+        }
+    }
+    
     return Err(Error::new(
         ErrorKind::Other,
         format!("use \"{}\" or \"{}\"", TIMEFORMAT, TIMEFORMAT_ALT),
     ));
 }
 
-pub(crate) fn timestamp_string(ts: i64) -> String {
+pub fn timestamp_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format(TIMEFORMAT).to_string()
 }
-pub(crate) fn timestamp_string_alt(ts: i64) -> String {
+pub fn timestamp_string_alt(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
     dt.format(TIMEFORMAT_ALT).to_string()
 }
-pub(crate) fn date_string(ts: i64) -> String {
+pub fn date_string(ts: i64) -> String {
     let dt = NaiveDateTime::from_timestamp(ts, 0);
-    dt.format("%Y%m%d").to_string()
+    dt.format(DATEFORMAT).to_string()
 }
 
-pub(crate) fn as_int(v: f64) -> i32 {
+pub fn as_int(v: f64) -> i32 {
     if v < 0.0 {
         return ((v * 10000000.0) - 0.5) as i32;
     }
