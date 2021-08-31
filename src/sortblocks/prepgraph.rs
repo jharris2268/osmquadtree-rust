@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::Result;
+use std::io::{Result,Error,ErrorKind};
 
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::Quadtree;
@@ -109,6 +109,19 @@ pub fn find_groups(
     mintarget: i64,
     lt: &mut LogTimes,
 ) -> Result<Box<QuadtreeTree>> {
+    
+    let tree = prepare_quadtree_tree(qtsfn, numchan, maxdepth)?;
+    
+    message!("{}", tree);
+    lt.add("prep tree");
+    let res = find_tree_groups(tree, target, mintarget)?;
+    lt.add("find groups");
+    Ok(res)
+}
+
+
+pub fn prepare_quadtree_tree(qtsfn: &str, numchan: usize, maxdepth: usize) -> Result<Box<QuadtreeTree>> {
+    
     let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
         > 0
     {
@@ -130,20 +143,16 @@ pub fn find_groups(
 
     message!("{}", t);
 
-    let mut tree: Option<Box<QuadtreeTree>> = None;
+    
     for (_, b) in std::mem::take(&mut t.others) {
         match b {
             OtherData::QuadtreeTree(t) => {
-                tree = Some(t);
+                return Ok(t);
             }
             _ => {}
         }
     }
-
-    let tree = tree.unwrap();
-    message!("{}", tree);
-    lt.add("prep tree");
-    let res = find_tree_groups(tree, target, mintarget)?;
-    lt.add("find groups");
-    Ok(res)
+    Err(Error::new(ErrorKind::Other, "no quadtreetree prepared??"))
 }
+
+
