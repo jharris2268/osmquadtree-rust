@@ -23,9 +23,9 @@ impl Timer {
 }
 
 pub struct LogTimes {
-    timer: Timer,
-    msgs: Vec<(String, f64)>,
-    longest: usize,
+    pub timer: Timer,
+    pub msgs: Vec<(String, f64)>,
+    pub longest: usize,
 }
 impl LogTimes {
     pub fn new() -> LogTimes {

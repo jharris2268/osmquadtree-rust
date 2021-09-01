@@ -4,7 +4,7 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
 use crate::elements::{Bbox, ElementType, MinimalBlock, Quadtree};
 use crate::pbfformat::make_convert_minimal_block_parts;
 use crate::pbfformat::{file_length, read_all_blocks_with_progbar};
-
+use crate::utils::LogTimes;
 
 
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
@@ -81,7 +81,10 @@ pub fn run_calcqts_inmem(
     qt_level: usize,
     qt_buffer: f64,
     numchan: usize,
-) -> Result<()> {
+) -> Result<LogTimes> {
+    
+    let mut lt = LogTimes::new();
+    
     let outfn_ = match outfn {
         Some(o) => String::from(o),
         None => format!("{}-qts.pbf", &fname[0..fname.len() - 4]),
@@ -123,7 +126,7 @@ pub fn run_calcqts_inmem(
         }
         rd
     };
-
+    lt.add("read data");
     message!(
         "have {} nodes, {} ways, {} relations",
         data.nodes.len(),
@@ -149,7 +152,7 @@ pub fn run_calcqts_inmem(
         wayqts.set(*w, q);
     }
     message!("calculated {} way qts", wayqts.len());
-
+    lt.add("calculate way qts");
     let mut nodeqts = QuadtreeSimple::new();
 
     for (w, rr) in &data.ways {
@@ -159,7 +162,7 @@ pub fn run_calcqts_inmem(
         }
     }
     message!("calculated {} node qts from way qts", nodeqts.len());
-
+    
     for (n, (ln, lt)) in &data.nodes {
         if !nodeqts.has_value(*n) {
             let q = Quadtree::calculate_point(*ln, *lt, qt_level, qt_buffer);
@@ -168,7 +171,7 @@ pub fn run_calcqts_inmem(
     }
 
     message!("have {} node qts", nodeqts.len());
-
+    lt.add("calculate node qts");
     let mut relrels = Vec::new();
 
     let mut relqts = QuadtreeSimple::new();
@@ -210,7 +213,7 @@ pub fn run_calcqts_inmem(
     }
 
     message!("have {} relqts", relqts.len());
-
+    lt.add("calculate relation qts");
     let writeqts = Box::new(WriteQuadTree::new(outfn));
 
     let mut allqts = PackQuadtrees::new(writeqts, 8000);
@@ -228,7 +231,7 @@ pub fn run_calcqts_inmem(
         }
     }
     allqts.finish();
-
-    Ok(())
+    lt.add("write file");
+    Ok(lt)
     //Err(Error::new(ErrorKind::Other,"not implemented"))
 }

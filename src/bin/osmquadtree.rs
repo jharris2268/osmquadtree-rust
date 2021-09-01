@@ -518,7 +518,7 @@ fn main() {
             count.value_of("TIMESTAMP"),
         ),
         ("calcqts", Some(calcqts)) => {
-            run_calcqts(
+            match run_calcqts(
                 calcqts.value_of("INPUT").unwrap(),
                 calcqts.value_of("QTSFN"),
                 value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
@@ -527,7 +527,10 @@ fn main() {
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
-            )
+            ) {
+                Ok(lt) => { message!("{}", lt); Ok(()) },
+                Err(e) => Err(e)
+            }
         }
         ("calcqts_prelim", Some(calcqts)) => run_calcqts_prelim(
             calcqts.value_of("INPUT").unwrap(),
