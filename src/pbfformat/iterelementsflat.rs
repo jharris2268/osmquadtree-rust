@@ -14,7 +14,13 @@ pub fn iter_primitiveblocks(fname: &str, numchan: usize) -> Result<Box<dyn Itera
         return Err(Error::new(ErrorKind::Other, "not implemented"))
     }
     
-    Ok(Box::new(ReadFileBlocksOwn::new(fname)?.enumerate().map( |(i,fb)| { PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), false, false).expect("?")})))
+    Ok(Box::new(ReadFileBlocksOwn::new(fname)?.enumerate().map( |(i,fb)| { 
+        if fb.block_type == "OSMData" {
+            PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), false, false).expect("?")
+        } else {
+            PrimitiveBlock::new(i as i64, 0)
+        }
+    })))
 }
 
     
