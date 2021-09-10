@@ -14,15 +14,19 @@ struct Settings {
     pub diffs_location: String,
     pub source_prfx: String,
     pub round_time: bool,
+    pub max_qt_level: usize,
+    pub qt_buffer: f64
 }
 
 impl Settings {
-    pub fn new(initial_state: i64, diffs_location: &str) -> Settings {
+    pub fn new(initial_state: i64, diffs_location: &str, max_qt_level: usize, qt_buffer: f64) -> Settings {
         Settings {
             initial_state: initial_state,
             diffs_location: String::from(diffs_location),
             source_prfx: String::from("https://planet.openstreetmap.org/replication/day/"),
             round_time: true,
+            max_qt_level: max_qt_level,
+            qt_buffer: qt_buffer
         }
     }
 
@@ -221,6 +225,8 @@ pub fn run_update_initial(
     timestamp: &str,
     initial_state: i64,
     diffs_location: &str,
+    max_qt_level: usize,
+    qt_buffer: f64,
     numchan: usize,
 ) -> Result<()> {
     let timestamp = parse_timestamp(timestamp)?;
@@ -229,7 +235,7 @@ pub fn run_update_initial(
     let infn2 = format!("{}{}", prfx, infn);
     let num_tiles = write_index_file(&infn2, &outfn, numchan);
 
-    let settings = Settings::new(initial_state, &diffs_location);
+    let settings = Settings::new(initial_state, &diffs_location, max_qt_level, qt_buffer);
     message!("{:?}", settings);
     settings.write(prfx);
 
@@ -273,17 +279,19 @@ pub fn run_update(prfx: &str, limit: usize, as_demo: bool, numchan: usize) -> Re
         for (chgfn, state, ts) in to_update {
             let fname = format!("{}{}.pbfc", date_string(ts), suffix);
             message!(
-                "call find_update('{}',{} entries,'{}', {}, {}, {}, {})",
+                "call find_update('{}',{} entries,'{}', {}, {}, {}, {}, {}, {})",
                 prfx,
                 filelist.len(),
                 chgfn,
                 prev_ts,
                 ts,
+                settings.max_qt_level,
+                settings.qt_buffer,
                 fname,
                 numchan
             );
 
-            let (_tx, nt) = find_update(prfx, &filelist, &chgfn, prev_ts, ts, &fname, numchan)?;
+            let (_tx, nt) = find_update(prfx, &filelist, &chgfn, prev_ts, ts, settings.max_qt_level, settings.qt_buffer, &fname, numchan)?;
             logtimes.add(&fname);
 
             let idxfn = format!("{}{}-index.pbf", prfx, fname);

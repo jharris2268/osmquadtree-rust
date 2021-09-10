@@ -50,6 +50,7 @@ impl IdSet for IdSetSet {
             ElementType::Node => self.nodes.contains(&id),
             ElementType::Way => self.ways.contains(&id),
             ElementType::Relation => self.relations.contains(&id),
+            _ => false
         }
     }
 }
@@ -148,6 +149,8 @@ impl IdSet for IdSetBool {
             ElementType::Node => self.nodes.contains(&id),
             ElementType::Way => self.ways.contains(&id),
             ElementType::Relation => self.relations.contains(&id),
+            _ => false
+            
         }
     }
 }

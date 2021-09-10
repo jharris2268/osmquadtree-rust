@@ -213,6 +213,42 @@ where
     }
 }
 
+pub struct ReadFileBlocksOwn {
+    bf: BufReader<File>,
+    p: u64
+}
+
+impl ReadFileBlocksOwn {
+    pub fn new(fname: &str) -> std::io::Result<ReadFileBlocksOwn> {
+        let fs = File::open(fname)?;
+        let bf = BufReader::new(fs);
+        Ok(ReadFileBlocksOwn{bf:bf,p:0})
+    }
+}
+
+impl Iterator for ReadFileBlocksOwn {
+    type Item = FileBlock;
+    fn next(&mut self) -> Option<Self::Item> {
+        match read_file_block_with_pos(&mut self.bf, self.p) {
+            Ok((p, fb)) => {
+                self.p = p;
+                Some(fb)
+            }
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::UnexpectedEof => {
+                        //at end of file
+                    }
+                    _ => {
+                        panic!("failed to read {}", err);
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+
 pub fn read_all_blocks<T, U>(fname: &str, mut pp: Box<T>) -> (U, f64)
 where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,

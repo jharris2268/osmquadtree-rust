@@ -143,12 +143,13 @@ fn run_sortblocks(
     //splitat: i64, tempinmem: bool, limit: usize,
     timestamp: Option<&str>,
     numchan: usize,
+    ram_gb: usize,
     keep_temps: bool,
 ) -> Result<()> {
     let mut lt = LogTimes::new();
 
     let mut splitat = 0i64;
-    let tempinmem = file_length(infn) < 512 * 1024 * 1024;
+    let tempinmem = file_length(infn) < 32 * 1024 * 1024 * (ram_gb as u64);
     let mut limit = 0usize;
 
     if splitat == 0 {
@@ -183,7 +184,7 @@ fn run_sortblocks(
 
     message!("groups: {} {}", groups.len(), groups.total_weight());
     if limit == 0 {
-        limit = 30000000usize / (groups.len() / (splitat as usize));
+        limit = 4000000usize * ram_gb / (groups.len() / (splitat as usize));
         if tempinmem {
             limit = usize::max(1000, limit / 10);
         }
@@ -239,6 +240,12 @@ fn get_i64(x: Option<&str>) -> Option<i64> {
 }
 
 const NUMCHAN_DEFAULT: usize = 4;
+const RAM_GB_DEFAULT: usize= 8;
+const QT_MAX_LEVEL_DEFAULT: usize = 18;
+const QT_GRAPH_LEVEL_DEFAULT: usize = 17;
+const QT_BUFFER_DEFAULT: f64 = 0.05;
+
+
 
 fn main() {
     // basic app information
@@ -259,6 +266,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
+                
         )
         .subcommand(
             SubCommand::with_name("calcqts")
@@ -268,15 +276,16 @@ fn main() {
                 //.arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("MODE").short("-m").long("--mode").takes_value(true).help("simplier implementation, suitable for files <8gb"))
-                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
+                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 18"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
+                .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
         )
         .subcommand(
             SubCommand::with_name("calcqts_prelim")
                 .about("calculates quadtrees for each element of a planet or extract pbf file")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
                 .arg(Arg::with_name("QTSFN").short("-q").long("--qtsfn").takes_value(true).help("specify output filename, defaults to <INPUT>-qts.pbf"))
-                .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
+                
         )
         .subcommand(
             SubCommand::with_name("calcqts_load_existing")
@@ -286,7 +295,7 @@ fn main() {
                 //.arg(Arg::with_name("COMBINED").short("-c").long("--combined").help("writes combined NodeWayNodes file"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("STOP_AT").short("-s").long("--stop_at").takes_value(true).help("location of first file block without nodes"))
-                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 17"))
+                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 18"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
         )
 
@@ -303,6 +312,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
+                .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
         )
         .subcommand(
             SubCommand::with_name("sortblocks_inmem")
@@ -316,6 +326,7 @@ fn main() {
 
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
         )
         .subcommand(
             SubCommand::with_name("update_initial")
@@ -325,6 +336,8 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").required(true).short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("INITIAL_STATE").required(true).short("-s").long("--state_initial").takes_value(true).help("initial state"))
                 .arg(Arg::with_name("DIFFS_LOCATION").required(true).short("-d").long("--diffs_location").takes_value(true).help("directory for downloaded osc.gz files"))
+                .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 18"))
+                .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
 
         )
@@ -368,6 +381,7 @@ fn main() {
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
 
         )
         .subcommand(
@@ -381,6 +395,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges_sort_from_existing")
@@ -389,6 +404,7 @@ fn main() {
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
                 .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
         )
         .subcommand(
             SubCommand::with_name("mergechanges")
@@ -399,6 +415,7 @@ fn main() {
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                
         )
         .subcommand(
             SubCommand::with_name("process_geometry_null")
@@ -521,12 +538,13 @@ fn main() {
             match run_calcqts(
                 calcqts.value_of("INPUT").unwrap(),
                 calcqts.value_of("QTSFN"),
-                value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
-                value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+                value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
+                value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
                 calcqts.value_of("MODE"),
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(calcqts, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
             ) {
                 Ok(lt) => { message!("{}", lt); Ok(()) },
                 Err(e) => Err(e)
@@ -540,8 +558,8 @@ fn main() {
         ("calcqts_load_existing", Some(calcqts)) => run_calcqts_load_existing(
             calcqts.value_of("INPUT").unwrap(),
             calcqts.value_of("QTSFN"),
-            value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(17),
-            value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(0.05),
+            value_t!(calcqts, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
+            value_t!(calcqts, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
             match value_t!(calcqts, "STOP_AT", u64) {
                 Ok(s) => Some(s),
                 Err(_) => None,
@@ -553,12 +571,13 @@ fn main() {
                 sortblocks.value_of("INPUT").unwrap(),
                 sortblocks.value_of("QTSFN"),
                 sortblocks.value_of("OUTFN"),
-                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(17),
+                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(QT_GRAPH_LEVEL_DEFAULT),
                 value_t!(sortblocks, "TARGET", i64).unwrap_or(40000),
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 false, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
                 sortblocks.is_present("KEEPTEMPS"),
             )
         }
@@ -567,12 +586,13 @@ fn main() {
                 sortblocks.value_of("INPUT").unwrap(),
                 sortblocks.value_of("QTSFN"),
                 sortblocks.value_of("OUTFN"),
-                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(17),
+                value_t!(sortblocks, "QT_MAX_LEVEL", usize).unwrap_or(QT_GRAPH_LEVEL_DEFAULT),
                 value_t!(sortblocks, "TARGET", i64).unwrap_or(40000),
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 true, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
                 false,
             )
         }
@@ -582,6 +602,8 @@ fn main() {
             update.value_of("TIMESTAMP").unwrap(),
             value_t!(update, "INITIAL_STATE", i64).unwrap_or(0),
             update.value_of("DIFFS_LOCATION").unwrap(),
+            value_t!(update, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
+            value_t!(update, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
             value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
         ("update", Some(update)) => {
@@ -613,6 +635,7 @@ fn main() {
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
         ),
         ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
             filter.value_of("INPUT").unwrap(),
@@ -623,12 +646,14 @@ fn main() {
             filter.value_of("TIMESTAMP"),
             filter.is_present("KEEPTEMPS"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
         ),
         ("mergechanges_sort_from_existing", Some(filter)) => run_mergechanges_sort_from_existing(
             filter.value_of("OUTFN").unwrap(),
             filter.value_of("TEMPFN").unwrap(),
             filter.is_present("ISSPLIT"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            
         ),
         ("mergechanges", Some(filter)) => run_mergechanges(
             filter.value_of("INPUT").unwrap(),

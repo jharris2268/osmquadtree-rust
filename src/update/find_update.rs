@@ -102,6 +102,7 @@ impl OrigData {
             ElementType::Node => get_quadtree(&self.node_qts, r),
             ElementType::Way => get_quadtree(&self.way_qts, r),
             ElementType::Relation => get_quadtree(&self.relation_qts, r),
+            _ => None
         }
     }
 
@@ -110,6 +111,7 @@ impl OrigData {
             ElementType::Node => get_alloc(&self.node_qts, r),
             ElementType::Way => get_alloc(&self.way_qts, r),
             ElementType::Relation => get_alloc(&self.relation_qts, r),
+            _ => None
         }
     }
 
@@ -714,6 +716,7 @@ fn prep_idset(changeblock: &ChangeBlock) -> Arc<IdSetSet> {
                 ElementType::Relation => {
                     idset.relations.insert(m.mem_ref);
                 }
+                _ => {}
             }
         }
     }
@@ -727,6 +730,8 @@ pub fn find_update(
     change_filename: &str,
     prev_ts: i64,
     ts: i64,
+    max_qt_level: usize,
+    qt_buffer: f64,
     fname: &str,
     numchan: usize,
 ) -> std::io::Result<(f64, usize)> {
@@ -768,7 +773,7 @@ pub fn find_update(
     let e = tx.since();
     message!("{}", tree);
 
-    let tiles = calc_qts(&changeblock, &mut orig_data, &tree, 18, 0.05, prev_ts, ts)?;
+    let tiles = calc_qts(&changeblock, &mut orig_data, &tree, max_qt_level, qt_buffer, prev_ts, ts)?;
     let f = tx.since();
 
     message!(

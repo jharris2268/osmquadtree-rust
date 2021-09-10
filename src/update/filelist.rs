@@ -93,7 +93,7 @@ pub fn get_file_locs(
     filter: Option<Bbox>,
     timestamp: Option<i64>,
 ) -> Result<ParallelFileLocs> {
-    if prfx.len() > 4 && &prfx[prfx.len() - 4..] == ".pbf" {
+    if std::path::Path::new(prfx).is_file() {
         if !timestamp.is_none() {
             return Err(Error::new(
                 ErrorKind::Other,

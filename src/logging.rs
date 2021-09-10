@@ -48,7 +48,8 @@ where
         }
         1 => {
             while STATE.load(Ordering::SeqCst) == 1 {
-                std::sync::atomic::spin_loop_hint();
+                //std::sync::atomic::spin_loop_hint();
+                std::hint::spin_loop();
             }
             set_messenger_error()
         }

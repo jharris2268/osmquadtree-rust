@@ -196,7 +196,8 @@ pub fn run_calcqts_inmem(
                     },
                     ElementType::Relation => {
                         relrels.push((r, rf));
-                    }
+                    },
+                    _ => {}
                 }
             }
         }

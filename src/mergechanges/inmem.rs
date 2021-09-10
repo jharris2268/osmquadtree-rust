@@ -8,7 +8,7 @@ use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
 use crate::update::{get_file_locs, ParallelFileLocs};
 use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
 use crate::{message,progress_percent};
-use std::io::Result;
+use std::io::{Result,Error,ErrorKind};
 use std::sync::Arc;
 
 type Timings = channelled_callbacks::Timings<PrimitiveBlock>;
@@ -212,6 +212,8 @@ pub fn make_write_file(
     Box::new(GroupBlocks::new(pack, block_size))
 }
 
+
+
 pub fn run_mergechanges_sort_inmem(
     inprfx: &str,
     outfn: &str,
@@ -219,6 +221,7 @@ pub fn run_mergechanges_sort_inmem(
     filterobjs: bool,
     timestamp: Option<&str>,
     numchan: usize,
+    ram_gb: usize,
 ) -> Result<()> {
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
@@ -230,7 +233,16 @@ pub fn run_mergechanges_sort_inmem(
 
     let mut pfilelocs = get_file_locs(inprfx, Some(bbox.clone()), timestamp)?;
     tx.add("get_file_locs");
-
+    
+    if pfilelocs.2 > (ram_gb as u64)*32*1024*1024 {
+        return Err(Error::new(ErrorKind::Other, format!(
+            "extract too big to merge in memory ({:0.1}mb > {:0.1}mb)",
+            (pfilelocs.2 as f64) / 1024.0 / 1024.0,
+            (ram_gb as f64) * 32.0
+        )));
+    }
+            
+    
     let ids: Arc<dyn IdSet> = 
         if filterobjs {
             match filter {

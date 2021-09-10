@@ -348,6 +348,7 @@ pub fn run_mergechanges_sort(
     timestamp: Option<&str>,
     keep_temps: bool,
     numchan: usize,
+    ram_gb: usize,
 ) -> Result<()> {
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
@@ -384,7 +385,7 @@ pub fn run_mergechanges_sort(
         }
     };
 
-    let mut limit = 1500000;
+    let mut limit = 200000 * ram_gb;
     if tempfn == "NONE" || tempfn == "NULL" {
         limit = 200;
     }
@@ -394,7 +395,7 @@ pub fn run_mergechanges_sort(
         0
     };
 
-    call_mergechanges_sort(&mut pfilelocs, outfn, &tempfn, limit, fsplit, ids, &bbox, keep_temps, tx, numchan)
+    call_mergechanges_sort(&mut pfilelocs, outfn, &tempfn, limit, fsplit, ids, &bbox, keep_temps, tx, numchan, ram_gb)
 }
 
 pub fn call_mergechanges_sort(
@@ -407,7 +408,9 @@ pub fn call_mergechanges_sort(
     bbox: &Bbox,
     keep_temps: bool,
     mut tx: LogTimes,
-    numchan: usize) -> Result<()> {
+    numchan: usize,
+    _ram_gb: usize,
+) -> Result<()> {
 
 
     let temps = write_temp_blocks(

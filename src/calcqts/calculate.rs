@@ -948,6 +948,7 @@ pub fn run_calcqts(
     //seperate: bool,
     //resort_waynodes: bool,
     numchan: usize,
+    _ram_gb: usize,
 ) -> Result<LogTimes> {
     let mut use_simple = false;
     let fl = file_length(fname) / 1024 / 1024;
