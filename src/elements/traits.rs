@@ -408,7 +408,7 @@ fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Eleme
                             //changed_users.insert((ln,rn));
                             
                         },
-                        x => { res.push(x); }
+                        x => { println!("add {:?}, now {}", x, res.len()); res.push(x); }
                     }
                     //Ok((None,None))
                 },
