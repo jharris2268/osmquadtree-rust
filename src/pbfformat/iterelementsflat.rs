@@ -1,16 +1,16 @@
 use crate::pbfformat::read_file_block::ReadFileBlocksOwn;
-use crate::pbfformat::{FileBlock,make_convert_primitive_block,file_length,read_all_blocks};
+use crate::pbfformat::{FileBlock,make_convert_primitive_block,/*file_length,*/read_all_blocks_with_progbar};
 use crate::elements::{Element,PrimitiveBlock};
 use channelled_callbacks::{Callback,CallbackMerge,CallbackSync,Timings,ReplaceNoneWithTimings,CallFinish,MergeTimings, ReverseCallback};
-use crate::{progress_bytes,logging::ProgressBytes};
+//use crate::{progress_bytes,logging::ProgressBytes};
 
 use std::io::{Result};
 
 pub fn iter_elements_flat(fname: &str, numchan: usize) -> Result<Box<dyn Iterator<Item = Element>>> {
     
-    Ok(Box::new(iter_primitiveblocks(fname, numchan)?.flat_map(|bl| { bl.into_iter() })))
+    Ok(Box::new(iter_primitiveblocks(fname, numchan)?.flat_map(|bl| { println!("{:?}",bl); bl.into_iter() })))
 }
-
+/*
 struct ConvBlocksCollect {
     blocks: Vec<PrimitiveBlock>
 }
@@ -36,7 +36,7 @@ impl CallFinish for ConvBlocksCollect {
 }
 
 
-/*struct ConvertPrimitiveBlocksLumps {
+struct ConvertPrimitiveBlocksLumps {
     
     ff: ReadFileBlocksOwn,
     numchan: usize,
@@ -101,16 +101,16 @@ impl Iterator for ConvertPrimitiveBlocksLumps {
     
 fn prep_read_all_primitive(fname: String, numchan: usize, cb: Box<dyn CallFinish<CallType=PrimitiveBlock, ReturnType=Timings<()>>>) -> Result<Timings<()>> {
     
-    let cbs = CallbackSync::new(cb, numchan/2);
+    let cbs = CallbackSync::new(cb, numchan);
     let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<()>>>> = Vec::new();
     for c in cbs {
         let c2 = Box::new(ReplaceNoneWithTimings::new(c));
         convs.push(Box::new(Callback::new(make_convert_primitive_block(false, c2))))
     }
     
-    let mut conv = Box::new(CallbackMerge::new(convs,Box::new(MergeTimings::new())));
+    let conv = Box::new(CallbackMerge::new(convs,Box::new(MergeTimings::new())));
     
-    let (tm,_) = read_all_blocks(&fname, conv);
+    let (tm,_) = read_all_blocks_with_progbar(&fname, conv, &format!("read from {}",&fname) );
     Ok(tm)
 }
     

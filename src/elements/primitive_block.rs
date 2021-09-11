@@ -38,7 +38,7 @@ pub trait PackableBlock: Block {
         Self: Sized;
 }
 
-#[derive(Debug)]
+
 pub struct PrimitiveBlock {
     pub index: i64,
     pub location: u64,
@@ -49,6 +49,13 @@ pub struct PrimitiveBlock {
     pub ways: Vec<Way>,
     pub relations: Vec<Relation>,
 }
+
+impl std::fmt::Debug for PrimitiveBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PrimitieBlock {} at {} [{} nodes, {} ways, {} relations]", self.index, self.location, self.nodes.len(), self.ways.len(), self.relations.len())
+    }
+}
+
 
 pub fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
     let mut res = Vec::new();
