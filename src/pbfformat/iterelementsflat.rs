@@ -1,7 +1,7 @@
 use crate::pbfformat::read_file_block::ReadFileBlocksOwn;
-use crate::pbfformat::{FileBlock,make_convert_primitive_block,file_length};
+use crate::pbfformat::{FileBlock,make_convert_primitive_block,file_length,read_all_blocks};
 use crate::elements::{Element,PrimitiveBlock};
-use channelled_callbacks::{Callback,CallbackMerge,CallbackSync,Timings,ReplaceNoneWithTimings,CallFinish,MergeTimings};
+use channelled_callbacks::{Callback,CallbackMerge,CallbackSync,Timings,ReplaceNoneWithTimings,CallFinish,MergeTimings, ReverseCallback};
 use crate::{progress_bytes,logging::ProgressBytes};
 
 use std::io::{Result};
@@ -36,7 +36,7 @@ impl CallFinish for ConvBlocksCollect {
 }
 
 
-struct ConvertPrimitiveBlocksLumps {
+/*struct ConvertPrimitiveBlocksLumps {
     
     ff: ReadFileBlocksOwn,
     numchan: usize,
@@ -95,18 +95,37 @@ impl Iterator for ConvertPrimitiveBlocksLumps {
         
         Some(std::mem::take(&mut res.others[0].1))
     }
+}*/
+
+
+    
+fn prep_read_all_primitive(fname: String, numchan: usize, cb: Box<dyn CallFinish<CallType=PrimitiveBlock, ReturnType=Timings<()>>>) -> Result<Timings<()>> {
+    
+    let cbs = CallbackSync::new(cb, numchan/2);
+    let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<()>>>> = Vec::new();
+    for c in cbs {
+        let c2 = Box::new(ReplaceNoneWithTimings::new(c));
+        convs.push(Box::new(Callback::new(make_convert_primitive_block(false, c2))))
+    }
+    
+    let mut conv = Box::new(CallbackMerge::new(convs,Box::new(MergeTimings::new())));
+    
+    let (tm,_) = read_all_blocks(&fname, conv);
+    Ok(tm)
 }
-    
-    
     
     
 
 pub fn iter_primitiveblocks(fname: &str, numchan: usize) -> Result<Box<dyn Iterator<Item = PrimitiveBlock>>> {
     
     if numchan != 0 {
+        let n=String::from(fname);
         
-        let cc = ConvertPrimitiveBlocksLumps::new(fname,numchan,false)?;
-        return Ok(Box::new(cc.into_iter().flatten()));
+        return Ok(Box::new(ReverseCallback::new(move |cb| prep_read_all_primitive(n,numchan,cb) )));
+            
+        
+        //let cc = ConvertPrimitiveBlocksLumps::new(fname,numchan,false)?;
+        //return Ok(Box::new(cc.into_iter().flatten()));
             
         //return Err(Error::new(ErrorKind::Other, "not implemented"))
     } 
