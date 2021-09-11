@@ -262,6 +262,17 @@ fn different_info(left: &Option<Info>, right: &Option<Info>) -> bool {
         
     }
 }
+fn tags_different(left: &Vec<Tag>, right: &Vec<Tag>) -> bool {
+    if left == right { return false; }
+    if left.len() != right.len() { return true; }
+    
+    for l in left {
+        if !right.contains(&l) {
+            return true;
+        }
+    }
+    return false;
+}   
 
 fn node_compare(left: Node, right: Node) -> Result<ElementCompare> {
     
@@ -269,8 +280,9 @@ fn node_compare(left: Node, right: Node) -> Result<ElementCompare> {
         Err(Error::new(ErrorKind::Other, "different elements"))
     } else if different_info(&left.info, &right.info) {
         Ok(ElementCompare::DifferentInfo(Element::Node(left), Element::Node(right)))
-    } else if left.tags != right.tags {
+    } else if tags_different(&left.tags, &right.tags) {
         Ok(ElementCompare::DifferentTags(Element::Node(left), Element::Node(right)))
+        
     } else if left.lon != right.lon || left.lat != right.lat {
         Ok(ElementCompare::DifferentData(Element::Node(left), Element::Node(right)))
     } else if left.quadtree != right.quadtree {
