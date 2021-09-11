@@ -417,10 +417,10 @@ fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Eleme
                     match element_compare(Some(left_ele.take().unwrap()),Some(right_ele.take().unwrap()))? {
                         ElementCompare::Same => {},
                         ElementCompare::ChangedUserName(ln,rn) => {
-                            //changed_users.insert((ln,rn));
+                            changed_users.insert((ln,rn));
                             
                         },
-                        x => { println!("add {:?}, now {}", x, res.len()); res.push(x); }
+                        x => { /*println!("add {:?}, now {}", x, res.len());*/ res.push(x); }
                     }
                     //Ok((None,None))
                 },
