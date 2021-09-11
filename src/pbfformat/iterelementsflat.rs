@@ -8,7 +8,7 @@ use std::io::{Result};
 
 pub fn iter_elements_flat(fname: &str, numchan: usize) -> Result<Box<dyn Iterator<Item = Element>>> {
     
-    Ok(Box::new(iter_primitiveblocks(fname, numchan)?.flat_map(|bl| { println!("{:?}",bl); bl.into_iter() })))
+    Ok(Box::new(iter_primitiveblocks(fname, numchan)?.flat_map(|bl| { bl.into_iter() })))
 }
 /*
 struct ConvBlocksCollect {
