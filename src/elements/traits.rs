@@ -378,7 +378,7 @@ pub fn element_compare(left: Option<Element>, right: Option<Element>) -> Result<
     }
 }
 use crate::elements::PrimitiveBlock;
-pub fn primitiveblock_compare(left: PrimitiveBlock, right: PrimitiveBlock) -> Result<(Vec<ElementCompare>,HashSet<(String,String)>)> {
+pub fn primitiveblock_compare(left: PrimitiveBlock, right: PrimitiveBlock) -> Result<(Vec<ElementCompare>,HashSet<(String,String)>,usize)> {
     let mrs=100000000000;
     let left_iter = left.into_iter();
     let right_iter = right.into_iter();
@@ -389,18 +389,11 @@ pub fn primitiveblock_compare(left: PrimitiveBlock, right: PrimitiveBlock) -> Re
 
 use std::collections::HashSet;
 
-fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Element>, res: &mut Vec<ElementCompare>,changed_users: &mut HashSet<(String,String)>) -> Result<()> {
+fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Element>) -> Result<ElementCompare> {
     match (&left_ele, &right_ele) {
-        (None, None) => { return Err(Error::new(ErrorKind::Other, "??")); }
-        (Some(_), None) => {
-            res.push(ElementCompare::OnlyLeft(left_ele.take().unwrap()));
-            //Ok((None,None))
-        }
-        
-        (None, Some(_)) => {
-            res.push(ElementCompare::OnlyRight(right_ele.take().unwrap()));
-            //Ok((None,None))
-        }
+        (None, None) => Err(Error::new(ErrorKind::Other, "??")),
+        (Some(_), None) => Ok(ElementCompare::OnlyLeft(left_ele.take().unwrap())),
+        (None, Some(_)) => Ok(ElementCompare::OnlyRight(right_ele.take().unwrap())),
         
         (Some(left), Some(right)) => {
             
@@ -410,31 +403,23 @@ fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Eleme
                 
                 None => { return Err(Error::new(ErrorKind::Other, format!("?? {:?} {:?}", left, right))); },
                 Some(Ordering::Less) => {
-                    res.push(ElementCompare::OnlyLeft(left_ele.take().unwrap()));
-                    //Ok((None,Some(right)))
+                    Ok(ElementCompare::OnlyLeft(left_ele.take().unwrap()))
+                    
                 },
                 Some(Ordering::Equal) => {
-                    match element_compare(Some(left_ele.take().unwrap()),Some(right_ele.take().unwrap()))? {
-                        ElementCompare::Same => {},
-                        ElementCompare::ChangedUserName(ln,rn) => {
-                            changed_users.insert((ln,rn));
-                            
-                        },
-                        x => { /*println!("add {:?}, now {}", x, res.len());*/ res.push(x); }
-                    }
-                    //Ok((None,None))
-                },
+                    element_compare(Some(left_ele.take().unwrap()),Some(right_ele.take().unwrap()))
+                }
                 Some(Ordering::Greater) => {
-                    res.push(ElementCompare::OnlyRight(right_ele.take().unwrap()));
-                    //Ok((Some(left),None))
+                    Ok(ElementCompare::OnlyRight(right_ele.take().unwrap()))
+                    
                 }
             }
         }
     }
-    Ok(())
+    
 }
 
-pub fn combine_element_iters<T: Iterator<Item=Element>>(mut left_iter: T, mut right_iter: T, max_result_len: usize) -> Result<(Vec<ElementCompare>,HashSet<(String,String)>)> {
+pub fn combine_element_iters<T: Iterator<Item=Element>>(mut left_iter: T, mut right_iter: T, max_result_len: usize) -> Result<(Vec<ElementCompare>,HashSet<(String,String)>,usize)> {
     
     let mut left_ele = left_iter.next();
     let mut right_ele = right_iter.next();
@@ -442,23 +427,34 @@ pub fn combine_element_iters<T: Iterator<Item=Element>>(mut left_iter: T, mut ri
     let mut res: Vec<ElementCompare> = Vec::new();
     
     let mut changed_users = HashSet::new();
-    
+    let mut count=0;
     
     loop {
         if left_ele.is_none() && right_ele.is_none() {
             break;
         }
         
-        check_left_right(&mut left_ele, &mut right_ele,&mut res, &mut changed_users)?;
+        match check_left_right(&mut left_ele, &mut right_ele)? {
+            ElementCompare::Same => {},
+            ElementCompare::ChangedUserName(ln,rn) => { changed_users.insert((ln,rn)); },
+            p => {
+                if res.len() < max_result_len {
+                    res.push(p);
+                } else if res.len() == max_result_len {
+                    println!("found {} diffs: {:?}", res.len(), p);
+                } else {
+                    //pass
+                }
+                count+=1;
+            }
+        }   
         
         if left_ele.is_none() { left_ele = left_iter.next(); }
         if right_ele.is_none() { right_ele = right_iter.next(); }
-        if res.len() > max_result_len {
-            break;
-        }
+        
     }
                     
-    Ok((res, changed_users))
+    Ok((res, changed_users, count))
                     
 }
                 
