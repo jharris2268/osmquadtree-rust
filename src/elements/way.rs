@@ -13,7 +13,7 @@ use crate::elements::traits::*;
 use core::cmp::Ordering;
 use std::io::Result;
 
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone,serde::Serialize)]
 pub struct Way {
     pub id: i64,
     pub changetype: Changetype,

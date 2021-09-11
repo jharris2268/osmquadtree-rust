@@ -14,7 +14,7 @@ use std::io::{Error, ErrorKind, Result};
 /// Representation of openstreetmap node element.
 /// See [https://wiki.openstreetmap.org/wiki/Node](https://wiki.openstreetmap.org/wiki/Node).
 /// Longitude and latitude are represented as integer values of 10^-7 degrees.
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone,serde::Serialize)]
 pub struct Node {
     pub id: i64,
     pub changetype: Changetype,

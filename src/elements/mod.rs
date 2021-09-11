@@ -1,5 +1,6 @@
 mod combine_block;
 mod common;
+mod compareelements;
 mod dense;
 mod idset;
 mod info;
@@ -27,3 +28,4 @@ pub use quadtree::{
     Quadtree, EARTH_WIDTH,
 };
 pub use traits::*;
+pub use compareelements::{compare_element_iters,compare_element_iters_json,compare_primitiveblock};

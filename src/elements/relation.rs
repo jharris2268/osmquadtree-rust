@@ -13,7 +13,7 @@ use crate::elements::IdSet;
 use core::cmp::Ordering;
 use std::io::{Error, ErrorKind, Result};
 
-#[derive(Debug, Eq, Clone)]
+#[derive(Debug, Eq, Clone,serde::Serialize)]
 pub struct Relation {
     pub id: i64,
     pub changetype: Changetype,
@@ -23,7 +23,7 @@ pub struct Relation {
     pub quadtree: Quadtree,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone,serde::Serialize)]
 pub struct Member {
     pub role: String,
     pub mem_type: ElementType,
