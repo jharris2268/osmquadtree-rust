@@ -96,7 +96,7 @@ where
                 r.filter_relations(self.ids.as_ref());
             }
         }
-        //println!("block {} {} nodes, {} ways, {} relations", b.quadtree.as_string(),b.nodes.len(),b.ways.len(),b.relations.len());
+        
         self.tm += tx.since();
         self.out.call(b);
     }

@@ -369,7 +369,7 @@ impl CallFinish for WritePostgresData {
                 match conn.execute(&qu) {
                     Ok(_) => {}
                     Err(e) => {
-                        print!(" FAILED {:?}", e);
+                        message!(" FAILED {:?}", e);
                     }
                 };
                 message!(": {:.1}s", tx.since());
@@ -497,8 +497,6 @@ pub fn make_write_postgresql_geometry(
 
     let mut preptables = Vec::new();
     for t in &options.table_spec {
-        //println!("{}", make_createtable(t, "")?);
-        //println!("{:?}", t);
         preptables.push(PrepTable::from_tablespec(t)?);
     }
 

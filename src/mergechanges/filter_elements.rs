@@ -9,6 +9,7 @@ use crate::utils::{as_int, ThreadTimer};
 use simple_protocolbuffers::{DeltaPackedInt, PackedInt};
 
 use crate::update::ParallelFileLocs;
+use crate::message;
 
 use std::fs::File;
 use std::io::{BufRead, /*Error,ErrorKind,*/ BufReader, Result};
@@ -53,7 +54,7 @@ impl Poly {
                     
                     name = ln_parts[0].to_string();
                 } else {
-                    println!("!!!: {:?}", ln_parts);
+                    message!("!!!: {:?}", ln_parts);
                 }
                 
             } else if ln_parts.len() == 2 {
@@ -63,37 +64,12 @@ impl Poly {
                 vertsy.push(lat);
             } else {
                 
-                println!("!!!: {:?}", ln_parts);
+                message!("!!!: {:?}", ln_parts);
             }
-            /*
-            let caps = re.captures(&ln);
-            match caps {
-                None => {
-                    if ln == "1" || ln == "END" {
-                        //pass
-                    } else if re_name.is_match(&ln) {
-                        
-                        name = ln.to_string();
-                    } else {
-                        println!("!!!: {}", ln);
-                    }
-                }
-                Some(cp) => {
-                    if cp.len() != 5 {
-                        println!("?? {} {}", cp.len(), ln);
-                    } else {
-                        let ln = cp.get(1).unwrap().as_str().parse().expect(&format!("?? {:?}", cp.get(1).unwrap().as_str()));
-                        let lt = cp.get(2).unwrap().as_str().parse().expect(&format!("?? {:?}", cp.get(2).unwrap().as_str()));
-
-                        /*println!("found {} & {}", ln, lt);*/
-                        vertsx.push(ln);
-                        vertsy.push(lt);
-                    }
-                }
-            }*/
+            
         }
         Ok(Poly::new(vertsx, vertsy, name))
-        //Err(Error::new(ErrorKind::Other,"not impl"))
+        
     }
 
     pub fn bounds(&self) -> Bbox {
@@ -271,7 +247,7 @@ impl FilterObjs {
                 }
             }
         } else {
-            println!("?? {} {} // {}", mb.quadtree.as_string(), qb, self.bbox);
+            message!("?? {} {} // {}", mb.quadtree.as_string(), qb, self.bbox);
         }
     }
     fn add_all(&mut self, mb: MinimalBlock) {

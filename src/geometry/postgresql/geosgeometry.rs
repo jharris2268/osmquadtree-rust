@@ -166,7 +166,7 @@ impl GeosGeometry {
                         Err(_) => {
                             // just skip this part
 
-                            /*println!("\npart {} / {} failed {:?}\n", parts.len(), cp.parts.len(),e);
+                            /*message!("\npart {} / {} failed {:?}\n", parts.len(), cp.parts.len(),e);
                             for p in parts {
                                 GEOSGeom_destroy_r(handle, p);
                             }

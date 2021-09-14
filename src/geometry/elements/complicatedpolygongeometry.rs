@@ -337,8 +337,6 @@ pub fn collect_rings(ww: Vec<RingPart>) -> Result<(Vec<Ring>, Vec<RingPart>)> {
         }
     }
 
-    //println!("found {} rings from {} ways, {} left", res.len(), nw, rem.len());
-    //Err(Error::new(ErrorKind::Other,"not implemented"))
     Ok((res, rem))
 }
 

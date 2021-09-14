@@ -9,7 +9,7 @@ use flate2::write::ZlibEncoder;
 use channelled_callbacks::CallFinish;
 use simple_protocolbuffers as spb;
 
-use crate::utils::Checktime;
+use crate::utils::Timer;
 use crate::logging::{ProgressPercent,ProgressBytes};
 use crate::{progress_bytes};
 //use indicatif::{ProgressBar, ProgressStyle};
@@ -85,7 +85,7 @@ pub fn read_file_block_with_pos<F: Read>(
     pos += l;
 
     let bb = spb::IterTags::new(&b);
-    //println!("{:?}", bb);
+    
     let mut ln = 0;
     for tg in bb {
         match tg {
@@ -254,31 +254,13 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    let mut ct = Checktime::new();
-
-    let pf = 100.0
-        / (std::fs::metadata(fname)
-            .expect(&format!("failed to open {}", fname))
-            .len() as f64);
+    let tx=Timer::new();
     let f = File::open(fname).expect("fail");
     let mut fbuf = BufReader::new(f);
     for (i, fb) in ReadFileBlocks::new(&mut fbuf).enumerate() {
-        match ct.checktime() {
-            Some(d) => {
-                print!(
-                    "\r{:8.3}s: {:6.1}% {:9.1}mb block {:10}",
-                    d,
-                    (fb.pos as f64) * pf,
-                    (fb.pos as f64) / 1024.0 / 1024.0,
-                    i
-                );
-                io::stdout().flush().expect("");
-            }
-            None => {}
-        }
         pp.call((i, fb));
     }
-    (pp.finish().expect("finish failed"), ct.gettime())
+    (pp.finish().expect("finish failed"), tx.since())
 }
 
 pub fn file_length(fname: &str) -> u64 {
@@ -299,7 +281,7 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    let ct = Checktime::new();
+    let ct = Timer::new();
 
     let pf = (end_percent-start_percent) / (flen as f64);
 
@@ -312,7 +294,7 @@ where
     let r = pp.finish().expect("finish failed");
 
     
-    (r, ct.gettime())
+    (r, ct.since())
 }
 
 pub fn read_all_blocks_prog_fpos<R: Read, T, U>(
@@ -325,7 +307,7 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    let ct = Checktime::new();
+    let ct = Timer::new();
 
     for (i, fb) in ReadFileBlocks::new_at_start(fobj).enumerate() {
         
@@ -334,7 +316,7 @@ where
     }
     
     pg.finish();
-    (pp.finish().expect("finish failed"), ct.gettime())
+    (pp.finish().expect("finish failed"), ct.since())
 }
 
 pub fn read_all_blocks_prog_fpos_stop<R: Read, T, U>(
@@ -347,13 +329,13 @@ where
     T: CallFinish<CallType = (usize, FileBlock), ReturnType = U> + ?Sized,
     U: Send + Sync + 'static,
 {
-    let ct = Checktime::new();
+    let ct = Timer::new();
     for (i, fb) in ReadFileBlocks::new_at_start_with_stop(fobj, stop_at).enumerate() {
         pb.progress_bytes(fb.pos);
         pp.call((i, fb));
     }
     pb.finish();
-    (pp.finish().expect("finish failed"), ct.gettime())
+    (pp.finish().expect("finish failed"), ct.since())
 }
 
 pub fn read_all_blocks_with_progbar<T, U>(fname: &str, pp: Box<T>, msg: &str) -> (U, f64)
@@ -390,63 +372,8 @@ where
 
     read_all_blocks_prog_fpos_stop(&mut fbuf, stop_after, pp, pb)
 }
-/*
-pub struct ProgBarWrap {
-    start: u64,
-    end: u64,
-    asb: bool,
-    pb: ProgressBar,
-}
 
-impl ProgBarWrap {
-    pub fn new(total: u64) -> ProgBarWrap {
-        let pb = ProgressBar::new(total);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
-            .progress_chars("#>-"));
 
-        ProgBarWrap {
-            start: 0,
-            end: 0,
-            pb: pb,
-            asb: false,
-        }
-    }
-
-    pub fn new_filebytes(filelen: u64) -> ProgBarWrap {
-        let pb = ProgressBar::new(filelen);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {bytes} / {total_bytes} ({eta_precise}) {msg}")
-            .progress_chars("#>-"));
-
-        ProgBarWrap {
-            start: 0,
-            end: 0,
-            pb: pb,
-            asb: true,
-        }
-    }
-
-    pub fn set_range(&mut self, x: u64) {
-        self.start = self.end;
-        self.end = self.start + x;
-    }
-    pub fn set_message(&self, msg: &str) {
-        self.pb.set_message(msg);
-    }
-    pub fn prog(&self, val: f64) {
-        if self.asb {
-            self.pb.set_position(val as u64);
-        } else {
-            let v = ((self.end - self.start) as f64) * val / 100.0;
-            self.pb.set_position(v as u64 + self.start);
-        }
-    }
-    pub fn finish(&self) {
-        self.pb.finish();
-    }
-}
-*/
 pub fn read_all_blocks_locs_prog<R, T, U>(
     fobj: &mut R,
     fname: &str,
@@ -461,7 +388,7 @@ where
     U: Send + Sync + 'static,
     R: Read + Seek,
 {
-    let ct = Checktime::new();
+    let ct = Timer::new();
 
     let pf = (end_percent-start_percent) / (locs.len() as f64);
 
@@ -476,7 +403,7 @@ where
         pp.call((i, fb));
     }
     pb.progress_percent(end_percent);
-    (pp.finish().expect("finish failed"), ct.gettime())
+    (pp.finish().expect("finish failed"), ct.since())
 }
 
 pub fn read_all_blocks_parallel_prog<T, U, F, Q>(
@@ -490,7 +417,7 @@ where
     U: Send + Sync + 'static,
     F: Seek + Read,
 {
-    let ct = Checktime::new();
+    let ct = Timer::new();
 
     let mut fposes = Vec::new();
     for f in fbufs.iter_mut() {
@@ -518,7 +445,7 @@ where
         pp.call((j, fbs));
     }
     pb.finish();
-    (pp.finish().expect("finish failed"), ct.gettime())
+    (pp.finish().expect("finish failed"), ct.since())
 }
 
 pub fn read_all_blocks_parallel_with_progbar<T, U, F, Q>(

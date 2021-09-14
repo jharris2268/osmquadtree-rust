@@ -192,13 +192,15 @@ pub struct WayBoxesSplit {
     tiles: BTreeMap<i64, Box<WayBoxesVec>>,
 
     tm: f64,
+    ram_limit: u64,
 }
 
 impl WayBoxesSplit {
-    pub fn new() -> WayBoxesSplit {
+    pub fn new(ram_gb: u64) -> WayBoxesSplit {
         WayBoxesSplit {
             tiles: BTreeMap::new(),
             tm: 0.0,
+            ram_limit: ram_gb * 1024 * 1024 * 1024,
         }
     }
 
@@ -217,7 +219,7 @@ impl WayBoxesSplit {
         if !self.tiles.contains_key(&wt) {
             self.tiles
                 .insert(wt, Box::new(WayBoxesVec::new(wt << WAY_SPLIT_SHIFT)));
-            if self.approx_memory_use() > 8 * 1024 * 1024 * 1024 {
+            if self.approx_memory_use() > self.ram_limit {
                 // i.e. expected memory use > 8gb
                 panic!("too many tiles");
             }

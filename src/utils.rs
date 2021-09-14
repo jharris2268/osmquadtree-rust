@@ -1,6 +1,6 @@
 use std::fmt;
 use std::io::{Error, ErrorKind, Result};
-use crate::message;
+
 
 fn as_secs(dur: std::time::Duration) -> f64 {
     (dur.as_secs() as f64) * 1.0 + (dur.subsec_nanos() as f64) * 0.000000001
@@ -113,15 +113,15 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
         Ok(tm) => {
             return Ok(tm.timestamp());
         }
-        Err(_) => {} //println!("{:?}", e)}
+        Err(_) => {} //message!("{:?}", e)}
     }
 
     match NaiveDateTime::parse_from_str(ts, TIMEFORMAT_ALT) {
         Ok(tm) => {
             return Ok(tm.timestamp());
         }
-        Err(e) => {
-            message!("{:?}", e)
+        Err(_) => {
+            //message!("{:?}", e)
         }
     }
     
@@ -129,8 +129,8 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
         Ok(tm) => {
             return Ok(tm.timestamp());
         }
-        Err(e) => {
-            message!("{:?}", e)
+        Err(_) => {
+            //message!("{:?}", e)
         }
     }
     
