@@ -265,6 +265,36 @@ fn make_write_packed_pbffile(
     }
 }
 
+
+fn prepare_writepostgresdata(
+        connstr: &str,
+        tableprfx: &str,
+        opts: &PostgresqlOptions,
+        newthread: bool,
+        exec_after: bool,
+) -> Result<Box<dyn CallFinish<CallType = Vec<PackedBlob>, ReturnType = Timings>>> {
+    let conn = Connection::connect(connstr)?;
+
+    conn.execute("begin")?;
+    let (before, copy, after) =
+        prepare_tables(Some(tableprfx), &opts.table_spec, opts.extended)?;
+
+    for (i, qu) in before.iter().enumerate() {
+        let tx = Timer::new();
+        message!("{} {:100.100} ", i, qu);
+        conn.execute(&qu)?;
+        message!(": {:.1}s", tx.since());
+    }
+    let wpg = Box::new(WritePostgresData::new(conn, copy, exec_after, after));
+    if newthread {
+        Ok(Box::new(Callback::new(wpg)))
+    } else {
+        Ok(wpg)
+    }
+}
+
+
+
 struct WritePostgresData {
     conn: Arc<Mutex<Connection>>, // see altconnection.rs or postgresconnection.rs
 
@@ -294,35 +324,10 @@ impl WritePostgresData {
         }
     }
 
-    pub fn connect(
-        connstr: &str,
-        tableprfx: &str,
-        opts: &PostgresqlOptions,
-        newthread: bool,
-        exec_after: bool,
-    ) -> Result<Box<dyn CallFinish<CallType = Vec<PackedBlob>, ReturnType = Timings>>> {
-        let mut conn = Connection::connect(connstr)?;
-
-        conn.execute("begin")?;
-        let (before, copy, after) =
-            prepare_tables(Some(tableprfx), &opts.table_spec, opts.extended)?;
-
-        for (i, qu) in before.iter().enumerate() {
-            let tx = Timer::new();
-            message!("{} {:100.100} ", i, qu);
-            conn.execute(&qu)?;
-            message!(": {:.1}s", tx.since());
-        }
-        let wpg = Box::new(WritePostgresData::new(conn, copy, exec_after, after));
-        if newthread {
-            Ok(Box::new(Callback::new(wpg)))
-        } else {
-            Ok(wpg)
-        }
-    }
+    
 
     fn call_copy(&mut self, pb: &PackedBlob) {
-        let mut conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.copy(
             &self.copy[pb.table],
             &vec![PGCOPY_HEADER, &pb.data, PGCOPY_TAIL],
@@ -353,7 +358,7 @@ impl CallFinish for WritePostgresData {
         let mut tm = Timings::new();
         tm.add("WritePostgresData::copy", self.tt);
 
-        let mut conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
 
         let tx = Timer::new();
         conn.execute("commit").expect("commit failed");
@@ -400,7 +405,7 @@ fn prep_output(
 ) -> Result<Box<dyn CallFinish<CallType = Vec<PackedBlob>, ReturnType = Timings>>> {
     match &opts.connection {
         PostgresqlConnection::Connection((connstr, tableprfx, execindices)) => {
-            WritePostgresData::connect(connstr, tableprfx, opts, numchan != 0, *execindices)
+            prepare_writepostgresdata(connstr, tableprfx, opts, numchan != 0, *execindices)
         }
         PostgresqlConnection::Null => Ok(Box::new(WritePackedFiles::new(
             None,

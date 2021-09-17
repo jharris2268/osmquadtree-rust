@@ -108,7 +108,7 @@ impl Connection {
         Ok(Connection { conn })
     }
 
-    pub fn execute(&mut self, sql: &str) -> Result<()> {
+    pub fn execute(&self, sql: &str) -> Result<()> {
         let sql_cstr = CString::new(sql).expect("failed to read sql str");
         unsafe {
             let res = PQexec(self.conn, sql_cstr.as_ptr());
@@ -121,7 +121,7 @@ impl Connection {
         }
     }
 
-    pub fn copy(&mut self, cmd: &str, data: &[&[u8]]) -> Result<()> {
+    pub fn copy(&self, cmd: &str, data: &[&[u8]]) -> Result<()> {
         let cmd_cstr = CString::new(cmd).expect("failed to read cmd str");
 
         unsafe {

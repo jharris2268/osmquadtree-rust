@@ -150,7 +150,7 @@ const TABLE_QUERIES: &str = r#"
         ["Option","CREATE INDEX %ZZ%highway_id ON %ZZ%highway USING btree(osm_id)"],
         ["All","VACUUM ANALYZE %ZZ%highway"],
         ["All","ALTER TABLE %ZZ%highway SET (autovacuum_enabled=true)"],
-        ["All", "CREATE VIEW %ZZ%json_highway AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%polygon pp"]
+        ["All", "CREATE VIEW %ZZ%json_highway AS SELECT osm_id,jsonb_strip_nulls(row_to_json(pp)::jsonb - 'osm_id' - 'way') AS properties,way FROM %ZZ%highway pp"]
     ],
     "polygon": [
         ["All","CREATE INDEX %ZZ%polygon_way ON %ZZ%polygon USING gist(way)"],
