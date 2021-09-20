@@ -77,6 +77,7 @@ pub fn read_common<'a, T: SetCommon + WithId>(
                 strings[vv[i] as usize].clone(),
             ));
         }
+        tags.sort();
         obj.set_tags(tags);
     }
     Ok(rem)
