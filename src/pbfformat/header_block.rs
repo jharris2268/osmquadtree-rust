@@ -50,7 +50,8 @@ impl IndexItem {
 pub struct HeaderBlock {
     pub bbox: Vec<i64>,
     pub writer: String,
-    pub features: Vec<String>,
+    pub required_features: Vec<String>,
+    pub optional_features: Vec<String>,
     pub index: Vec<IndexItem>,
 }
 
@@ -76,7 +77,8 @@ impl HeaderBlock {
         HeaderBlock {
             bbox: Vec::new(),
             writer: String::new(),
-            features: Vec::new(),
+            required_features: Vec::new(),
+            optional_features: Vec::new(),
             index: Vec::new(),
         }
     }
@@ -90,7 +92,11 @@ impl HeaderBlock {
                 spb::PbfTag::Data(1, d) => res.bbox = read_header_bbox(&d)?,
                 spb::PbfTag::Data(4, d) => {
                     let f = std::str::from_utf8(d).unwrap().to_string();
-                    res.features.push(f);
+                    res.required_features.push(f);
+                },
+                spb::PbfTag::Data(5, d) => {
+                    let f = std::str::from_utf8(d).unwrap().to_string();
+                    res.optional_features.push(f);
                 }
                 spb::PbfTag::Data(16, d) => {
                     res.writer = std::str::from_utf8(d).expect("!").to_string()
