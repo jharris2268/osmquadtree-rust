@@ -180,8 +180,6 @@ impl Dense {
                     if kvs_idx < kvs.len() {
                         kvs_idx += 1;
                     }
-                    
-                    nd.tags.sort();
                 }
                 res.push(nd);
             } else {

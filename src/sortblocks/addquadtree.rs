@@ -208,8 +208,20 @@ pub fn make_unpackprimblock<T: CallFinish<CallType = PrimitiveBlock, ReturnType 
 ) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> {
     let conv = Box::new(|(i, fb): (usize, FileBlock)| {
         if fb.block_type == "OSMData" {
-            PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), false, false)
-                .expect("failed to read")
+            let mut pb = PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), false, false)
+                .expect("failed to read");
+            
+            for n in &mut pb.nodes {
+                n.tags.sort();
+            }
+            for w in &mut pb.ways {
+                w.tags.sort();
+            }
+            for r in &mut pb.relations {
+                r.tags.sort();
+            }
+            pb
+            
         } else {
             PrimitiveBlock::new(i as i64, fb.pos)
         }
