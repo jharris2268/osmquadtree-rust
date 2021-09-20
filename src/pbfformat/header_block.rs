@@ -53,6 +53,11 @@ pub struct HeaderBlock {
     pub source: Option<String>,
     pub required_features: Vec<String>,
     pub optional_features: Vec<String>,
+    
+    pub osmosis_replication_timestamp: Option<i64>,
+    pub osmosis_replication_sequence_number: Option<i64>,
+    pub osmosis_replication_base_url: Option<String>,
+    
     pub index: Vec<IndexItem>,
 }
 
@@ -81,6 +86,9 @@ impl HeaderBlock {
             source: None,
             required_features: Vec::new(),
             optional_features: Vec::new(),
+            osmosis_replication_timestamp:None,
+            osmosis_replication_sequence_number: None,
+            osmosis_replication_base_url: None,
             index: Vec::new(),
         }
     }
@@ -118,6 +126,20 @@ impl HeaderBlock {
                         std::str::from_utf8(d).expect("!")
                     ))?;
                 }
+                
+                spb::PbfTag::Value(32, d) => {
+                    res.osmosis_replication_timestamp = Some(d as i64);
+                    
+                }
+                spb::PbfTag::Value(33, d) => {
+                    res.osmosis_replication_sequence_number = Some(d as i64);
+                    
+                }
+                spb::PbfTag::Data(34, d) => {
+                    res.osmosis_replication_base_url = Some(std::str::from_utf8(d).unwrap().to_string());
+                    
+                }
+                
                 _ => { return Err(Error::new(ErrorKind::Other, format!("?? {:?}", x))); },
             }
         }
