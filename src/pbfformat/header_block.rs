@@ -49,7 +49,8 @@ impl IndexItem {
 #[derive(Debug)]
 pub struct HeaderBlock {
     pub bbox: Vec<i64>,
-    pub writer: String,
+    pub writingprogram: Option<String>,
+    pub source: Option<String>,
     pub required_features: Vec<String>,
     pub optional_features: Vec<String>,
     pub index: Vec<IndexItem>,
@@ -76,7 +77,8 @@ impl HeaderBlock {
     pub fn new() -> HeaderBlock {
         HeaderBlock {
             bbox: Vec::new(),
-            writer: String::new(),
+            writingprogram: None,
+            source: None,
             required_features: Vec::new(),
             optional_features: Vec::new(),
             index: Vec::new(),
@@ -99,7 +101,10 @@ impl HeaderBlock {
                     res.optional_features.push(f);
                 }
                 spb::PbfTag::Data(16, d) => {
-                    res.writer = std::str::from_utf8(d).expect("!").to_string()
+                    res.writingprogram = Some(std::str::from_utf8(d).expect("!").to_string())
+                }
+                spb::PbfTag::Data(17, d) => {
+                    res.source = Some(std::str::from_utf8(d).expect("!").to_string())
                 }
                 spb::PbfTag::Data(22, d) => {
                     let i = IndexItem::read(npos, &d)?;
