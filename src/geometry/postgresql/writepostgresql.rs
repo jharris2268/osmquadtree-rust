@@ -82,7 +82,7 @@ struct CopySpec<'a> {
 
 impl<'a> CopySpec<'a> {
     pub fn new(tabs: &'a Vec<TableSpec>, extended: bool) -> CopySpec<'a> {
-        let (before, copy, after) = prepare_tables(None, &tabs, extended).expect("!");
+        let (before, copy, after) = prepare_tables(None, &tabs, extended, false, &None).expect("!");
         CopySpec {
             tabs,
             before,
@@ -277,7 +277,7 @@ fn prepare_writepostgresdata(
 
     conn.execute("begin")?;
     let (before, copy, after) =
-        prepare_tables(Some(tableprfx), &opts.table_spec, opts.extended)?;
+        prepare_tables(Some(tableprfx), &opts.table_spec, opts.extended, opts.planet_osm_views, &opts.lowzoom)?;
 
     for (i, qu) in before.iter().enumerate() {
         let tx = Timer::new();
@@ -292,7 +292,6 @@ fn prepare_writepostgresdata(
         Ok(wpg)
     }
 }
-
 
 
 struct WritePostgresData {

@@ -28,6 +28,10 @@ pub fn latitude_un_mercator(d: f64, scale: f64) -> f64 {
 
 pub const EARTH_WIDTH: f64 = 20037508.342789244;
 
+pub fn zoom(z: f64) -> f64 {
+    EARTH_WIDTH / 256.0 / 2.0_f64.powf(z)
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tuple {
     pub x: u32,

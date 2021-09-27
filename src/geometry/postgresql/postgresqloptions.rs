@@ -17,6 +17,8 @@ pub struct PostgresqlOptions {
     pub table_alloc: AllocFunc,
     pub table_spec: Vec<TableSpec>,
     pub extended: bool,
+    pub planet_osm_views: bool,
+    pub lowzoom: Option<Vec<(String,i64,bool)>>
 }
 
 impl PostgresqlOptions {
@@ -26,6 +28,8 @@ impl PostgresqlOptions {
             table_alloc: Arc::new(osm2pgsql_alloc),
             table_spec: make_table_spec(style, false),
             extended: false,
+            planet_osm_views: false,
+            lowzoom: None
         }
     }
 
@@ -35,6 +39,8 @@ impl PostgresqlOptions {
             table_alloc: Arc::new(extended_alloc),
             table_spec: make_table_spec(style, true),
             extended: true,
+            planet_osm_views: false,
+            lowzoom: None
         }
     }
 
@@ -42,12 +48,16 @@ impl PostgresqlOptions {
         conn: PostgresqlConnection,
         alloc_func: AllocFunc,
         table_spec: Vec<TableSpec>,
+        
+        
     ) -> PostgresqlOptions {
         PostgresqlOptions {
             connection: conn,
             table_alloc: alloc_func,
             table_spec: table_spec,
             extended: false,
+            planet_osm_views: false,
+            lowzoom: None
         }
     }
 }

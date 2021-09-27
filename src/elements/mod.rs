@@ -25,7 +25,7 @@ pub use primitive_block::{Block, Info, Member, Node, PrimitiveBlock, Relation, T
 pub use common::{pack_head, PackStringTable, read_common};
 pub use quadtree::{
     coordinate_as_float, coordinate_as_integer, latitude_mercator, latitude_un_mercator, Bbox,
-    Quadtree, EARTH_WIDTH,
+    Quadtree, EARTH_WIDTH,zoom
 };
 pub use traits::*;
 pub use compareelements::{compare_element_iters,compare_element_iters_json,compare_primitiveblock,ElementCompare};

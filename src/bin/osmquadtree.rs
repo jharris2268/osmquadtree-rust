@@ -10,7 +10,7 @@ use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem, Quadt
 use osmquadtree::update::{run_update, run_update_initial, write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
 
-use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions};
+use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions,prepare_tables};
 use osmquadtree::geometry::{process_geometry, GeometryStyle, OutputType};
 use osmquadtree::mergechanges::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
@@ -378,7 +378,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").required(true).takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("--filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
@@ -391,11 +391,12 @@ fn main() {
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("--filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
+                .arg(Arg::with_name("SINGLETEMPFILE").short("-S").long("--single_temp_file").help("write temp data to one file"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges_sort_from_existing")
@@ -412,7 +413,7 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("OUTFN").short("-o").long("--outfn").required(true).takes_value(true).help("out filename, "))
                 .arg(Arg::allow_hyphen_values(Arg::with_name("FILTER").short("-f").long("--filter").takes_value(true).help("filters blocks by bbox FILTER"),true))
-                .arg(Arg::with_name("FILTEROBJS").short("-F").long("filterobjs").help("filter objects within blocks"))
+                .arg(Arg::with_name("FILTEROBJS").short("-F").long("--filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
@@ -520,6 +521,11 @@ fn main() {
         .subcommand(
             SubCommand::with_name("dump_geometry_style")
                 .arg(Arg::with_name("OUTPUT").required(true))
+        )
+        .subcommand(
+            SubCommand::with_name("show_after_queries")
+                .arg(Arg::with_name("TABLE_PREFIX").short("-p").long("--tableprefix").takes_value(true).help("table prfx"))
+                .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
         )
         ;
 
@@ -647,6 +653,8 @@ fn main() {
             filter.is_present("KEEPTEMPS"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
             value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+            filter.is_present("SINGLETEMPFILE")
+
         ),
         ("mergechanges_sort_from_existing", Some(filter)) => run_mergechanges_sort_from_existing(
             filter.value_of("OUTFN").unwrap(),
@@ -791,7 +799,27 @@ fn main() {
             )
         }
         ("dump_geometry_style", Some(geom)) => dump_geometry_style(geom.value_of("OUTPUT")),
+        
+        ("show_after_queries", Some(geom)) => {
+            (|| {
+                let pc = PostgresqlConnection::Connection((String::new(),String::new(),true));
+                let po = if geom.is_present("EXTENDED") {
+                    PostgresqlOptions::extended(pc, &GeometryStyle::default())
+                } else {
+                    PostgresqlOptions::osm2pgsql(pc, &GeometryStyle::default())
+                };
+                let lz = if po.extended { Some(Vec::from([(String::from("lz6_"),6,true),(String::from("lz9_"),9,false),(String::from("lz11_"),11,false)])) } else {None};
+                message!("{}", prepare_tables(geom.value_of("TABLE_PREFIX"), 
+                    &po.table_spec, 
+                    po.extended,
+                    po.extended,
+                    &lz)?.2.join("\n"));
+                Ok(())
+            })()
+        },
+        
         _ => Err(Error::new(ErrorKind::Other, "??")),
+        
     };
 
     match res {

@@ -349,6 +349,7 @@ pub fn run_mergechanges_sort(
     keep_temps: bool,
     numchan: usize,
     ram_gb: usize,
+    single_temp_file: bool,
 ) -> Result<()> {
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
@@ -389,7 +390,7 @@ pub fn run_mergechanges_sort(
     if tempfn == "NONE" || tempfn == "NULL" {
         limit = 200;
     }
-    let fsplit = if filter.is_none() || pfilelocs.2 > 4 * 1024 * 1024 * 1024 {
+    let fsplit = if !single_temp_file && pfilelocs.2 > 4 * 1024 * 1024 * 1024 {
         128
     } else {
         0
