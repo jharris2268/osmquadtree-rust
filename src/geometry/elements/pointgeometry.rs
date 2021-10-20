@@ -18,7 +18,7 @@ pub fn pack_tags(tgs: &[Tag]) -> std::io::Result<Value> {
     Ok(json!(res))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct PointGeometry {
     pub id: i64,
     pub info: Option<Info>,
@@ -46,7 +46,7 @@ impl PointGeometry {
             minzoom: None,
         }
     }
-
+ 
     pub fn to_geo(&self, transform: bool) -> geo::Point<f64> {
         geo::Point(self.lonlat.to_xy(transform))
     }

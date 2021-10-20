@@ -141,12 +141,20 @@ impl GeometryBlock {
     pub fn pack(&self) -> Result<Vec<u8>> {
         pack_geometry_block(self)
     }
+    
 
     pub fn extend(&mut self, other: GeometryBlock) {
         self.points.extend(other.points);
         self.linestrings.extend(other.linestrings);
         self.simple_polygons.extend(other.simple_polygons);
         self.complicated_polygons.extend(other.complicated_polygons);
+    }
+    
+    pub fn extend_clone(&mut self, other: &GeometryBlock) {
+        self.points.extend(other.points.clone());
+        self.linestrings.extend(other.linestrings.clone());
+        self.simple_polygons.extend(other.simple_polygons.clone());
+        self.complicated_polygons.extend(other.complicated_polygons.clone());
     }
 
     pub fn to_geojson(&self) -> Result<Value> {

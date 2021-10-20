@@ -9,7 +9,7 @@ use serde_json::{json, Map, Value};
 
 extern crate geo;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct LinestringGeometry {
     pub id: i64,
     pub info: Option<Info>,

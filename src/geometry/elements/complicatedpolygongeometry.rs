@@ -45,7 +45,7 @@ impl RingPart {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct Ring {
     
     pub parts: Vec<RingPart>,
@@ -340,7 +340,7 @@ pub fn collect_rings(ww: Vec<RingPart>) -> Result<(Vec<Ring>, Vec<RingPart>)> {
     Ok((res, rem))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct PolygonPart {
     pub exterior: Ring,
     pub interiors: Vec<Ring>,
@@ -404,7 +404,7 @@ impl PolygonPart {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct ComplicatedPolygonGeometry {
     pub id: i64,
     pub info: Option<Info>,

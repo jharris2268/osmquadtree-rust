@@ -275,7 +275,7 @@ where
     }
 }
 
-fn write_geojson_tiles(tiles: BTreeMap<Quadtree, GeometryBlock>, outfn: &str) -> Result<()> {
+fn write_geojson_tiles(tiles: &BTreeMap<Quadtree, GeometryBlock>, outfn: &str) -> Result<()> {
     let mut v = Vec::new();
     for (_, t) in tiles {
         v.push(t.to_geojson()?);
@@ -324,6 +324,7 @@ fn write_geojson_flat(tiles: BTreeMap<Quadtree, GeometryBlock>, outfn: &str) -> 
 
 pub enum OutputType {
     None,
+    Collect,
     Json(String),
     TiledJson(String),
     PbfFile(String),
@@ -340,7 +341,7 @@ pub fn process_geometry(
     style_name: Option<&str>,
     max_minzoom: Option<i64>,
     numchan: usize,
-) -> Result<()> {
+) -> Result<Option<Vec<GeometryBlock>>> {
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
 
@@ -380,7 +381,7 @@ pub fn process_geometry(
     let out: Option<Box<dyn CallFinish<CallType = GeometryBlock, ReturnType = Timings>>> =
         match &outfn {
             OutputType::None => None,
-            OutputType::Json(_) | OutputType::TiledJson(_) => Some(Box::new(StoreBlocks::new())),
+            OutputType::Collect | OutputType::Json(_) | OutputType::TiledJson(_) => Some(Box::new(StoreBlocks::new())),
             OutputType::PbfFile(ofn) => {
                 Some(prep_write_geometry_pbffile(ofn, &bbox, numchan)?)
             },
@@ -513,28 +514,32 @@ pub fn process_geometry(
     }
     tx.add("finish process_geometry");
     
-    match outfn {
-        OutputType::None | OutputType::PbfFile(_) | OutputType::Postgresql(_) => {},
+    let out = match outfn {
+        OutputType::None | OutputType::PbfFile(_) | OutputType::Postgresql(_) => { None },
+        OutputType::Collect => Some(all_tiles.into_values().collect()),
         OutputType::PbfFileSorted(outfn) => {
             write_temp_geometry(&outfn, &bbox, tempdata.unwrap(), groups.unwrap(), numchan)?;
             tx.add("write final pbf");
-            
+            None
         },
         OutputType::Json(ofn) => {
             if !all_tiles.is_empty() {
                 write_geojson_flat(all_tiles, &ofn)?;
                 tx.add("write json");
             }
+            None
         }
         OutputType::TiledJson(ofn) => {
             if !all_tiles.is_empty() {
-                write_geojson_tiles(all_tiles, &ofn)?;
+                write_geojson_tiles(&all_tiles, &ofn)?;
                 tx.add("write json");
             }
+            Some(all_tiles.into_values().collect())
         }
-    }
+    };
     
 
     message!("{}", tx);
-    Ok(())
+    Ok(out)
+        
 }

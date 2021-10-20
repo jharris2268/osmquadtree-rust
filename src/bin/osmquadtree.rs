@@ -11,126 +11,30 @@ use osmquadtree::update::{run_update, run_update_initial, write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
 
 use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions,prepare_tables};
-use osmquadtree::geometry::{process_geometry, GeometryStyle, OutputType};
+use osmquadtree::geometry::{GeometryStyle, OutputType};
 use osmquadtree::mergechanges::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
     run_mergechanges_sort_inmem,
 };
 use osmquadtree::message;
+use osmquadtree::defaultlogger::register_messenger_default;
+
 use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
 
-
-use indicatif::{ProgressBar, ProgressStyle};
-use osmquadtree::logging::{ProgressBytes,ProgressPercent,Messenger};
-
-
-
-pub struct ProgressBytesDefault {
-    pb: ProgressBar
+fn process_geometry(
+    prfx: &str,
+    outfn: OutputType,
+    filter: Option<&str>,
+    timestamp: Option<&str>,
+    find_minzoom: bool,
+    style_name: Option<&str>,
+    max_minzoom: Option<i64>,
+    numchan: usize,
+) -> Result<()> {
+    osmquadtree::geometry::process_geometry(prfx, outfn, filter, timestamp, find_minzoom, style_name, max_minzoom, numchan)?;
+    Ok(())
 }
-
-impl ProgressBytesDefault {
-    pub fn new(message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
-        let pb = ProgressBar::new(total_bytes);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {bytes} / {total_bytes} ({eta_precise}) {msg}")
-            .progress_chars("#>-"));
-        
-        pb.set_message(message);
-        
-        Box::new(ProgressBytesDefault{pb: pb})
-    }
-}
-
-impl ProgressBytes for ProgressBytesDefault {
-    fn change_message(&self, new_message: &str) {
-        self.pb.set_message(new_message);
-    }
-    
-    
-    fn progress_bytes(&self, bytes: u64) {
-        
-        self.pb.set_position(bytes);
-        
-    }
-    fn finish(&self) {
-        
-        self.pb.finish();
-        
-    }
-}
-
-pub struct ProgressPercentDefault {
-    pb: ProgressBar
-}
-
-impl ProgressPercentDefault {
-    pub fn new(message: &str) -> Box<dyn ProgressPercent> {
-                
-        let pb = ProgressBar::new(1000);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {percent:>4}% ({eta_precise}) {msg}")
-            .progress_chars("#>-"));
-        pb.set_message(message);
-        
-        Box::new(ProgressPercentDefault{pb: pb})
-    }
-}
-
-impl ProgressPercent for ProgressPercentDefault {
-    fn change_message(&self, new_message: &str) {
-        self.pb.set_message(new_message);
-    }
-    
-    fn progress_percent(&self, percent: f64) {
-        
-        self.pb.set_position((percent*10.0) as u64);
-        
-    }
-    fn finish(&self) {
-        
-        self.pb.finish();
-        
-    }
-}
-pub struct MessengerDefault;
-    
-impl MessengerDefault {
-    
-    pub fn new() -> MessengerDefault {
-        
-        MessengerDefault
-    }
-    
-    
-}
-
-impl Messenger for MessengerDefault {
-    
-    
-    fn message(&self, message: &str) {
-        let lns = message.split("\n");
-        for (i,l) in lns.enumerate() {
-            println!("{} {}", (if i==0 { "MSG:" } else { "    "}), l);
-        }
-    }
-    
-    fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent> {
-        
-        ProgressPercentDefault::new(message)
-    }
-    fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
-        
-        ProgressBytesDefault::new(message, total_bytes)
-    }
-    
-        
-        
-}
-    
-
-
 
 fn run_sortblocks(
     infn: &str,
@@ -249,8 +153,7 @@ const QT_BUFFER_DEFAULT: f64 = 0.05;
 
 fn main() {
     // basic app information
-    let msg = Box::new(MessengerDefault::new());
-    osmquadtree::logging::set_boxed_messenger(msg).expect("!!");
+    register_messenger_default().expect("!!");
     
     
     let app = App::new("osmquadtree")

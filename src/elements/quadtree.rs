@@ -103,7 +103,7 @@ impl fmt::Display for Tuple {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Bbox {
     pub minlon: i32,
     pub minlat: i32,

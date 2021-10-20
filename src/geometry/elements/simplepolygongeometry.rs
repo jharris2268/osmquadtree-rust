@@ -33,7 +33,7 @@ pub fn pack_bounds(bounds: &Bbox) -> Value {
     ))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Clone)]
 pub struct SimplePolygonGeometry {
     pub id: i64,
     pub info: Option<Info>,
