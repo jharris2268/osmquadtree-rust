@@ -22,7 +22,7 @@ pub use crate::geometry::waywithnodes::CollectWayNodes;
 
 pub use crate::geometry::elements::{
     ComplicatedPolygonGeometry, LinestringGeometry, PointGeometry, PolygonPart, Ring, RingPart,
-    SimplePolygonGeometry,
+    SimplePolygonGeometry, GeoJsonable
 };
 pub use crate::geometry::geometry_block::GeometryBlock;
 pub use crate::geometry::process_geometry::{process_geometry, OutputType};
