@@ -104,7 +104,7 @@ impl SimplePolygonGeometry {
         res
     }
 
-    fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+    pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
         let mut res = Map::new();
 
         res.insert(String::from("type"), json!("Polygon"));

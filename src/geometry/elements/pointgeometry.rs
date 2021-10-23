@@ -51,7 +51,7 @@ impl PointGeometry {
         geo::Point(self.lonlat.to_xy(transform))
     }
 
-    fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+    pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
         let geom = geojson::Value::from(&self.to_geo(false));
 
         Ok(Value::from(&geom))
