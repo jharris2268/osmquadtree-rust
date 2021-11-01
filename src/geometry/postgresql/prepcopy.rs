@@ -244,9 +244,9 @@ impl PrepTable {
         match self.other_tags_col {
             None => {}
             Some(i) => {
-                if !other_tags.is_empty() {
+                //if !other_tags.is_empty() {
                     res[i] = CopyValue::HStore(other_tags);
-                }
+                //}
             }
         }
 
