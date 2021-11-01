@@ -1,4 +1,4 @@
-use crate::elements::{Info, Node, Quadtree, Tag};
+use crate::elements::{Info, Node, Quadtree, Tag,coordinate_as_float};
 use crate::geometry::elements::GeoJsonable;
 use crate::geometry::wkb::{prep_wkb, write_point};
 
@@ -52,16 +52,16 @@ impl PointGeometry {
     }
 
     pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
-        let geom = geojson::Value::from(&self.to_geo(false));
+        //let geom = geojson::Value::from(&self.to_geo(false));
 
-        Ok(Value::from(&geom))
-        /*
+        //Ok(Value::from(&geom))
+        
 
         let mut res = Map::new();
         //let p = self.lonlat.forward();
         res.insert(String::from("type"), json!("Point"));
         res.insert(String::from("coordinates"), json!((coordinate_as_float(self.lonlat.lon),coordinate_as_float(self.lonlat.lat))));
-        Ok(json!(res))*/
+        Ok(json!(res))
     }
 
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
