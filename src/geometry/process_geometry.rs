@@ -278,7 +278,7 @@ where
 fn write_geojson_tiles(tiles: &BTreeMap<Quadtree, GeometryBlock>, outfn: &str) -> Result<()> {
     let mut v = Vec::new();
     for (_, t) in tiles {
-        v.push(t.to_geojson()?);
+        v.push(t.to_geojson(false)?);
     }
     serde_json::to_writer(std::fs::File::create(outfn)?, &v)?;
     Ok(())
@@ -287,7 +287,7 @@ fn write_geojson_tiles(tiles: &BTreeMap<Quadtree, GeometryBlock>, outfn: &str) -
 fn pack_feature_collection<F: GeoJsonable>(feats: &[F]) -> Result<Value> {
     let mut vv = Vec::with_capacity(feats.len());
     for f in feats {
-        vv.push(f.to_geojson()?);
+        vv.push(f.to_geojson(false)?);
     }
     let mut m = Map::new();
     m.insert(String::from("type"), json!("FeatureCollection"));

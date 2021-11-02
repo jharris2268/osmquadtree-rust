@@ -51,7 +51,7 @@ impl PointGeometry {
         geo::Point(self.lonlat.to_xy(transform))
     }
 
-    pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+    pub fn to_geometry_geojson(&self, transform: bool) -> std::io::Result<Value> {
         //let geom = geojson::Value::from(&self.to_geo(false));
 
         //Ok(Value::from(&geom))
@@ -60,7 +60,12 @@ impl PointGeometry {
         let mut res = Map::new();
         //let p = self.lonlat.forward();
         res.insert(String::from("type"), json!("Point"));
-        res.insert(String::from("coordinates"), json!((coordinate_as_float(self.lonlat.lon),coordinate_as_float(self.lonlat.lat))));
+        if transform {
+            let q = self.lonlat.forward();
+            res.insert(String::from("coordinates"), json!((q.x,q.y)));
+        } else {
+            res.insert(String::from("coordinates"), json!((coordinate_as_float(self.lonlat.lon),coordinate_as_float(self.lonlat.lat))));
+        }
         Ok(json!(res))
     }
 
@@ -74,7 +79,7 @@ impl PointGeometry {
 }
 
 impl GeoJsonable for PointGeometry {
-    fn to_geojson(&self) -> std::io::Result<Value> {
+    fn to_geojson(&self, transform: bool) -> std::io::Result<Value> {
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
         res.insert(String::from("id"), json!(self.id));
@@ -83,7 +88,7 @@ impl GeoJsonable for PointGeometry {
             json!(self.quadtree.as_tuple().xyz()),
         );
         res.insert(String::from("properties"), pack_tags(&self.tags)?);
-        res.insert(String::from("geometry"), self.to_geometry_geojson()?);
+        res.insert(String::from("geometry"), self.to_geometry_geojson(transform)?);
 
         match self.layer {
             None => {}

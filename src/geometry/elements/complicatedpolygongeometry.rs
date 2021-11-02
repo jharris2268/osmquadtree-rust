@@ -374,12 +374,12 @@ impl PolygonPart {
         self.interiors.push(p);
     }
 
-    pub fn prep_coordinates(&self) -> Result<Vec<Vec<(f64, f64)>>> {
+    pub fn prep_coordinates(&self, transform: bool) -> Result<Vec<Vec<(f64, f64)>>> {
         let mut rings = Vec::new();
 
-        rings.push(read_lonlats(&self.exterior.lonlats()?, false));
+        rings.push(read_lonlats(&self.exterior.lonlats()?, false, transform));
         for ii in &self.interiors {
-            rings.push(read_lonlats(&ii.lonlats()?, false));
+            rings.push(read_lonlats(&ii.lonlats()?, false, transform));
         }
 
         Ok(rings)
@@ -501,19 +501,19 @@ impl ComplicatedPolygonGeometry {
         res
     }
 
-    pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+    pub fn to_geometry_geojson(&self, transform: bool) -> std::io::Result<Value> {
         let mut res = Map::new();
         if self.parts.len() == 1 {
             res.insert(String::from("type"), json!("Polygon"));
             res.insert(
                 String::from("coordinates"),
-                json!(self.parts[0].prep_coordinates()?),
+                json!(self.parts[0].prep_coordinates(transform)?),
             );
         } else {
             res.insert(String::from("type"), json!("MultiPolygon"));
             let mut cc = Vec::new();
             for p in &self.parts {
-                cc.push(p.prep_coordinates()?);
+                cc.push(p.prep_coordinates(transform)?);
             }
             res.insert(String::from("coordinates"), json!(cc));
         }
@@ -522,7 +522,7 @@ impl ComplicatedPolygonGeometry {
 }
 
 impl GeoJsonable for ComplicatedPolygonGeometry {
-    fn to_geojson(&self) -> std::io::Result<Value> {
+    fn to_geojson(&self, transform: bool) -> std::io::Result<Value> {
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
         res.insert(String::from("id"), json!(self.id));
@@ -531,7 +531,7 @@ impl GeoJsonable for ComplicatedPolygonGeometry {
             json!(self.quadtree.as_tuple().xyz()),
         );
         res.insert(String::from("properties"), pack_tags(&self.tags)?);
-        res.insert(String::from("geometry"), self.to_geometry_geojson()?);
+        res.insert(String::from("geometry"), self.to_geometry_geojson(transform)?);
         res.insert(
             String::from("way_area"),
             json!(f64::round(self.area * 10.0) / 10.0),

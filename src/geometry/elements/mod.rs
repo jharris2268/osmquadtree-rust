@@ -11,5 +11,5 @@ pub use pointgeometry::PointGeometry;
 pub use simplepolygongeometry::SimplePolygonGeometry;
 
 pub trait GeoJsonable {
-    fn to_geojson(&self) -> std::io::Result<serde_json::Value>;
+    fn to_geojson(&self, transform: bool) -> std::io::Result<serde_json::Value>;
 }

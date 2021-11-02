@@ -157,7 +157,7 @@ impl GeometryBlock {
         self.complicated_polygons.extend(other.complicated_polygons.clone());
     }
 
-    pub fn to_geojson(&self) -> Result<Value> {
+    pub fn to_geojson(&self, transform: bool) -> Result<Value> {
         let mut rr = Map::new();
 
         rr.insert(
@@ -174,25 +174,25 @@ impl GeometryBlock {
         );
         let mut points = Vec::new();
         for p in &self.points {
-            points.push(p.to_geojson()?);
+            points.push(p.to_geojson(transform)?);
         }
         rr.insert(String::from("points"), json!(points));
 
         let mut linestrings = Vec::new();
         for p in &self.linestrings {
-            linestrings.push(p.to_geojson()?);
+            linestrings.push(p.to_geojson(transform)?);
         }
         rr.insert(String::from("linestrings"), json!(linestrings));
 
         let mut simple_polygons = Vec::new();
         for p in &self.simple_polygons {
-            simple_polygons.push(p.to_geojson()?);
+            simple_polygons.push(p.to_geojson(transform)?);
         }
         rr.insert(String::from("simple_polygons"), json!(simple_polygons));
 
         let mut complicated_polygons = Vec::new();
         for p in &self.complicated_polygons {
-            complicated_polygons.push(p.to_geojson()?);
+            complicated_polygons.push(p.to_geojson(transform)?);
         }
         rr.insert(
             String::from("complicated_polygons"),

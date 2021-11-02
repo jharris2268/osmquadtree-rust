@@ -73,20 +73,20 @@ impl LinestringGeometry {
         res
     }
 
-    pub fn to_geometry_geojson(&self) -> std::io::Result<Value> {
+    pub fn to_geometry_geojson(&self, transform: bool) -> std::io::Result<Value> {
         let mut res = Map::new();
 
         res.insert(String::from("type"), json!("LineString"));
         res.insert(
             String::from("coordinates"),
-            json!(read_lonlats(&self.lonlats, false)),
+            json!(read_lonlats(&self.lonlats, false,transform)),
         );
         Ok(json!(res))
     }
 }
 
 impl GeoJsonable for LinestringGeometry {
-    fn to_geojson(&self) -> std::io::Result<Value> {
+    fn to_geojson(&self, transform: bool) -> std::io::Result<Value> {
         let mut res = Map::new();
         res.insert(String::from("type"), json!("Feature"));
         res.insert(String::from("id"), json!(self.id));
@@ -95,7 +95,7 @@ impl GeoJsonable for LinestringGeometry {
             json!(self.quadtree.as_tuple().xyz()),
         );
         res.insert(String::from("properties"), pack_tags(&self.tags)?);
-        res.insert(String::from("geometry"), self.to_geometry_geojson()?);
+        res.insert(String::from("geometry"), self.to_geometry_geojson(transform)?);
         res.insert(
             String::from("way_length"),
             json!(f64::round(self.length * 10.0) / 10.0),
