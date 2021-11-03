@@ -9,7 +9,7 @@ use crate::geometry::position::{calc_line_length, calc_ring_area};
 use crate::geometry::relationtags::AddRelationTags;
 use crate::geometry::{
     CollectWayNodes, GeometryBlock, GeometryStyle, LinestringGeometry, OtherData, PointGeometry,
-    SimplePolygonGeometry, Timings, WorkingBlock,
+    SimplePolygonGeometry, ComplicatedPolygonGeometry, Timings, WorkingBlock,
 };
 
 use crate::geometry::tempfile::{prep_write_geometry_pbffile, make_write_temp_geometry, write_temp_geometry};
@@ -38,15 +38,62 @@ use std::sync::Arc;
 
 struct StoreBlocks {
     tiles: BTreeMap<Quadtree, GeometryBlock>,
+    rem: Option<GeometryBlock>,
     nt: usize,
 }
 
 impl StoreBlocks {
-    pub fn new() -> StoreBlocks {
-        StoreBlocks {
-            tiles: BTreeMap::new(),
-            nt: 0,
+    pub fn new(qq: Vec<Quadtree>) -> StoreBlocks {
+        let mut tiles = BTreeMap::new();
+        for q in qq {
+            tiles.insert(q, GeometryBlock::new(tiles.len() as i64, q.clone(), 0));
         }
+        StoreBlocks {
+            tiles: tiles, 
+            nt: 0,
+            rem: Some(GeometryBlock::new(-1, Quadtree::empty(), 0))
+        }
+    }
+    fn add_point(&mut self, p: PointGeometry) {
+        for i in p.quadtree.depth()..0 {
+            match self.tiles.get_mut(&p.quadtree.round(i)) {
+                Some(b) => { b.points.push(p); return; }
+                _ => {}
+            }
+        }
+        self.rem.as_mut().unwrap().points.push(p);
+        //return self.tiles.get_mut(&Quadtree::new(0)).unwrap()
+    }
+
+    fn add_linestring(&mut self, p: LinestringGeometry) {
+        for i in p.quadtree.depth()..0 {
+            match self.tiles.get_mut(&p.quadtree.round(i)) {
+                Some(b) => { b.linestrings.push(p); return; }
+                _ => {}
+            }
+        }
+        self.rem.as_mut().unwrap().linestrings.push(p);
+        //return self.tiles.get_mut(&Quadtree::new(0)).unwrap()
+    }
+    fn add_simple_polygon(&mut self, p: SimplePolygonGeometry) {
+        for i in p.quadtree.depth()..0 {
+            match self.tiles.get_mut(&p.quadtree.round(i)) {
+                Some(b) => { b.simple_polygons.push(p); return; }
+                _ => {}
+            }
+        }
+        self.rem.as_mut().unwrap().simple_polygons.push(p);
+        //return self.tiles.get_mut(&Quadtree::new(0)).unwrap()
+    }
+    fn add_complicated_polygon(&mut self, p: ComplicatedPolygonGeometry) {
+        for i in p.quadtree.depth()..0 {
+            match self.tiles.get_mut(&p.quadtree.round(i)) {
+                Some(b) => { b.complicated_polygons.push(p); return; }
+                _ => {}
+            }
+        }
+        self.rem.as_mut().unwrap().complicated_polygons.push(p);
+        //return self.tiles.get_mut(&Quadtree::new(0)).unwrap()
     }
 }
 
@@ -54,27 +101,41 @@ impl CallFinish for StoreBlocks {
     type CallType = GeometryBlock;
     type ReturnType = Timings;
 
+    
+            
+
     fn call(&mut self, gb: GeometryBlock) {
         self.nt += 1;
         if gb.len() == 0 {
             return;
         }
-
-        match self.tiles.get_mut(&gb.quadtree) {
-            Some(tl) => {
-                tl.extend(gb);
-            }
-            None => {
-                self.tiles.insert(gb.quadtree.clone(), gb);
-            }
+        
+        
+        for p in gb.points {
+            self.add_point(p);
+        }
+        for p in gb.linestrings {
+            self.add_linestring(p);
+        }
+        for p in gb.simple_polygons {
+            self.add_simple_polygon(p);
+        }
+        for p in gb.complicated_polygons {
+            self.add_complicated_polygon(p);
         }
     }
 
     fn finish(&mut self) -> Result<Timings> {
         let mut tms = Timings::new();
+        let rem = std::mem::take(&mut self.rem).unwrap();
+        if rem.len()>0 {
+            self.tiles.insert(Quadtree::empty(), rem);
+        }
         for (_, t) in self.tiles.iter_mut() {
             t.sort();
         }
+        
+        
         tms.add_other(
             "StoreBlocks",
             OtherData::Messages(vec![format!(
@@ -381,7 +442,13 @@ pub fn process_geometry(
     let out: Option<Box<dyn CallFinish<CallType = GeometryBlock, ReturnType = Timings>>> =
         match &outfn {
             OutputType::None => None,
-            OutputType::Collect | OutputType::Json(_) | OutputType::TiledJson(_) => Some(Box::new(StoreBlocks::new())),
+            OutputType::Collect | OutputType::Json(_) | OutputType::TiledJson(_) => {
+                let mut qq = Vec::new();
+                for a in &pfilelocs.1 {
+                    qq.push(a.0.clone());
+                }
+                Some(Box::new(StoreBlocks::new(qq)))
+            },
             OutputType::PbfFile(ofn) => {
                 Some(prep_write_geometry_pbffile(ofn, &bbox, numchan)?)
             },
