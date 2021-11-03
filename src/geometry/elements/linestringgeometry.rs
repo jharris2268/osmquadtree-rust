@@ -56,7 +56,7 @@ impl LinestringGeometry {
     }
 
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
-        let mut res = prep_wkb(with_srid, transform, 2, 4 + 16 * self.lonlats.len())?;
+        let mut res = prep_wkb(transform, with_srid, 2, 4 + 16 * self.lonlats.len())?;
         write_ring(
             &mut res,
             self.lonlats.len(),

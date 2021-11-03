@@ -72,7 +72,7 @@ impl PointGeometry {
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
         let xy = self.lonlat.to_xy(transform);
 
-        let mut res = prep_wkb(with_srid, transform, 1, 16)?;
+        let mut res = prep_wkb(transform, with_srid, 1, 16)?;
         write_point(&mut res, &xy)?;
         Ok(res)
     }

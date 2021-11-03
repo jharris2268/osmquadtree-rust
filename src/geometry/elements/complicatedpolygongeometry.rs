@@ -4,7 +4,7 @@ use crate::geometry::elements::pointgeometry::pack_tags;
 use crate::geometry::elements::simplepolygongeometry::{pack_bounds, read_lonlats};
 use crate::geometry::elements::GeoJsonable;
 use crate::geometry::position::calc_ring_area_and_bbox;
-use crate::geometry::wkb::{prep_wkb, write_ring, write_uint32, AsWkb};
+use crate::geometry::wkb::{prep_wkb, write_ring, write_uint32, /*AsWkb*/};
 use crate::geometry::LonLat;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -385,7 +385,7 @@ impl PolygonPart {
         Ok(rings)
     }
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> Result<Vec<u8>> {
-        let mut res = prep_wkb(with_srid, transform, 3, 0)?;
+        let mut res = prep_wkb(transform, with_srid, 3, 0)?;
 
         write_uint32(&mut res, 1 + self.interiors.len() as u32)?;
         write_ring(
@@ -467,28 +467,28 @@ impl ComplicatedPolygonGeometry {
     }
 
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
-        let xx = self.to_geo(transform);
+        /*let xx = self.to_geo(transform);
         let srid = if with_srid {
             Some(if transform { 3857 } else { 4326 })
         } else {
             None
         };
         xx.as_wkb(srid)
-
-        /*
+        */
+        
 
         if self.parts.len()==1 {
             self.parts[0].to_wkb(transform, with_srid)
 
         } else {
-            let mut res = prep_wkb(with_srid, transform, 6, 4)?;
+            let mut res = prep_wkb(transform, with_srid, 6, 4)?;
             write_uint32(&mut res, self.parts.len() as u32)?;
             for p in &self.parts {
                 res.extend(p.to_wkb(transform, with_srid)?);
             }
 
             Ok(res)
-        }*/
+        }
     }
 
     pub fn bounds(&self) -> Bbox {

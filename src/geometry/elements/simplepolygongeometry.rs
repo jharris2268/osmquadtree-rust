@@ -91,7 +91,7 @@ impl SimplePolygonGeometry {
         )
     }
     pub fn to_wkb(&self, transform: bool, with_srid: bool) -> std::io::Result<Vec<u8>> {
-        let mut res = prep_wkb(with_srid, transform, 3, 4 + 4 + 16 * self.lonlats.len())?;
+        let mut res = prep_wkb(transform, with_srid, 3, 4 + 4 + 16 * self.lonlats.len())?;
         write_uint32(&mut res, 1)?;
         write_ring(
             &mut res,
