@@ -2,8 +2,9 @@ use crate::geometry::XY;
 use std::io::{Result, Write /*,ErrorKind,Error*/};
 //use geos::Geom;
 
+/*
 pub fn write_uint16<W: Write>(w: &mut W, i: usize) -> Result<()> {
-    w.write_all(&[((i >> 8) & 255) as u8, (i & 255) as u8])
+    w.write_all(&[(i & 255) as u8, ((i >> 8) & 255) as u8])
 }
 
 pub fn write_int32<W: Write>(w: &mut W, i: i32) -> Result<()> {
@@ -12,9 +13,53 @@ pub fn write_int32<W: Write>(w: &mut W, i: i32) -> Result<()> {
 
 pub fn write_int64<W: Write>(w: &mut W, i: i64) -> Result<()> {
     write_uint64(w, i as u64)
-}
+}*/
 
 pub fn write_uint32<W: Write>(w: &mut W, i: u32) -> Result<()> {
+    w.write_all(&[
+        (i & 255) as u8,
+        ((i >> 8) & 255) as u8,
+        ((i >> 16) & 255) as u8,
+        ((i >> 24) & 255) as u8
+    ])
+}
+
+pub fn write_uint64<W: Write>(w: &mut W, i: u64) -> Result<()> {
+    w.write_all(&[
+        (i & 255) as u8,
+        ((i >> 8) & 255) as u8,
+        ((i >> 16) & 255) as u8,
+        ((i >> 24) & 255) as u8,
+        ((i >> 32) & 255) as u8,
+        ((i >> 40) & 255) as u8,
+        ((i >> 48) & 255) as u8,
+        ((i >> 56) & 255) as u8,
+        
+    ])
+}
+
+pub fn write_f64<W: Write>(w: &mut W, f: f64) -> Result<()> {
+    //let i = unsafe { *(&f as *const f64 as *const u64) };
+    //write_uint64(w, i)
+    write_uint64(w, f.to_bits())
+}
+
+
+
+
+pub fn write_uint16_be<W: Write>(w: &mut W, i: usize) -> Result<()> {
+    w.write_all(&[((i >> 8) & 255) as u8, (i & 255) as u8])
+}
+
+pub fn write_int32_be<W: Write>(w: &mut W, i: i32) -> Result<()> {
+    write_uint32_be(w, i as u32)
+}
+
+pub fn write_int64_be<W: Write>(w: &mut W, i: i64) -> Result<()> {
+    write_uint64_be(w, i as u64)
+}
+
+pub fn write_uint32_be<W: Write>(w: &mut W, i: u32) -> Result<()> {
     w.write_all(&[
         ((i >> 24) & 255) as u8,
         ((i >> 16) & 255) as u8,
@@ -23,7 +68,7 @@ pub fn write_uint32<W: Write>(w: &mut W, i: u32) -> Result<()> {
     ])
 }
 
-pub fn write_uint64<W: Write>(w: &mut W, i: u64) -> Result<()> {
+pub fn write_uint64_be<W: Write>(w: &mut W, i: u64) -> Result<()> {
     w.write_all(&[
         ((i >> 56) & 255) as u8,
         ((i >> 48) & 255) as u8,
@@ -33,19 +78,21 @@ pub fn write_uint64<W: Write>(w: &mut W, i: u64) -> Result<()> {
         ((i >> 16) & 255) as u8,
         ((i >> 8) & 255) as u8,
         (i & 255) as u8,
+        
     ])
 }
 
-pub fn write_f64<W: Write>(w: &mut W, f: f64) -> Result<()> {
-    let i = unsafe { *(&f as *const f64 as *const u64) };
-    write_uint64(w, i)
+pub fn write_f64_be<W: Write>(w: &mut W, f: f64) -> Result<()> {
+    //let i = unsafe { *(&f as *const f64 as *const u64) };
+    //write_uint64(w, i)
+    write_uint64_be(w, f.to_bits())
 }
 
 pub fn prep_wkb(transform: bool, with_srid: bool, ty: u32, ln: usize) -> Result<Vec<u8>> {
     let l = 1 + 4 + (if with_srid { 4 } else { 0 }) + ln;
     let mut res = Vec::with_capacity(l);
 
-    res.push(0);
+    res.push(1);
     if with_srid {
         write_uint32(&mut res, ty + (32 << 24))?;
         write_uint32(&mut res, if transform { 3857 } else { 4326 })?;
@@ -84,7 +131,7 @@ fn prep_wkb_alt(srid: Option<u32>, ty: u32, ln: u32) -> Result<Vec<u8>> {
         Vec::with_capacity(1 + 4 + (if srid.is_none() { 4 } else { 0 }) + ln as usize)
     };
 
-    res.push(0);
+    res.push(1);
     match srid {
         None => {
             write_uint32(&mut res, ty)?;

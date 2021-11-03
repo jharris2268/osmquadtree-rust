@@ -1,8 +1,8 @@
 use crate::elements::{Quadtree, Tag, WithId, WithQuadtree, WithTags};
 use crate::geometry::postgresql::{ColumnSource, ColumnType, GeosGeometry, TableSpec};
 use crate::geometry::wkb::{
-    write_f64, /*write_uint32,write_uint64,AsWkb*/
-    write_int32, write_int64, write_uint16,
+    write_f64_be, /*write_uint32,write_uint64,AsWkb*/
+    write_int32_be, write_int64_be, write_uint16_be,
 };
 use crate::geometry::{
     ComplicatedPolygonGeometry, GeometryBlock, LinestringGeometry, PointGeometry,
@@ -244,9 +244,7 @@ impl PrepTable {
         match self.other_tags_col {
             None => {}
             Some(i) => {
-                //if !other_tags.is_empty() {
-                    res[i] = CopyValue::HStore(other_tags);
-                //}
+                res[i] = CopyValue::HStore(other_tags);
             }
         }
 
@@ -659,7 +657,7 @@ pub enum GeometryType<'a> {
 fn pack_hstore(tt: &[Tag]) -> Result<Vec<u8>> {
     let mut w = Vec::new();
 
-    write_int32(&mut w, tt.len() as i32)?;
+    write_int32_be(&mut w, tt.len() as i32)?;
     for t in tt {
         write_text(&mut w, &t.key)?;
         write_text(&mut w, &t.val)?;
@@ -672,25 +670,25 @@ fn write_text<W: Write>(w: &mut W, t: &str) -> Result<()> {
 }
 
 fn write_bytes<W: Write>(w: &mut W, b: &[u8]) -> Result<()> {
-    write_int32(w, b.len() as i32)?;
+    write_int32_be(w, b.len() as i32)?;
     w.write_all(&b)
 }
 
 fn pack_all<W: Write>(w: &mut W, row: &Vec<CopyValue>) -> Result<()> {
-    write_uint16(w, row.len())?;
+    write_uint16_be(w, row.len())?;
 
     for r in row {
         match r {
             CopyValue::Null => {
-                write_int32(w, -1)?;
+                write_int32_be(w, -1)?;
             }
             CopyValue::Integer(i) => {
-                write_int32(w, 8)?;
-                write_int64(w, *i)?;
+                write_int32_be(w, 8)?;
+                write_int64_be(w, *i)?;
             }
             CopyValue::Double(d) => {
-                write_int32(w, 8)?;
-                write_f64(w, *d)?;
+                write_int32_be(w, 8)?;
+                write_f64_be(w, *d)?;
             }
             CopyValue::Text(t) => {
                 write_text(w, &t)?;
