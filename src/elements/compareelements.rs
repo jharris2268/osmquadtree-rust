@@ -1,9 +1,9 @@
 use std::io::{Error,ErrorKind,Result,Write};
 use std::cmp::{Ordering};
 use crate::elements::{Element,Node,Way,Relation,Tag,Info,PrimitiveBlock};
-use crate::geometry::{
+/*use crate::geometry::{
     ComplicatedPolygonGeometry, LinestringGeometry, PointGeometry, SimplePolygonGeometry,
-};
+};*/
 use std::fs::File;
 use crate::message;
 
@@ -20,7 +20,7 @@ pub enum ElementCompare {
 }
 
 
-
+/*
 fn pointgeometry_compare(_left: PointGeometry,_right: PointGeometry) -> Result<ElementCompare> {
     Err(Error::new(ErrorKind::Other, "not impl for geometry types"))
 }
@@ -36,7 +36,7 @@ fn simplepolygongeometry_compare(_left: SimplePolygonGeometry,_right: SimplePoly
 fn compliatedpolygongeometry_compare(_left: ComplicatedPolygonGeometry,_right: ComplicatedPolygonGeometry) -> Result<ElementCompare> {
     Err(Error::new(ErrorKind::Other, "not impl for geometry types"))
 }
-
+*/
 fn different_info(left: &Option<Info>, right: &Option<Info>) -> bool {
     match (left,right) {
         (None,None) => false,
@@ -151,10 +151,10 @@ pub fn element_compare(left: Option<Element>, right: Option<Element>) -> Result<
                 (Element::Node(left), Element::Node(right)) => node_compare(left,right),
                 (Element::Way(left), Element::Way(right)) => way_compare(left,right),
                 (Element::Relation(left), Element::Relation(right)) => relation_compare(left,right),
-                (Element::PointGeometry(left), Element::PointGeometry(right)) => pointgeometry_compare(left,right),
+               /* (Element::PointGeometry(left), Element::PointGeometry(right)) => pointgeometry_compare(left,right),
                 (Element::LinestringGeometry(left), Element::LinestringGeometry(right)) => linestringgeometry_compare(left,right),
                 (Element::SimplePolygonGeometry(left), Element::SimplePolygonGeometry(right)) => simplepolygongeometry_compare(left,right),
-                (Element::ComplicatedPolygonGeometry(left), Element::ComplicatedPolygonGeometry(right)) => compliatedpolygongeometry_compare(left,right),
+                (Element::ComplicatedPolygonGeometry(left), Element::ComplicatedPolygonGeometry(right)) => compliatedpolygongeometry_compare(left,right),*/
                 (_, _) => Err(Error::new(ErrorKind::Other, "different element types!!"))
             }
         }

@@ -10,8 +10,8 @@ use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem, Quadt
 use osmquadtree::update::{run_update, run_update_initial, write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
 
-use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions,prepare_tables};
-use osmquadtree::geometry::{GeometryStyle, OutputType};
+//use osmquadtree::geometry::postgresql::{PostgresqlConnection, PostgresqlOptions,prepare_tables};
+//use osmquadtree::geometry::{GeometryStyle, OutputType};
 use osmquadtree::mergechanges::{
     run_mergechanges, run_mergechanges_sort, run_mergechanges_sort_from_existing,
     run_mergechanges_sort_inmem,
@@ -21,7 +21,7 @@ use osmquadtree::defaultlogger::register_messenger_default;
 
 use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
-
+/*
 fn process_geometry(
     prfx: &str,
     outfn: OutputType,
@@ -35,7 +35,7 @@ fn process_geometry(
     osmquadtree::geometry::process_geometry(prfx, outfn, filter, timestamp, find_minzoom, style_name, max_minzoom, numchan)?;
     Ok(())
 }
-
+*/
 fn run_sortblocks(
     infn: &str,
     qtsfn: Option<&str>,
@@ -125,7 +125,7 @@ fn write_index_file_w(prfx: &str, outfn: Option<&str>, numchan: usize) -> Result
     };
     Ok(())
 }
-
+/*
 fn dump_geometry_style(outfn: Option<&str>) -> Result<()> {
     let outfn = match outfn {
         Some(o) => String::from(o),
@@ -142,7 +142,7 @@ fn get_i64(x: Option<&str>) -> Option<i64> {
         Some(t) => Some(t.parse().expect("expected integer argument")),
     }
 }
-
+*/
 const NUMCHAN_DEFAULT: usize = 4;
 const RAM_GB_DEFAULT: usize= 8;
 const QT_MAX_LEVEL_DEFAULT: usize = 18;
@@ -321,7 +321,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 
         )
-        .subcommand(
+        /*.subcommand(
             SubCommand::with_name("process_geometry_null")
                 .about("process_geometry")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
@@ -429,7 +429,7 @@ fn main() {
             SubCommand::with_name("show_after_queries")
                 .arg(Arg::with_name("TABLE_PREFIX").short("-p").long("--tableprefix").takes_value(true).help("table prfx"))
                 .arg(Arg::with_name("EXTENDED").short("-e").long("--extended").help("extended table spec"))
-        )
+        )*/
         ;
 
     let mut help = Vec::new();
@@ -574,7 +574,7 @@ fn main() {
             filter.value_of("TIMESTAMP"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
         ),
-        ("process_geometry_null", Some(geom)) => process_geometry(
+        /*("process_geometry_null", Some(geom)) => process_geometry(
             geom.value_of("INPUT").unwrap(),
             OutputType::None,
             geom.value_of("FILTER"),
@@ -720,7 +720,7 @@ fn main() {
                 Ok(())
             })()
         },
-        
+        */
         _ => Err(Error::new(ErrorKind::Other, "??")),
         
     };

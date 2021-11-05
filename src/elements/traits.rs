@@ -1,8 +1,8 @@
 use crate::elements::{Info, Quadtree, Tag};
 use crate::elements::{Node, Relation, Way};
-use crate::geometry::{
+/*use crate::geometry::{
     ComplicatedPolygonGeometry, LinestringGeometry, PointGeometry, SimplePolygonGeometry,
-};
+};*/
 
 use std::cmp::Ordering;
 
@@ -11,10 +11,10 @@ pub enum Element {
     Node(Node),
     Way(Way),
     Relation(Relation),
-    PointGeometry(PointGeometry),
+    /*PointGeometry(PointGeometry),
     LinestringGeometry(LinestringGeometry),
     SimplePolygonGeometry(SimplePolygonGeometry),
-    ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),
+    ComplicatedPolygonGeometry(ComplicatedPolygonGeometry),*/
 }
 
 impl WithType for Element {
@@ -23,10 +23,10 @@ impl WithType for Element {
             Element::Node(_) => ElementType::Node,
             Element::Way(_) => ElementType::Way,
             Element::Relation(_) => ElementType::Relation,
-            Element::PointGeometry(_) => ElementType::PointGeometry,
+            /*Element::PointGeometry(_) => ElementType::PointGeometry,
             Element::LinestringGeometry(_) => ElementType::LinestringGeometry,
             Element::SimplePolygonGeometry(_) => ElementType::SimplePolygonGeometry,
-            Element::ComplicatedPolygonGeometry(_) => ElementType::ComplicatedPolygonGeometry,
+            Element::ComplicatedPolygonGeometry(_) => ElementType::ComplicatedPolygonGeometry,*/
         }
     }
 }
@@ -37,10 +37,10 @@ impl WithId for Element {
             Element::Node(n) => n.id,
             Element::Way(n) => n.id,
             Element::Relation(n) => n.id,
-            Element::PointGeometry(n) => n.id,
+            /*Element::PointGeometry(n) => n.id,
             Element::LinestringGeometry(n) => n.id,
             Element::SimplePolygonGeometry(n) => n.id,
-            Element::ComplicatedPolygonGeometry(n) => n.id,
+            Element::ComplicatedPolygonGeometry(n) => n.id,*/
         }
     }
 }
@@ -208,10 +208,10 @@ impl WithQuadtree for Element {
             Element::Node(n) => n.get_quadtree(),
             Element::Way(n) => n.get_quadtree(),
             Element::Relation(n) => n.get_quadtree(),
-            Element::PointGeometry(n) => n.get_quadtree(),
+            /*Element::PointGeometry(n) => n.get_quadtree(),
             Element::LinestringGeometry(n) => n.get_quadtree(),
             Element::SimplePolygonGeometry(n) => n.get_quadtree(),
-            Element::ComplicatedPolygonGeometry(n) => n.get_quadtree(),
+            Element::ComplicatedPolygonGeometry(n) => n.get_quadtree(),*/
         }
     }
 }

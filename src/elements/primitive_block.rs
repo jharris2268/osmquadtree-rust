@@ -14,11 +14,12 @@ pub use crate::elements::way::Way;
 
 use crate::elements::common::PackStringTable;
 use crate::elements::dense::Dense;
-use crate::elements::traits::{Changetype, Element, ElementType, WithChangetype};
+use crate::elements::traits::{Changetype, Element, ElementType, WithChangetype,WithQuadtree};
 
 use std::io::{Error, ErrorKind, Result};
 
 pub trait Block {
+    type Element: WithQuadtree;
     fn with_quadtree(q: Quadtree) -> Self;
     fn get_index(&self) -> i64;
     fn get_quadtree<'a>(&'a self) -> &'a Quadtree;
@@ -27,7 +28,7 @@ pub trait Block {
     fn len(&self) -> usize;
     fn weight(&self) -> usize;
 
-    fn add_object(&mut self, ele: Element) -> Result<()>;
+    fn add_object(&mut self, ele: Self::Element) -> Result<()>;
     fn sort(&mut self);
 }
 
@@ -110,6 +111,8 @@ fn find_splits<O: WithChangetype>(objs: &Vec<O>) -> Vec<(Changetype, usize, usiz
 }
 
 impl Block for PrimitiveBlock {
+    type Element=Element;
+    
     fn with_quadtree(q: Quadtree) -> Self {
         let mut b = PrimitiveBlock::new(0, 0);
         b.quadtree = q;
@@ -132,7 +135,7 @@ impl Block for PrimitiveBlock {
         self.nodes.len() + 8 * self.ways.len() + 20 * self.relations.len()
     }
 
-    fn add_object(&mut self, ele: Element) -> Result<()> {
+    fn add_object(&mut self, ele: Self::Element) -> Result<()> {
         match ele {
             Element::Node(n) => {
                 self.nodes.push(n);
@@ -146,10 +149,6 @@ impl Block for PrimitiveBlock {
                 self.relations.push(r);
                 Ok(())
             }
-            _ => Err(Error::new(
-                ErrorKind::Other,
-                format!("wrong element type {:?}", ele),
-            )),
         }
     }
     fn sort(&mut self) {
@@ -191,6 +190,7 @@ impl IntoIterator for PrimitiveBlock {
 
 pub struct SortablePrimitiveBlock(PrimitiveBlock);
 impl Block for SortablePrimitiveBlock {
+    type Element=Element;
     fn with_quadtree(q: Quadtree) -> Self {
         SortablePrimitiveBlock(PrimitiveBlock::with_quadtree(q))
     }
@@ -211,7 +211,7 @@ impl Block for SortablePrimitiveBlock {
         self.0.weight()
     }
 
-    fn add_object(&mut self, ele: Element) -> Result<()> {
+    fn add_object(&mut self, ele: Self::Element) -> Result<()> {
         self.0.add_object(ele)
     }
 

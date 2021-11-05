@@ -5,15 +5,12 @@ authors = ["James Harris <jimbo.harris@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-#flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
-#flate2 = { version = "1.0", features = ["zlib"] }
-#flate2 = { version = "1.0.17", features = ["zlib-ng-compat"],  default-features = false }
+
 flate2 = "1"
-#cpuprofiler = "0.0.2"
+
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-#crossbeam = "0.7"
-#bitvec = "0.19"
+
 chrono = "0.4.0"
 cpu-time="1.0.0"
 quick-xml="0.20"
@@ -21,8 +18,7 @@ csv = "1.1"
 indicatif = "0.15"
 clap="2"
 regex="1.4"
-geo= { version = "0.16", features = ["use-proj", "use-serde"] }
-geojson = { version = "0.21", features = ["geo-types"] }
+
 
 #postgres = { version = "0.19", features = ["with-serde_json-1"]}
 pq-sys = "0.4"
@@ -35,8 +31,6 @@ ureq="1.0"
 simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocolbuffers.git", branch = "main" }
 channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
 
-
-#lazy_static = "1.4"
 
 [profile.release]
 #debug = true

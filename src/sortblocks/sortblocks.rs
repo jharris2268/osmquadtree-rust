@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Result;
 use std::sync::Arc;
 
-use crate::elements::{Block, Element, Quadtree, WithQuadtree};
+use crate::elements::{Block, Quadtree, WithQuadtree};
 use crate::sortblocks::QuadtreeTree;
 
 fn get_block<'a, B: Block>(
@@ -41,12 +41,12 @@ where
         get_block(&mut self.blocks, &self.groups, q)
     }
 
-    fn add_object(&mut self, e: Element) -> Result<()> {
+    fn add_object(&mut self, e: BlockType::Element) -> Result<()> {
         let t = self.get_block(e.get_quadtree());
         t.add_object(e)
     }
 
-    pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter) -> Result<()> {
+    pub fn add_all<Iter: Iterator<Item = BlockType::Element>>(&mut self, bl: Iter) -> Result<()> {
         for o in bl {
             self.add_object(o)?;
         }
@@ -100,7 +100,7 @@ where
         }
     }
 
-    pub fn add_all<Iter: Iterator<Item = Element>>(&mut self, bl: Iter) -> Result<Vec<(i64, BlockType)>> {
+    pub fn add_all<Iter: Iterator<Item = BlockType::Element>>(&mut self, bl: Iter) -> Result<Vec<(i64, BlockType)>> {
         let mut mm = Vec::new();
         for e in bl {
             match self.add_object(e)? {
@@ -122,7 +122,7 @@ where
         (k,self.pending.get_mut(&k).unwrap())
     }
 
-    fn add_object(&mut self, n: Element) -> Result<Option<(i64,BlockType)>> {
+    fn add_object(&mut self, n: BlockType::Element) -> Result<Option<(i64,BlockType)>> {
         let l=self.limit;
         let (i,t) = self.get_block(n.get_quadtree());
         t.add_object(n)?;
