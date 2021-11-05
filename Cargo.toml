@@ -21,10 +21,10 @@ regex="1.4"
 
 
 #postgres = { version = "0.19", features = ["with-serde_json-1"]}
-pq-sys = "0.4"
+#pq-sys = "0.4"
 
 #geos = { version="7", features = ["v3_8_0", "dox"]} //leaks memory
-geos-sys = { version="2", features = ["v3_8_0"]}
+#geos-sys = { version="2", features = ["v3_8_0"]}
 
 ureq="1.0"
 
