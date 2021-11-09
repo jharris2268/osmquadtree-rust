@@ -146,7 +146,7 @@ impl Bbox {
     }
     
     pub fn from_point(lon: i32, lat: i32) -> Bbox {
-        Bbox{lon,lat,lon,lat}
+        Bbox::new(lon,lat,lon,lat)
     }
     
     pub fn contains(&self, other: &Bbox) -> bool {
