@@ -3,11 +3,11 @@ use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
 use crate::pbfformat::{
-    pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos, FileBlock, HeaderBlock,
+    pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos, FileBlock, HeaderBlock,FilelistEntry
 };
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
-use crate::update::{check_index_file, read_xml_change, ChangeBlock, FilelistEntry};
+use crate::update::{check_index_file, read_xml_change, ChangeBlock};
 use crate::utils::{ThreadTimer, Timer};
 use crate::{message,progress_percent};
 use crate::logging::{ProgressPercent};

@@ -13,7 +13,7 @@ use crate::sortblocks::{
     write_tempfilesplit_locs, WriteTempData, WriteTempFile, WriteTempFileSplit, WriteTempNull
 };
 use crate::sortblocks::{OtherData, TempData, Timings, WriteFile};
-use crate::update::{get_file_locs, ParallelFileLocs};
+use crate::pbfformat::{get_file_locs, ParallelFileLocs};
 use crate::utils::{
     parse_timestamp, LogTimes, ThreadTimer,
 };

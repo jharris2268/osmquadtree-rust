@@ -4,12 +4,13 @@ use crate::pbfformat::{
     file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock
 };
 
-use crate::update::{get_file_locs, read_xml_change, ChangeBlock};
+use crate::update::{read_xml_change, ChangeBlock};
 
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
 use crate::pbfformat::{
     make_convert_minimal_block, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
+    get_file_locs
 };
 use crate::utils::ThreadTimer;
 

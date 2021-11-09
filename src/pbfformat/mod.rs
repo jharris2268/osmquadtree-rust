@@ -3,6 +3,8 @@ mod header_block;
 mod read_file_block;
 mod writefile;
 mod iterelementsflat;
+mod filelist;
+
 pub use crate::pbfformat::convertblocks::{
     make_convert_minimal_block, make_convert_minimal_block_parts, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
@@ -22,6 +24,9 @@ pub use crate::pbfformat::read_file_block::{
     ReadFileBlocks,
 };
 
+
+
 pub use crate::pbfformat::writefile::{FileLocs, WriteFile};
 
 pub use crate::pbfformat::iterelementsflat::iter_elements_flat;
+pub use filelist::{get_file_locs, read_filelist, write_filelist, FilelistEntry, ParallelFileLocs};

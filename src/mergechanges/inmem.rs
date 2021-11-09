@@ -5,7 +5,7 @@ use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock};
 use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
-use crate::update::{get_file_locs, ParallelFileLocs};
+use crate::pbfformat::{get_file_locs, ParallelFileLocs};
 use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
 use crate::{message,progress_percent};
 use std::io::{Result,Error,ErrorKind};

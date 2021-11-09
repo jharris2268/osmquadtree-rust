@@ -3,12 +3,12 @@ use crate::elements::{
     Bbox, ElementType, IdSet, IdSetAll, IdSetSet, IdSetBool, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay,
 };
 use crate::pbfformat::{
-    make_read_minimal_blocks_combine_call_all, read_all_blocks_parallel_with_progbar, FileBlock,
+    make_read_minimal_blocks_combine_call_all, read_all_blocks_parallel_with_progbar, FileBlock,ParallelFileLocs
 };
 use crate::utils::{as_int, ThreadTimer};
 use simple_protocolbuffers::{DeltaPackedInt, PackedInt};
 
-use crate::update::ParallelFileLocs;
+
 use crate::message;
 
 use std::fs::File;

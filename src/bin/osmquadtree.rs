@@ -5,7 +5,7 @@ use clap::{value_t, App, AppSettings, Arg, SubCommand};
 use osmquadtree::count::run_count;
 
 use osmquadtree::calcqts::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim};
-use osmquadtree::pbfformat::file_length;
+use osmquadtree::pbfformat::{file_length,read_filelist, write_filelist};
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem, QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial, write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
@@ -106,7 +106,7 @@ fn run_sortblocks(
 }
 
 fn run_update_droplast(prfx: &str) -> Result<()> {
-    let mut fl = osmquadtree::update::read_filelist(prfx);
+    let mut fl = read_filelist(prfx);
     if fl.len() < 2 {
         return Err(Error::new(
             ErrorKind::Other,
@@ -114,7 +114,7 @@ fn run_update_droplast(prfx: &str) -> Result<()> {
         ));
     }
     fl.pop();
-    osmquadtree::update::write_filelist(prfx, &fl);
+    write_filelist(prfx, &fl);
     Ok(())
 }
 

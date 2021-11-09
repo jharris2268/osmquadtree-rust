@@ -1,4 +1,5 @@
-use crate::update::{find_update, read_filelist, write_filelist, write_index_file, FilelistEntry};
+use crate::update::{write_index_file,find_update};
+use crate::pbfformat::{read_filelist, write_filelist, FilelistEntry};
 use crate::utils::{
     date_string, parse_timestamp, timestamp_string, timestamp_string_alt, LogTimes,
 };
