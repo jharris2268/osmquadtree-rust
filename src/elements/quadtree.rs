@@ -144,7 +144,11 @@ impl Bbox {
         }
         Ok(Bbox::new(vvi[0], vvi[1], vvi[2], vvi[3]))
     }
-
+    
+    pub fn from_point(lon: i32, lat: i32) -> Bbox {
+        Bbox{lon,lat,lon,lat}
+    }
+    
     pub fn contains(&self, other: &Bbox) -> bool {
         if self.minlon > other.minlon {
             return false;
