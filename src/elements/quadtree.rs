@@ -148,6 +148,9 @@ impl Bbox {
     pub fn from_point(lon: i32, lat: i32) -> Bbox {
         Bbox::new(lon,lat,lon,lat)
     }
+    pub fn as_tuple(&self) -> (i32,i32,i32,i32) {
+        (self.minlon,self.minlat,self.maxlon,self.maxlat)
+    }
     
     pub fn contains(&self, other: &Bbox) -> bool {
         if self.minlon > other.minlon {
