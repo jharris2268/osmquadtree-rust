@@ -100,7 +100,7 @@ pub fn get_file_locs(
 fn check_entry_depth(max_depth: &Option<usize>, test_depth: &usize) -> bool {
     match max_depth {
         None => true,
-        Some(md) => test_depth <= md
+        Some(md) => *test_depth <= *md
     }
 }
 
