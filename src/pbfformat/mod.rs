@@ -29,4 +29,4 @@ pub use crate::pbfformat::read_file_block::{
 pub use crate::pbfformat::writefile::{FileLocs, WriteFile};
 
 pub use crate::pbfformat::iterelementsflat::iter_elements_flat;
-pub use filelist::{get_file_locs, read_filelist, write_filelist, FilelistEntry, ParallelFileLocs};
+pub use filelist::{get_file_locs, read_filelist, write_filelist, FilelistEntry, ParallelFileLocs, get_file_locs_max_depth};

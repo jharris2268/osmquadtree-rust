@@ -93,6 +93,21 @@ pub fn get_file_locs(
     filter: Option<Bbox>,
     timestamp: Option<i64>,
 ) -> Result<ParallelFileLocs> {
+    
+    get_file_locs_max_depth(prfx, filter, timestamp, None)
+}
+
+fn check_entry_depth(max_depth: &Option<usize>, test_depth: &usize) -> bool {
+    match max_depth {
+        None => true,
+        Some(md) => test_depth <= md
+    }
+}
+
+pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Option<i64>, max_depth: Option<usize>) -> Result<ParallelFileLocs> {
+    
+
+
     if std::path::Path::new(prfx).is_file() {
         if !timestamp.is_none() {
             return Err(Error::new(
@@ -138,18 +153,21 @@ pub fn get_file_locs(
         all_locs += head.index.len();
         for entry in head.index {
             if i == 0 {
-                if filter.as_ref().is_none()
-                    || filter
-                        .as_ref()
-                        .unwrap()
-                        .overlaps(&entry.quadtree.as_bbox(0.05))
-                {
-                    locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
-                    locs.get_mut(&entry.quadtree)
-                        .unwrap()
-                        .1
-                        .push((i, entry.location));
-                    total_len += entry.length;
+                if check_entry_depth(&max_depth, &entry.quadtree.depth()) {
+                
+                    if filter.as_ref().is_none()
+                        || filter
+                            .as_ref()
+                            .unwrap()
+                            .overlaps(&entry.quadtree.as_bbox(0.05))
+                    {
+                        locs.insert(entry.quadtree.clone(), (locs.len(), Vec::new()));
+                        locs.get_mut(&entry.quadtree)
+                            .unwrap()
+                            .1
+                            .push((i, entry.location));
+                        total_len += entry.length;
+                    }
                 }
             } else {
                 if locs.contains_key(&entry.quadtree) {
