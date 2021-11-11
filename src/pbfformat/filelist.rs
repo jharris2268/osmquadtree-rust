@@ -48,7 +48,14 @@ pub type ParallelFileLocs = (
     u64,
 );
 
-pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<ParallelFileLocs> {
+/*pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<ParallelFileLocs> {
+    get_file_locs_single_max_depth(infn, filter, None)
+}*/
+
+
+pub fn get_file_locs_single_max_depth(infn: &str, filter: Option<Bbox>, max_depth: Option<usize>) -> Result<ParallelFileLocs> {
+
+
     let cap = match filter {
         Some(_) => 8 * 1024,
         None => 5 * 1024 * 1024,
@@ -68,17 +75,19 @@ pub fn get_file_locs_single(infn: &str, filter: Option<Bbox>) -> Result<Parallel
     let mut total_len = 0;
 
     for entry in head.index {
-        if filter.as_ref().is_none()
-            || filter
-                .as_ref()
-                .unwrap()
-                .overlaps(&entry.quadtree.as_bbox(0.05))
-        {
-            locs.insert(
-                entry.quadtree.clone(),
-                (locs.len(), vec![(0, entry.location)]),
-            );
-            total_len += entry.length;
+        if check_entry_depth(&max_depth, &entry.quadtree.depth()) {
+            if filter.as_ref().is_none()
+                || filter
+                    .as_ref()
+                    .unwrap()
+                    .overlaps(&entry.quadtree.as_bbox(0.05))
+            {
+                locs.insert(
+                    entry.quadtree.clone(),
+                    (locs.len(), vec![(0, entry.location)]),
+                );
+                total_len += entry.length;
+            }
         }
     }
     let mut locsv = Vec::new();
@@ -100,7 +109,7 @@ pub fn get_file_locs(
 fn check_entry_depth(max_depth: &Option<usize>, test_depth: &usize) -> bool {
     match max_depth {
         None => true,
-        Some(md) => {println!("check_entry_depth {} {}", test_depth, md); *test_depth <= *md }
+        Some(md) => test_depth <= md
     }
 }
 
@@ -115,7 +124,7 @@ pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Opti
                 "can't specify timestamp with single file",
             ));
         }
-        return get_file_locs_single(prfx, filter);
+        return get_file_locs_single_max_depth(prfx, filter, max_depth);
     }
 
     let filelist = read_filelist(&prfx);
