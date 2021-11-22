@@ -60,7 +60,7 @@ impl fmt::Display for LogTimes {
             tot += b;
         }
         if others > 0.0 {
-            write!(f, "OTHERS:{}{:6.2}s", " ".repeat(self.longest - 6), others)?;
+            write!(f, "OTHERS:{}{:6.2}s\n", " ".repeat(self.longest - 6), others)?;
         }
         write!(f, "TOTAL:{}{:6.2}s", " ".repeat(self.longest - 5), tot)
     }
