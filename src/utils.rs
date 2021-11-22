@@ -32,7 +32,7 @@ impl LogTimes {
         LogTimes {
             timer: Timer::new(),
             msgs: Vec::new(),
-            longest: 5,
+            longest: 6,
         }
     }
     pub fn add(&mut self, msg: &str) {
@@ -44,15 +44,23 @@ impl LogTimes {
 impl fmt::Display for LogTimes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut tot = 0.0;
+        let mut others=0.0;
         for (a, b) in &self.msgs {
-            write!(
-                f,
-                "{}:{}{:6.2}s\n",
-                a,
-                " ".repeat(self.longest - a.len()),
-                b
-            )?;
+            if *b > 0.1 {
+                write!(
+                    f,
+                    "{}:{}{:6.2}s\n",
+                    a,
+                    " ".repeat(self.longest - a.len()),
+                    b
+                )?;
+            } else {
+                others += b;
+            }
             tot += b;
+        }
+        if others > 0.0 {
+            write!(f, "OTHERS:{}{:6.2}s", " ".repeat(self.longest - 6), others)?;
         }
         write!(f, "TOTAL:{}{:6.2}s", " ".repeat(self.longest - 5), tot)
     }
