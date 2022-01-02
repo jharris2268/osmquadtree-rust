@@ -28,7 +28,7 @@ use crate::calcqts::packwaynodes::{
     prep_relation_node_vals, prep_way_nodes, prep_way_nodes_tempfile, RelMems,
 };
 use crate::calcqts::quadtree_store::{
-    QuadtreeGetSet, QuadtreeSimple, QuadtreeSplit, QuadtreeTileInt, WAY_SPLIT_VAL,
+    QuadtreeGetSet, QuadtreeSimple, QuadtreeSplit, QuadtreeTileInt, WAY_SPLIT_VAL, WAY_SPLIT_SHIFT
 };
 use crate::calcqts::write_quadtrees::{PackQuadtrees, WrapWriteFile, WriteQuadTree};
 use crate::calcqts::{run_calcqts_inmem, NodeWayNodes, OtherData, Timings};
@@ -243,8 +243,8 @@ fn calc_way_quadtrees_split(
     for (a, b) in &splits {
         calc_way_quadtrees_split_part(
             nodewaynodes.clone(),
-            a << 20,
-            b << 20,
+            a << WAY_SPLIT_SHIFT,
+            b << WAY_SPLIT_SHIFT,
             wf.clone(),
             qt_level,
             qt_buffer,
@@ -272,8 +272,8 @@ fn calc_way_quadtrees_split_inmem(
     for (a, b) in &splits {
         calc_way_quadtrees_split_part_inmem(
             nodewaynodes.clone(),
-            a << 20,
-            b << 20,
+            a << WAY_SPLIT_SHIFT,
+            b << WAY_SPLIT_SHIFT,
             qts.clone(),
             qt_level,
             qt_buffer,
@@ -349,6 +349,7 @@ struct ExpandNodeQuadtree<T> {
     curr: Box<QuadtreeBlock>,
     qt_level: usize,
     qt_buffer: f64,
+    nerrs: usize,
 }
 const NODE_LIMIT: usize = 100000;
 
@@ -375,6 +376,7 @@ where
             curr,
             qt_level,
             qt_buffer,
+            nerrs: 0,
         }
     }
 }
@@ -414,6 +416,10 @@ where
             };
             if q.as_int()<0 {
                 message!("\n\n?? node {} {} {} qt {}??\n\n", n.id, n.lon, n.lat, q.as_int());
+                self.nerrs+=1;
+                if self.nerrs > 32 {
+                    panic!("{} errors", self.nerrs);
+                }
             }
             self.nodeqts.as_mut().unwrap().expand_if_present(n.id, &q);
             //bl.add_node(n.id,q);
@@ -699,7 +705,9 @@ fn calc_quadtrees_flatvec(
     let splits = if ram_gb > 16 {
             vec![(0,0)]
         } else {
-            vec![(0,350),(350,700),(700,0)]
+            let s = ((384 << 20) >> WAY_SPLIT_SHIFT) as i64;
+            
+            vec![(0,s),(s,s*2),(s*2,0)]
         };
         
     

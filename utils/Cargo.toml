@@ -1,0 +1,14 @@
+[package]
+name = "osmquadtree-utils"
+version = "0.1.0"
+authors = ["James Harris <jimbo.harris@gmail.com>"]
+edition = "2021"
+
+
+[workspace]
+
+[dependencies]
+clap="2"
+osmquadtree = { path = "../" }
+
+
