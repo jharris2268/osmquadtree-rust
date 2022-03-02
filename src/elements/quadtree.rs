@@ -4,7 +4,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use std::f64::consts::PI;
 
-use regexp::RegExp;
+use regex::Regex;
 
 pub fn coordinate_as_integer(v: f64) -> i32 {
     if v > 0.0 {
@@ -105,6 +105,20 @@ impl fmt::Display for Tuple {
     }
 }
 
+fn i32_from_str(c: &str) -> Result<i32> {
+    match c.parse() {
+        Ok(p) => Ok(p),
+        _ => Err(Error::new(ErrorKind::Other, format!("{} not an integer", c)))
+    }
+}
+fn f64_from_str(c: &str) -> Result<f64> {
+    match c.parse() {
+        Ok(p) => Ok(p),
+        _ => Err(Error::new(ErrorKind::Other, format!("{} not a float", c)))
+    }
+}
+
+
 #[derive(Clone, PartialEq)]
 pub struct Bbox {
     pub minlon: i32,
@@ -152,35 +166,36 @@ impl Bbox {
     }
     
     pub fn from_str_alt(instr: &str) -> Result<Bbox> {
-        let four_ints = RegExp::new(r"(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+)").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
-        if let Some(caps) =  all_ints.captures(instr) {
-            let minlon = caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[1]))))?;
-            let minlat = caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[2]))))?;
-            let maxlon = caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[3]))))?;
-            let maxlat = caps[4].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[4]))))?;
+        let four_ints = Regex::new(r"(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+)").or(Err(Error::new(ErrorKind::Other,"??")))?;
+        if let Some(caps) =  four_ints.captures(instr) {
+            let minlon = i32_from_str(&caps[1])?;
+            let minlat = i32_from_str(&caps[2])?;
+            let maxlon = i32_from_str(&caps[3])?;
+            let maxlat = i32_from_str(&caps[4])?;
+            println!("Bbox::new({},{},{},{})",minlon,minlat,maxlon,maxlat);
             return Ok(Bbox::new(minlon,minlat,maxlon,maxlat));
         }
         
-        let four_floats = RegExp::new(r"(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
-        if let Some(caps) =  all_floats.captures(instr) {
-            let minlon = coordinate_as_integer(caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[1])))));
-            let minlat = coordinate_as_integer(caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[2])))));
-            let maxlon = coordinate_as_integer(caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[3])))));
-            let maxlat = coordinate_as_integer(caps[4].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[4])))));
+        let four_floats = Regex::new(r"(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)").or(Err(Error::new(ErrorKind::Other,"??")))?;
+        if let Some(caps) =  four_floats.captures(instr) {
+            let minlon = coordinate_as_integer(f64_from_str(&caps[1])?);
+            let minlat = coordinate_as_integer(f64_from_str(&caps[2])?);
+            let maxlon = coordinate_as_integer(f64_from_str(&caps[3])?);
+            let maxlat = coordinate_as_integer(f64_from_str(&caps[4])?);
+            println!("Bbox::new({},{},{},{})",minlon,minlat,maxlon,maxlat);
             return Ok(Bbox::new(minlon,minlat,maxlon,maxlat));
         }
         
-        let tile_spec = RegExp::new(r"tile:(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)(buf:(\-?[0-9]*\.?[0-9]*))?").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
+        let tile_spec = Regex::new(r"tile:(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)(:(\-?[0-9]*\.?[0-9]*))?").or(Err(Error::new(ErrorKind::Other,"??")))?;
         if let Some(caps) = tile_spec.captures(instr) {
-            let x = caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[1]))));
-            let y = caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[2]))));
-            let z = caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[4]))));
-            let buff = if caps.len()==6 {
-                caps[5].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[5]))));
-            } else {
-                0.0
+            let x = f64_from_str(&caps[1])?;
+            let y = f64_from_str(&caps[2])?;
+            let z = f64_from_str(&caps[3])?;
+            let buff = match caps.get(5) {
+                Some(c) => f64_from_str(c.as_str())?,
+                None => 0.0
             };
-            
+            println!("Bbox::from_tile({},{},{},{})",x,y,z,buff);
             return Ok(Bbox::from_tile(x,y,z,buff))
         }
         Err(Error::new(ErrorKind::Other,format!("can't make Bbox from {:?}", instr)))
@@ -195,7 +210,7 @@ impl Bbox {
     
     
     pub fn from_tile(x: f64, y: f64, z: f64, buffer: f64) -> Bbox {
-        let sz = zoom(z);
+        let sz = zoom(z)*256.0;
         let minx = -EARTH_WIDTH + (x - buffer) * sz;
         let maxy = EARTH_WIDTH - (y - buffer) * sz;
         

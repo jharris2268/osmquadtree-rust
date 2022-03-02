@@ -19,7 +19,7 @@ use crate::elements::{
     Relation, Way,
 };
 use std::io::BufReader;
-use std::io::{Error, ErrorKind, Result};
+use std::io::Result;
 
 use simple_protocolbuffers::read_delta_packed_int;
 

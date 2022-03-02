@@ -135,7 +135,7 @@ pub fn read_filter(filter: Option<&str>) -> Result<(Bbox, Option<Poly>)> {
     match filter {
         None => Ok((Bbox::planet(), None)),
         Some(filter) => {
-            match Bbox::from_str(filter) {
+            match Bbox::from_str_alt(filter) {
                 Ok(bbox) => {
                     return Ok((bbox, None));
                 }
