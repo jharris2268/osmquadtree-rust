@@ -130,6 +130,27 @@ impl Poly {
 }
 
 
+
+pub fn read_filter(filter: Option<&str>) -> Result<(Bbox, Option<Poly>)> {
+    match filter {
+        None => Ok((Bbox::planet(), None)),
+        Some(filter) => {
+            match Bbox::from_str(filter) {
+                Ok(bbox) => {
+                    return Ok((bbox, None));
+                }
+                Err(_) => {}
+            }
+
+            let poly = Poly::from_file(filter)?;
+            let bbox = poly.bounds();
+
+            Ok((bbox, Some(poly)))
+        }
+    }
+}
+
+
 pub enum IdSetEither {
     Set(IdSetSet),
     Bool(IdSetBool),

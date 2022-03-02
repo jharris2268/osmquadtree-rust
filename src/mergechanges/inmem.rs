@@ -1,6 +1,6 @@
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{Bbox, Block, IdSet, IdSetAll, PrimitiveBlock};
-use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly};
+use crate::mergechanges::filter_elements::{prep_bbox_filter, Poly, read_filter};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock};
@@ -164,24 +164,7 @@ where
     }
 }
 
-pub fn read_filter(filter: Option<&str>) -> Result<(Bbox, Option<Poly>)> {
-    match filter {
-        None => Ok((Bbox::planet(), None)),
-        Some(filter) => {
-            match Bbox::from_str(filter) {
-                Ok(bbox) => {
-                    return Ok((bbox, None));
-                }
-                Err(_) => {}
-            }
 
-            let poly = Poly::from_file(filter)?;
-            let bbox = poly.bounds();
-
-            Ok((bbox, Some(poly)))
-        }
-    }
-}
 
 pub fn make_write_file(
     outfn: &str,

@@ -804,14 +804,7 @@ pub fn call_count(fname: &str,
             cc.add_other(&a.others[0].1);
 
         //cc = count_all(cc, read_file_block::ReadFileBlocks::new(&mut fbuf), 0, fname, minimal, false);
-        } else if numchan > 8 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "numchan must be between 0 and 8",
-            ));
         } else {
-            
-            
             let mut fbuf = f;
 
             let mut ccs: Vec<

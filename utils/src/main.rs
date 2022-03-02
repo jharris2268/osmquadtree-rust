@@ -143,7 +143,7 @@ fn get_i64(x: Option<&str>) -> Option<i64> {
     }
 }
 */
-const NUMCHAN_DEFAULT: usize = 4;
+//const NUMCHAN_DEFAULT: usize = 4;
 const RAM_GB_DEFAULT: usize= 8;
 const QT_MAX_LEVEL_DEFAULT: usize = 18;
 const QT_GRAPH_LEVEL_DEFAULT: usize = 17;
@@ -154,7 +154,7 @@ const QT_BUFFER_DEFAULT: f64 = 0.05;
 fn main() {
     // basic app information
     register_messenger_default().expect("!!");
-    
+    let numchan_default = num_cpus::get();
     
     let app = App::new("osmquadtree")
         .version("0.1")
@@ -439,7 +439,7 @@ fn main() {
         ("count", Some(count)) => run_count(
             count.value_of("INPUT").unwrap(),
             count.is_present("PRIMITIVE"),
-            value_t!(count, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(count, "NUMCHAN", usize).unwrap_or(numchan_default),
             count.value_of("FILTER"),
             count.value_of("TIMESTAMP"),
         ),
@@ -452,7 +452,7 @@ fn main() {
                 calcqts.value_of("MODE"),
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
-                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
                 value_t!(calcqts, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
             ) {
                 Ok(lt) => { message!("{}", lt); Ok(()) },
@@ -462,7 +462,7 @@ fn main() {
         ("calcqts_prelim", Some(calcqts)) => run_calcqts_prelim(
             calcqts.value_of("INPUT").unwrap(),
             calcqts.value_of("QTSFN"),
-            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("calcqts_load_existing", Some(calcqts)) => run_calcqts_load_existing(
             calcqts.value_of("INPUT").unwrap(),
@@ -473,7 +473,7 @@ fn main() {
                 Ok(s) => Some(s),
                 Err(_) => None,
             },
-            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("sortblocks", Some(sortblocks)) => {
             run_sortblocks(
@@ -485,7 +485,7 @@ fn main() {
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 false, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
-                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
                 value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
                 sortblocks.is_present("KEEPTEMPS"),
             )
@@ -500,7 +500,7 @@ fn main() {
                 value_t!(sortblocks, "MINTARGET", i64).unwrap_or(-1),
                 true, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
-                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
                 value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
                 false,
             )
@@ -513,14 +513,14 @@ fn main() {
             update.value_of("DIFFS_LOCATION").unwrap(),
             value_t!(update, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
             value_t!(update, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
-            value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("update", Some(update)) => {
             run_update(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 false, //as_demo
-                value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("update_demo", Some(update)) => {
@@ -528,14 +528,14 @@ fn main() {
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 true, //as_demo
-                value_t!(update, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("update_droplast", Some(update)) => run_update_droplast(update.value_of("INPUT").unwrap()),
         ("write_index_file", Some(write)) => write_index_file_w(
             write.value_of("INPUT").unwrap(),
             write.value_of("OUTFN"),
-            value_t!(write, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(write, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("mergechanges_sort_inmem", Some(filter)) => run_mergechanges_sort_inmem(
             filter.value_of("INPUT").unwrap(),
@@ -543,7 +543,7 @@ fn main() {
             filter.value_of("FILTER"),
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
         ),
         ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
@@ -554,7 +554,7 @@ fn main() {
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             filter.is_present("KEEPTEMPS"),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
             filter.is_present("SINGLETEMPFILE")
 
@@ -563,7 +563,7 @@ fn main() {
             filter.value_of("OUTFN").unwrap(),
             filter.value_of("TEMPFN").unwrap(),
             filter.is_present("ISSPLIT"),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             
         ),
         ("mergechanges", Some(filter)) => run_mergechanges(
@@ -572,7 +572,7 @@ fn main() {
             filter.value_of("FILTER"),
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         /*("process_geometry_null", Some(geom)) => process_geometry(
             geom.value_of("INPUT").unwrap(),
@@ -582,7 +582,7 @@ fn main() {
             geom.is_present("FIND_MINZOOM"),
             geom.value_of("STYLE_NAME"),
             get_i64(geom.value_of("MAX_MINZOOM")),
-            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("process_geometry_json", Some(geom)) => process_geometry(
             geom.value_of("INPUT").unwrap(),
@@ -592,7 +592,7 @@ fn main() {
             geom.is_present("FIND_MINZOOM"),
             geom.value_of("STYLE_NAME"),
             get_i64(geom.value_of("MAX_MINZOOM")),
-            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("process_geometry_tiled_json", Some(geom)) => process_geometry(
             geom.value_of("INPUT").unwrap(),
@@ -602,7 +602,7 @@ fn main() {
             geom.is_present("FIND_MINZOOM"),
             geom.value_of("STYLE_NAME"),
             get_i64(geom.value_of("MAX_MINZOOM")),
-            value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+            value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         ("process_geometry_pbffile", Some(geom)) => {
             
@@ -620,7 +620,7 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         },
         ("process_geometry_postgresqlnull", Some(geom)) => {
@@ -638,7 +638,7 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("process_geometry_postgresqlblob", Some(geom)) => {
@@ -657,7 +657,7 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("process_geometry_postgresqlblob_pbf", Some(geom)) => {
@@ -676,7 +676,7 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("process_geometry_postgresql", Some(geom)) => {
@@ -698,7 +698,7 @@ fn main() {
                 geom.is_present("FIND_MINZOOM"),
                 geom.value_of("STYLE_NAME"),
                 get_i64(geom.value_of("MAX_MINZOOM")),
-                value_t!(geom, "NUMCHAN", usize).unwrap_or(NUMCHAN_DEFAULT),
+                value_t!(geom, "NUMCHAN", usize).unwrap_or(numchan_default),
             )
         }
         ("dump_geometry_style", Some(geom)) => dump_geometry_style(geom.value_of("OUTPUT")),

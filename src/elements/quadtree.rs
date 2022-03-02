@@ -4,6 +4,8 @@ use std::io::{Error, ErrorKind, Result};
 
 use std::f64::consts::PI;
 
+use regexp::RegExp;
+
 pub fn coordinate_as_integer(v: f64) -> i32 {
     if v > 0.0 {
         return ((v * 10000000.0) + 0.5) as i32;
@@ -140,14 +142,73 @@ impl Bbox {
         }
         let mut vvi = Vec::new();
         for v in vv {
-            vvi.push(v.parse().unwrap());
+            match v.parse() {
+                Ok(vi) => { vvi.push(vi); },
+                Err(_) => { return Err(Error::new(ErrorKind::Other, "expected integer values")); }
+            }
+            //vvi.push(v.parse().unwrap());
         }
         Ok(Bbox::new(vvi[0], vvi[1], vvi[2], vvi[3]))
     }
     
+    pub fn from_str_alt(instr: &str) -> Result<Bbox> {
+        let four_ints = RegExp::new(r"(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+),(\-?[0-9]+)").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
+        if let Some(caps) =  all_ints.captures(instr) {
+            let minlon = caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[1]))))?;
+            let minlat = caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[2]))))?;
+            let maxlon = caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[3]))))?;
+            let maxlat = caps[4].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not an int",caps[4]))))?;
+            return Ok(Bbox::new(minlon,minlat,maxlon,maxlat));
+        }
+        
+        let four_floats = RegExp::new(r"(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
+        if let Some(caps) =  all_floats.captures(instr) {
+            let minlon = coordinate_as_integer(caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[1])))));
+            let minlat = coordinate_as_integer(caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[2])))));
+            let maxlon = coordinate_as_integer(caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[3])))));
+            let maxlat = coordinate_as_integer(caps[4].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[4])))));
+            return Ok(Bbox::new(minlon,minlat,maxlon,maxlat));
+        }
+        
+        let tile_spec = RegExp::new(r"tile:(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*),(\-?[0-9]*\.?[0-9]*)(buf:(\-?[0-9]*\.?[0-9]*))?").or_else(Err(Error::new(ErrorKind::Other,"??")))?;
+        if let Some(caps) = tile_spec.captures(instr) {
+            let x = caps[1].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[1]))));
+            let y = caps[2].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[2]))));
+            let z = caps[3].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[4]))));
+            let buff = if caps.len()==6 {
+                caps[5].parse().or_else(Err(Error::new(ErrorKind::Other,format!("{} not a float",caps[5]))));
+            } else {
+                0.0
+            };
+            
+            return Ok(Bbox::from_tile(x,y,z,buff))
+        }
+        Err(Error::new(ErrorKind::Other,format!("can't make Bbox from {:?}", instr)))
+    }
+                
+        
+        
+    
     pub fn from_point(lon: i32, lat: i32) -> Bbox {
         Bbox::new(lon,lat,lon,lat)
     }
+    
+    
+    pub fn from_tile(x: f64, y: f64, z: f64, buffer: f64) -> Bbox {
+        let sz = zoom(z);
+        let minx = -EARTH_WIDTH + (x - buffer) * sz;
+        let maxy = EARTH_WIDTH - (y - buffer) * sz;
+        
+        let maxx = minx + (2.0+buffer) * sz;
+        let miny = maxy - (2.0+buffer) * sz;
+        
+        let minlon = coordinate_as_integer(minx * 180.0 / EARTH_WIDTH);
+        let minlat = coordinate_as_integer(latitude_un_mercator(miny, EARTH_WIDTH));
+        let maxlon = coordinate_as_integer(maxx * 180.0 / EARTH_WIDTH);
+        let maxlat = coordinate_as_integer(latitude_un_mercator(maxy, EARTH_WIDTH));
+        Bbox::new(minlon,minlat,maxlon,maxlat)
+    }
+    
     pub fn as_tuple(&self) -> (i32,i32,i32,i32) {
         (self.minlon,self.minlat,self.maxlon,self.maxlat)
     }
