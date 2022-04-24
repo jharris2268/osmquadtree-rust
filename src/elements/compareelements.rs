@@ -256,7 +256,7 @@ pub fn compare_element_iters_json<T: Iterator<Item=Element>>(mut left_iter: T, m
             ElementCompare::ChangedUserName(ln,rn) => { changed_users.insert((ln,rn)); },
             p => {
                 let mut x = serde_json::to_vec(&p).expect("?");
-                x.push(32);
+                x.push(10); //newline character
                 outf.write_all(&x).expect("?");
                 
                 count+=1;
