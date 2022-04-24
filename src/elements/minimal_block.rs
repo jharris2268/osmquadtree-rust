@@ -309,7 +309,29 @@ impl MinimalBlock {
                 PbfTag::Value(32, qt) => res.quadtree = quadtree::Quadtree::new(un_zig_zag(qt)),
                 PbfTag::Value(33, sd) => res.start_date = sd as i64,
                 PbfTag::Value(34, ed) => res.end_date = ed as i64,
-
+                
+                
+                PbfTag::Value(17, granularity) => {
+                    if granularity != 100 {
+                        return Err(Error::new(ErrorKind::Other, format!("unexpected granuality [{}!=100]", granularity)));
+                    }
+                },
+                PbfTag::Value(18, date_granularity) => {
+                    if date_granularity != 1000 {
+                        return Err(Error::new(ErrorKind::Other, format!("unexpected date_granularity [{}!=1000]", date_granularity)));
+                    }
+                },
+                PbfTag::Value(19, lat_offset) => {
+                    if lat_offset != 0 {
+                        return Err(Error::new(ErrorKind::Other, format!("unexpected lat_offset [{}!=0]", lat_offset)));
+                    }
+                },
+                PbfTag::Value(20, lon_offset) => {
+                    if lon_offset != 0 {
+                        return Err(Error::new(ErrorKind::Other, format!("unexpected lon_offset [{}!=0]", lon_offset)));
+                    }
+                },
+                
                 _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
             }
         }

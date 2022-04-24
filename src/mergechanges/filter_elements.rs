@@ -322,6 +322,43 @@ impl FilterObjs {
     }
 
     fn check_relation(&mut self, r: &MinimalRelation, justr: bool) -> (bool, bool) {
+        if r.refs_data.is_empty() {
+            
+            return (false, false);
+        }
+        
+        
+            
+        let mut has_relation_member = false;
+        
+        for (tyi, rf) in PackedInt::new(&r.types_data).zip(DeltaPackedInt::new(&r.refs_data)) {
+            let ty = ElementType::from_int(tyi);
+            if ty == ElementType::Relation {
+                has_relation_member = true;
+            }
+        
+            if justr {
+                
+                if ty == ElementType::Relation {
+                    if self.idset.contains(ty, rf) {
+                        self.idset.add_relation(r.id);
+                        return (true, false);
+                    }
+                }
+            } else {
+                if self.idset.contains(ty, rf) {
+                    self.idset.add_relation(r.id);
+                    return (true, false);
+                }
+            }
+        }
+                
+        return (true, has_relation_member);
+        
+    }
+        
+     /*   
+        
         let mut hasm = false;
         let mut hasr = false;
         for (tyi, rf) in PackedInt::new(&r.types_data).zip(DeltaPackedInt::new(&r.refs_data)) {
@@ -333,13 +370,13 @@ impl FilterObjs {
             if !justr || ty == ElementType::Relation {
                 if self.idset.contains(ty, rf) {
                     //self.get_idset().relations.insert(r.id);
-                    self.idset.add_node(r.id);
+                    self.idset.add_relation(r.id);
                     return (true, false);
                 }
             }
         }
         (!hasm, hasr)
-    }
+    }*/
 
     fn check_pending_relations(&mut self) {
         
