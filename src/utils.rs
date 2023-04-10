@@ -149,16 +149,24 @@ pub fn parse_timestamp(ts: &str) -> Result<i64> {
 }
 
 pub fn timestamp_string(ts: i64) -> String {
-    let dt = NaiveDateTime::from_timestamp(ts, 0);
-    dt.format(TIMEFORMAT).to_string()
+    match NaiveDateTime::from_timestamp_opt(ts, 0) {
+        Some(dt) => dt.format(TIMEFORMAT).to_string(),
+        None => String::from("??")
+    }
+        
 }
 pub fn timestamp_string_alt(ts: i64) -> String {
-    let dt = NaiveDateTime::from_timestamp(ts, 0);
-    dt.format(TIMEFORMAT_ALT).to_string()
+    match NaiveDateTime::from_timestamp_opt(ts, 0) {
+        Some(dt) => dt.format(TIMEFORMAT_ALT).to_string(),
+        None => String::from("??")
+    }
 }
 pub fn date_string(ts: i64) -> String {
-    let dt = NaiveDateTime::from_timestamp(ts, 0);
-    dt.format(DATEFORMAT).to_string()
+    match NaiveDateTime::from_timestamp_opt(ts, 0) {
+        Some(dt) => dt.format(DATEFORMAT).to_string(),
+        None => String::from("??")
+    }
+    
 }
 
 pub fn as_int(v: f64) -> i32 {

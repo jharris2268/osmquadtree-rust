@@ -1,7 +1,8 @@
 use std::fs::File;
 
 use crate::pbfformat::{
-    file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos, FileBlock
+    file_length, read_all_blocks_parallel_with_progbar, read_all_blocks_prog_fpos,
+    FileBlock, ParallelFileLocs,
 };
 
 use crate::update::{read_xml_change, ChangeBlock};
@@ -845,54 +846,62 @@ pub fn call_count(fname: &str,
             None => None,
         };
         
-        let (mut fbufs, locsv, total_len) = get_file_locs(fname, filter, tstamp).expect("?");
+        let file_locs = get_file_locs(fname, filter, tstamp).expect("?");
 
-        let mut pps: Vec<
-            Box<
-                dyn CallFinish<
-                    CallType = (usize, Vec<FileBlock>),
-                    ReturnType = channelled_callbacks::Timings<Count>,
-                >,
-            >,
-        > = Vec::new();
-        let msg: String;
-        if use_primitive {
-            msg = format!(
-                "count blocks combine primitive {}, numchan={}",
-                fname, numchan
-            );
-            for _ in 0..numchan {
-                let cca = Box::new(CountPrim::new());
-                pps.push(Box::new(Callback::new(
-                    make_read_primitive_blocks_combine_call_all(cca),
-                )));
-            }
-        } else {
-            msg = format!(
-                "count blocks combine minimal {}, numchan={}",
-                fname, numchan
-            );
-            for _ in 0..numchan {
-                let cca = Box::new(CountMinimal::new());
-                pps.push(Box::new(Callback::new(
-                    make_read_minimal_blocks_combine_call_all(cca),
-                )));
-            }
-        }
-        let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
-        let a = read_all_blocks_parallel_with_progbar(&mut fbufs, &locsv, readb, &msg, total_len);
+        call_count_combine(fname, file_locs, use_primitive, numchan)
 
-        let mut cc = Count::new();
-        for (_, y) in &a.others {
-            cc.add_other(y);
-        }
 
-        Ok(CountAny::Count(cc))
+        
     }
     
 }
 
+pub fn call_count_combine(fname: &str, file_locs: ParallelFileLocs, use_primitive: bool, numchan: usize) -> Result<CountAny> {
     
+    let (mut fbufs, locsv, total_len) = file_locs;
+    
+    let mut pps: Vec<
+        Box<
+            dyn CallFinish<
+                CallType = (usize, Vec<FileBlock>),
+                ReturnType = channelled_callbacks::Timings<Count>,
+            >,
+        >,
+    > = Vec::new();
+    let msg: String;
+    if use_primitive {
+        msg = format!(
+            "count blocks combine primitive {}, numchan={}",
+            fname, numchan
+        );
+        for _ in 0..numchan {
+            let cca = Box::new(CountPrim::new());
+            pps.push(Box::new(Callback::new(
+                make_read_primitive_blocks_combine_call_all(cca),
+            )));
+        }
+    } else {
+        msg = format!(
+            "count blocks combine minimal {}, numchan={}",
+            fname, numchan
+        );
+        for _ in 0..numchan {
+            let cca = Box::new(CountMinimal::new());
+            pps.push(Box::new(Callback::new(
+                make_read_minimal_blocks_combine_call_all(cca),
+            )));
+        }
+    }
+    let readb = Box::new(CallbackMerge::new(pps, Box::new(MergeTimings::new())));
+    let a = read_all_blocks_parallel_with_progbar(&mut fbufs, &locsv, readb, &msg, total_len);
+
+    let mut cc = Count::new();
+    for (_, y) in &a.others {
+        cc.add_other(y);
+    }
+
+    Ok(CountAny::Count(cc))
+}
 
 pub fn run_count(
     fname: &str,

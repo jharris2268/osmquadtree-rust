@@ -4,3 +4,6 @@ junk/
 Cargo.lock
 readpackedpbf.py
 __pycache__/
+**/*filelocs.json
+**/*.pbf
+**/*.xml

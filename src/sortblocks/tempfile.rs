@@ -7,10 +7,10 @@ use std::sync::Arc;
 use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
 use crate::elements::{ PrimitiveBlock};
 
-use crate::pbfformat::HeaderType;
+
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks_with_progbar, read_file_block_with_pos,
-    unpack_file_block, FileBlock,
+    unpack_file_block, FileBlock,CompressionType,HeaderType
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{
@@ -413,7 +413,7 @@ fn write_temp_blocks(
     let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
         == 0
     {
-        let pc = make_packprimblock_many(wt, true);
+        let pc = make_packprimblock_many(wt, true, CompressionType::Zlib);
         let cc = Box::new(CollectTempBlocks::new(pc, limit, splitat, groups));
         let aq = Box::new(AddQuadtree::new(qtsfn, cc));
         make_unpackprimblock(aq)
@@ -425,7 +425,7 @@ fn write_temp_blocks(
 
         for wt in wts {
             let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-            let pp = make_packprimblock_many(wt2, true);
+            let pp = make_packprimblock_many(wt2, true, CompressionType::Zlib);
             pcs.push(Box::new(Callback::new(Box::new(CollectTempBlocks::new(
                 pp,
                 limit / numchan,
@@ -476,19 +476,21 @@ struct CollectBlocksTemp<T> {
     tm: f64,
     tm2: f64,
     timestamp: i64,
+    compression_type: CompressionType
 }
 
 impl<T> CollectBlocksTemp<T>
 where
     T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>,
 {
-    pub fn new(out: Box<T>, groups: Arc<QuadtreeTree>, timestamp: i64) -> CollectBlocksTemp<T> {
+    pub fn new(out: Box<T>, groups: Arc<QuadtreeTree>, timestamp: i64, compression_type: CompressionType) -> CollectBlocksTemp<T> {
         CollectBlocksTemp {
             out: out,
             groups: groups,
             tm: 0.0,
             tm2: 0.0,
             timestamp: timestamp,
+            compression_type: compression_type
         }
     }
 
@@ -509,11 +511,11 @@ where
     }
 }
 
-fn pack_all(bls: Vec<PrimitiveBlock>) -> Vec<(i64, Vec<u8>)> {
+fn pack_all(bls: Vec<PrimitiveBlock>, compression_type: &CompressionType) -> Vec<(i64, Vec<u8>)> {
     let mut r = Vec::new();
     for bl in bls {
         let p = bl.pack(true, false).expect("?");
-        let q = pack_file_block("OSMData", &p, true).expect("?");
+        let q = pack_file_block("OSMData", &p, compression_type).expect("?");
         r.push((bl.quadtree.as_int(), q));
     }
     r
@@ -530,7 +532,7 @@ where
         let tx = Timer::new();
         let bv = self.sort_all(bls);
         let ta = tx.since();
-        let tp = pack_all(bv);
+        let tp = pack_all(bv, &self.compression_type);
         let tb = tx.since();
         self.tm += ta;
         self.tm2 += tb - ta;
@@ -692,11 +694,12 @@ fn write_blocks_from_temp(
     numchan: usize,
     timestamp: i64,
     keep_temps: bool,
+    compression_type: CompressionType,
 ) -> io::Result<()> {
-    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
+    let wf = Box::new(WriteFile::with_compression_type(&outfn, HeaderType::ExternalLocs, None, compression_type));
 
     let t = if numchan == 0 {
-        let cq = Box::new(CollectBlocksTemp::new(wf, groups, timestamp));
+        let cq = Box::new(CollectBlocksTemp::new(wf, groups, timestamp, compression_type));
 
         read_temp_data(xx, cq, !keep_temps)
     } else {
@@ -711,6 +714,7 @@ fn write_blocks_from_temp(
                 w2,
                 groups.clone(),
                 timestamp,
+                compression_type
             )))));
         }
 
@@ -796,6 +800,7 @@ pub fn sort_blocks(
     limit /*write_at*/: usize,
     timestamp: i64,
     keep_temps: bool,
+    compression_type: CompressionType,
     lt: &mut LogTimes,
 ) -> io::Result<()> {
     message!(
@@ -887,7 +892,7 @@ pub fn sort_blocks(
         }
     }
     lt.add("write temp files");
-    write_blocks_from_temp(xx, outfn, groups, numchan, timestamp, keep_temps)?;
+    write_blocks_from_temp(xx, outfn, groups, numchan, timestamp, keep_temps, compression_type)?;
     lt.add("write blocks");
     Ok(())
     //Err(io::Error::new(io::ErrorKind::Other,"not impl"))

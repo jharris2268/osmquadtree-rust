@@ -1,7 +1,7 @@
 use channelled_callbacks::{CallFinish, Callback, CallbackSync, ReplaceNoneWithTimings};
 use crate::elements::{Quadtree, QuadtreeBlock};
 use crate::pbfformat::WriteFile;
-use crate::pbfformat::{pack_file_block, HeaderType};
+use crate::pbfformat::{pack_file_block, HeaderType, CompressionType};
 
 
 use crate::calcqts::{OtherData, Timings};
@@ -79,7 +79,7 @@ where
     fn call(&mut self, t: Self::CallType) {
         let mut t = t;
         let p = t.pack().expect("failed to pack");
-        let b = pack_file_block("OSMData", &p, true).expect("failed to pack");
+        let b = pack_file_block("OSMData", &p, &CompressionType::Zlib).expect("failed to pack");
 
         self.out.call(b);
     }

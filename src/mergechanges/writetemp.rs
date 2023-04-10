@@ -6,7 +6,7 @@ use crate::mergechanges::filter_elements::prep_bbox_filter;
 use crate::mergechanges::{make_write_file, read_filter};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
-use crate::pbfformat::{read_all_blocks_parallel_with_progbar, FileBlock};
+use crate::pbfformat::{read_all_blocks_parallel_with_progbar, FileBlock, CompressionType};
 use crate::sortblocks::{make_packprimblock_many, make_packprimblock_qtindex};
 use crate::sortblocks::{
     read_temp_data, read_tempfile_locs, read_tempfilesplit_locs, write_tempfile_locs,
@@ -283,7 +283,7 @@ pub fn write_temp_blocks(
     let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
         if numchan == 0 {
             //let (mut res, d) = if numchan == 0 {
-            let pc = make_packprimblock_many(wt, true);
+            let pc = make_packprimblock_many(wt, true, CompressionType::Zlib);
             let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at));
             /*let pp =*/
             make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true)
@@ -296,7 +296,7 @@ pub fn write_temp_blocks(
             > = Vec::new();
             for wt in wts {
                 let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
-                let pc = make_packprimblock_many(wt2, true);
+                let pc = make_packprimblock_many(wt2, true, CompressionType::Zlib);
                 let cc = Box::new(CollectTemp::new(pc, 0, splitat, write_at / numchan));
                 pcs.push(Box::new(Callback::new(
                     make_read_primitive_blocks_combine_call_all_idset(cc, ids.clone(), true),
@@ -347,6 +347,7 @@ pub fn run_mergechanges_sort(
     filter_objs: bool,
     timestamp: Option<&str>,
     keep_temps: bool,
+    compression_type: CompressionType,
     numchan: usize,
     ram_gb: usize,
     single_temp_file: bool,
@@ -396,7 +397,7 @@ pub fn run_mergechanges_sort(
         0
     };
 
-    call_mergechanges_sort(&mut pfilelocs, outfn, &tempfn, limit, fsplit, ids, &bbox, keep_temps, tx, numchan, ram_gb)
+    call_mergechanges_sort(&mut pfilelocs, outfn, &tempfn, limit, fsplit, ids, &bbox, keep_temps, compression_type, tx, numchan, ram_gb)
 }
 
 pub fn call_mergechanges_sort(
@@ -408,6 +409,7 @@ pub fn call_mergechanges_sort(
     ids: Arc<dyn IdSet>,
     bbox: &Bbox,
     keep_temps: bool,
+    compression_type: CompressionType,
     mut tx: LogTimes,
     numchan: usize,
     _ram_gb: usize,
@@ -465,7 +467,7 @@ pub fn call_mergechanges_sort(
         }
     }
 
-    let wf = make_write_file(outfn, bbox, 8000, numchan);
+    let wf = make_write_file(outfn, bbox, 8000, compression_type, numchan);
 
     let res = if numchan == 0 {
         read_temp_data(
@@ -504,6 +506,7 @@ pub fn run_mergechanges_sort_from_existing(
     outfn: &str,
     tempfn: &str,
     is_split: bool,
+    compression_type: CompressionType,
     numchan: usize,
 ) -> Result<()> {
     let mut tx = LogTimes::new();
@@ -517,7 +520,7 @@ pub fn run_mergechanges_sort_from_existing(
 
     tx.add("load filelocs");
 
-    let wf = make_write_file(outfn, &bbox, 8000, numchan);
+    let wf = make_write_file(outfn, &bbox, 8000, compression_type, numchan);
 
     let res = if numchan == 0 {
         read_temp_data(
@@ -559,6 +562,7 @@ pub fn run_mergechanges(
     filter: Option<&str>,
     filter_objs: bool,
     timestamp: Option<&str>,
+    compression_type: CompressionType,
     numchan: usize,
 ) -> Result<()> {
     let mut tx = LogTimes::new();
@@ -585,7 +589,7 @@ pub fn run_mergechanges(
         _ => Arc::new(IdSetAll()),
     };
     
-    call_mergechanges(&mut pfilelocs, outfn, ids, &bbox, tx, numchan)
+    call_mergechanges(&mut pfilelocs, outfn, ids, &bbox, compression_type, tx, numchan)
 }
 
 pub fn call_mergechanges(
@@ -593,14 +597,18 @@ pub fn call_mergechanges(
     outfn: &str,
     ids: Arc<dyn IdSet>,
     bbox: &Bbox,
+    compression_type: CompressionType,
     mut tx: LogTimes,
     numchan: usize) -> Result<()> {
     
-    let wf = Box::new(WriteFile::with_bbox(&outfn, HeaderType::ExternalLocs, Some(bbox)));
+    
+    let wf = Box::new(WriteFile::with_compression_type(
+            &outfn, HeaderType::ExternalLocs, Some(bbox), compression_type
+        ));
 
     let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
         if numchan == 0 {
-            let pc = make_packprimblock_qtindex(wf, true);
+            let pc = make_packprimblock_qtindex(wf, true, compression_type);
             make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true)
         } else {
             let wfs = CallbackSync::new(wf, numchan);
@@ -609,7 +617,7 @@ pub fn call_mergechanges(
             > = Vec::new();
             for w in wfs {
                 let w2 = Box::new(ReplaceNoneWithTimings::new(w));
-                let pc = make_packprimblock_qtindex(w2, true);
+                let pc = make_packprimblock_qtindex(w2, true, compression_type);
                 pps.push(Box::new(Callback::new(
                     make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true),
                 )))

@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result, Write};
 
+
+const DEFAULT_SOURCE_PRFX: &'static str = "https://planet.openstreetmap.org/replication/day/";
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct Settings {
@@ -24,7 +27,7 @@ impl Settings {
         Settings {
             initial_state: initial_state,
             diffs_location: String::from(diffs_location),
-            source_prfx: String::from("https://planet.openstreetmap.org/replication/day/"),
+            source_prfx: String::from(DEFAULT_SOURCE_PRFX),
             round_time: true,
             max_qt_level: max_qt_level,
             qt_buffer: qt_buffer
@@ -124,7 +127,7 @@ fn get_diff_url(source_prfx: &str, state: i64) -> String {
     format!("{}{:03}/{:03}/{:03}.osc.gz", source_prfx, a, b, c)
 }
 
-fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
+pub fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
     let state_url = get_diff_state_url(source_prfx, state);
 
     let state_response = ureq::get(&state_url).call().into_string()?;
@@ -163,6 +166,36 @@ fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
     }
     Ok((seq_num.unwrap(), timestamp.unwrap()))
 }
+
+fn find_initial_state(source_prfx: Option<&str>, diffs_location: &str, timestamp: i64) -> Result<i64> {
+    let csv_list = read_csv_list(diffs_location, 0);
+    for pair in csv_list.windows(2) {
+        if pair[1].2 == timestamp {
+            return Ok(pair[1].1);
+        }
+        if pair[0].2 < timestamp && pair[1].2 > timestamp {
+            return Ok(pair[0].1);
+        }
+    }
+    
+    
+    let (initial_state,ts)  = get_state(source_prfx.unwrap_or(&DEFAULT_SOURCE_PRFX), None)?;
+    if ts <= timestamp {
+        return Ok(initial_state);
+    }
+    
+    for offset in 1..20 {
+        let state = initial_state - offset;
+        let (_, ts) = get_state(source_prfx.unwrap_or(&DEFAULT_SOURCE_PRFX), Some(state))?;
+        if ts <= timestamp {
+            return Ok(state);
+        }
+        
+                
+    }
+    return Err(Error::new(ErrorKind::Other, "source file too old??"));
+}
+
 
 fn read_csv_list(diffs_location: &str, last_state: i64) -> Vec<(String, i64, i64)> {
     let mut res = Vec::new();
@@ -224,7 +257,8 @@ pub fn run_update_initial(
     prfx: &str,
     infn: &str,
     timestamp: &str,
-    initial_state: i64,
+    initial_state: Option<i64>,
+    diffs_src: Option<&str>,
     diffs_location: &str,
     max_qt_level: usize,
     qt_buffer: f64,
@@ -235,8 +269,20 @@ pub fn run_update_initial(
     let outfn = format!("{}{}-index.pbf", prfx, infn);
     let infn2 = format!("{}{}", prfx, infn);
     let num_tiles = write_index_file(&infn2, &outfn, numchan);
-
-    let settings = Settings::new(initial_state, &diffs_location, max_qt_level, qt_buffer);
+    
+    
+    
+    let initial_state = match initial_state {
+        Some(s) =>  s,
+        None => find_initial_state(diffs_src, diffs_location, timestamp)?
+        
+    };
+       
+    
+    let mut settings = Settings::new(initial_state, &diffs_location, max_qt_level, qt_buffer);
+    if let Some(diff) = diffs_src {
+        settings.source_prfx = diff.to_string();
+    };
     message!("{:?}", settings);
     settings.write(prfx);
 

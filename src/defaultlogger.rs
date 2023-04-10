@@ -1,7 +1,9 @@
 
 use indicatif::{ProgressBar, ProgressStyle};
-use crate::logging::{ProgressBytes,ProgressPercent,Messenger,set_boxed_messenger};
+use crate::logging::{ProgressBytes,ProgressPercent,TaskSequence, Messenger,set_boxed_messenger};
+use crate::message;
 
+use std::sync::{Arc, Mutex, MutexGuard};
 
 
 pub struct ProgressBytesDefault {
@@ -72,6 +74,69 @@ impl ProgressPercent for ProgressPercentDefault {
         
     }
 }
+pub struct TaskSequenceState {
+    sequence_message: String,
+    num_tasks: usize,
+    current_task: usize
+}
+
+impl TaskSequenceState {
+    
+    fn new(message: &str, num_tasks: usize) -> Arc<Mutex<TaskSequenceState>> {
+        Arc::new(Mutex::new(
+            TaskSequenceState{
+                sequence_message: String::from(message),
+                num_tasks: num_tasks,
+                current_task: 0
+            }
+        ))
+    }
+    
+    fn start_task(&mut self, msg: &str) {
+        self.current_task += 1;
+        message!("[{} {}/{}] {}", self.sequence_message, self.current_task, self.num_tasks, msg);
+    }
+    
+    fn finish(&mut self) {}
+}
+       
+
+
+pub struct TaskSequenceDefault {
+    
+    state: Arc<Mutex<TaskSequenceState>>
+        
+}
+
+
+
+impl TaskSequenceDefault {
+    pub fn new(message: &str, num_tasks: usize) -> Box<dyn TaskSequence> {
+        Box::new(TaskSequenceDefault{state: TaskSequenceState::new(message, num_tasks)})
+    }
+    
+    #[inline]
+    fn state(&self) -> MutexGuard<'_, TaskSequenceState> {
+        self.state.lock().unwrap()
+    }
+    
+}
+
+impl TaskSequence for TaskSequenceDefault {
+    fn start_task(&self, msg: &str) {
+        self.state().start_task(msg);
+    }
+    
+    fn finish(&self) {
+        self.state().finish();
+    }
+}
+        
+        
+        
+        
+        
+
 pub struct MessengerDefault;
     
 impl MessengerDefault {
@@ -103,7 +168,9 @@ impl Messenger for MessengerDefault {
         ProgressBytesDefault::new(message, total_bytes)
     }
     
-        
+    fn start_task_sequence(&self, message: &str, num_tasks: usize) -> Box<dyn TaskSequence> {
+        TaskSequenceDefault::new(message, num_tasks)
+    }        
         
 }
     

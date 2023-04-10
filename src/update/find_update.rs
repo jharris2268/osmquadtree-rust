@@ -3,7 +3,8 @@ use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
 use crate::pbfformat::{
-    pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos, FileBlock, HeaderBlock,FilelistEntry
+    pack_file_block, read_all_blocks_locs_prog, read_file_block_with_pos,
+    FileBlock, HeaderBlock,FilelistEntry,CompressionType
 };
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
@@ -737,6 +738,8 @@ pub fn find_update(
 ) -> std::io::Result<(f64, usize)> {
     let mut chgf = BufReader::new(File::open(change_filename)?);
 
+    let compression_type = CompressionType::Zlib;
+
     let tx = Timer::new();
 
     let mut changeblock = if change_filename.ends_with(".gz") {
@@ -785,7 +788,7 @@ pub fn find_update(
     let mut wf = WriteFileInternalLocs::new(&format!("{}{}", prfx, fname), true);
     for (k, v) in tiles.iter() {
         let pp = v.pack(true, true)?;
-        let qq = pack_file_block("OSMData", &pp, true)?;
+        let qq = pack_file_block("OSMData", &pp, &compression_type)?;
         wf.call((*k, qq))
     }
     wf.finish()?;

@@ -77,6 +77,11 @@ pub trait ProgressPercent {
     fn finish(&self);
 }
 
+pub trait TaskSequence {
+    fn start_task(&self, message: &str);
+    fn finish(&self);
+}
+
 pub struct ProgressPercentPartial<'a, T: ProgressPercent + ?Sized> {
     inner: &'a Box<T>,
     start: f64,
@@ -108,13 +113,10 @@ pub trait Messenger {
     fn message(&self, message: &str);
     
     fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes>;
-    //fn progress_bytes(&self, bytes: u64);
-    //fn finish_progress_bytes(&self);
-    
-    
     fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent>;
-    //fn progress_percent(&self, percent: f64);
-    //fn finish_progress_percent(&self);
+    
+    fn start_task_sequence(&self, message: &str, num_tasks: usize) -> Box<dyn TaskSequence>;
+    
 }
 
 struct NopProgressBytes;
@@ -132,6 +134,14 @@ impl ProgressPercent for NopProgressPercent {
     fn finish(&self) {}
 }
 
+struct NopTaskSequence;
+impl TaskSequence for NopTaskSequence {
+    fn start_task(&self, _message: &str) {}
+    fn finish(&self) {}
+}
+
+
+    
 
 
 struct NopMessenger;
@@ -141,15 +151,15 @@ impl Messenger for NopMessenger {
     fn start_progress_bytes(&self, _message: &str, _total_bytes: u64) -> Box<dyn ProgressBytes> {
         Box::new(NopProgressBytes)
     }
-    //fn progress_bytes(&self, _bytes: u64) {}
-    //fn finish_progress_bytes(&self) {}
-    
     
     fn start_progress_percent(&self, _message: &str)  -> Box<dyn ProgressPercent> {
         Box::new(NopProgressPercent)
     }
-    //fn progress_percent(&self, _percent: f64) {}
-    //fn finish_progress_percent(&self) {}
+    
+    fn start_task_sequence(&self, _message: &str, _num_tasks: usize) -> Box<dyn TaskSequence> {
+        Box::new(NopTaskSequence)
+    }
+    
 }
 
 
@@ -182,4 +192,12 @@ macro_rules! progress_percent {
     
 }
 
+#[macro_export]
+macro_rules! task_sequence {
+    ($message:expr, $num_tasks:expr) => ({
+        $crate::logging::messenger().start_task_sequence($message, $num_tasks)
+        
+    });
+    
+}
     

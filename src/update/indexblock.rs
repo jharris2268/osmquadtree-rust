@@ -2,7 +2,7 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, Ca
 use crate::elements::{ElementType, IdSet, MinimalBlock, Quadtree};
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
-    read_all_blocks_with_progbar, FileBlock,
+    read_all_blocks_with_progbar, FileBlock,CompressionType
 };
 use crate::logging::ProgressPercent;
 use simple_protocolbuffers::{
@@ -126,7 +126,7 @@ fn convert_indexblock(i_fb: (usize, FileBlock)) -> Vec<u8> {
     let mb = MinimalBlock::read(i_fb.0 as i64, i_fb.1.pos, &i_fb.1.data(), false)
         .expect("MinimalBlock::read failed");
     let d = prep_index_block(&mb);
-    pack_file_block("IndexBlock", &d, true).expect("pack_file_block failed")
+    pack_file_block("IndexBlock", &d, &CompressionType::Zlib).expect("pack_file_block failed")
 }
 
 pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {

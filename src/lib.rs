@@ -13,3 +13,5 @@ pub mod update;
 
 pub mod logging;
 pub mod defaultlogger;
+
+pub mod brotli_compression;

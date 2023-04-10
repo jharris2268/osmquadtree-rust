@@ -1,7 +1,7 @@
 use channelled_callbacks::CallFinish;
 use crate::elements::Bbox;
 use crate::pbfformat::pack_file_block;
-use crate::pbfformat::{make_header_block, HeaderType};
+use crate::pbfformat::{make_header_block, HeaderType, CompressionType};
 use crate::utils::ThreadTimer;
 
 use serde_json;
@@ -16,7 +16,7 @@ pub struct WriteFile {
     write_external_locs: bool,
     locs: HashMap<i64, Vec<(u64, u64)>>,
     tm: f64,
-    fname: String,
+    fname: String
 }
 
 impl WriteFile {
@@ -25,6 +25,13 @@ impl WriteFile {
     }
 
     pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
+        WriteFile::with_compression_type(outfn, header_type, bbox, CompressionType::Zlib)
+    }
+
+    pub fn with_compression_type(
+            outfn: &str, header_type: HeaderType,
+            bbox: Option<&Bbox>, compression_type: CompressionType) -> WriteFile {
+        
         let mut outf = Some(File::create(outfn).expect("failed to create"));
         let mut write_external_locs = false;
         match header_type {
@@ -33,7 +40,7 @@ impl WriteFile {
                 outf.as_mut()
                     .unwrap()
                     .write_all(
-                        &pack_file_block("OSMHeader", &make_header_block(false, bbox), true)
+                        &pack_file_block("OSMHeader", &make_header_block(false, bbox), &compression_type)
                             .expect("?"),
                     )
                     .expect("?");
@@ -42,7 +49,7 @@ impl WriteFile {
                 outf.as_mut()
                     .unwrap()
                     .write_all(
-                        &pack_file_block("OSMHeader", &make_header_block(true, bbox), true)
+                        &pack_file_block("OSMHeader", &make_header_block(true, bbox), &compression_type)
                             .expect("?"),
                     )
                     .expect("?");
@@ -58,7 +65,7 @@ impl WriteFile {
             tm: 0.0,
             write_external_locs: write_external_locs,
             locs: HashMap::new(),
-            fname: String::from(outfn),
+            fname: String::from(outfn)
         }
     }
 

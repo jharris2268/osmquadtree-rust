@@ -14,6 +14,18 @@ use crate::logging::{ProgressPercent,ProgressBytes};
 use crate::{progress_bytes};
 //use indicatif::{ProgressBar, ProgressStyle};
 
+
+use crate::brotli_compression::{compress_brotli, decompress_brotli};
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum CompressionType {
+    Uncompressed,
+    Zlib,
+    Brotli
+}
+
+
 pub fn read_file_data<R: Read>(file: &mut R, nbytes: u64) -> io::Result<Vec<u8>> {
     let mut res = vec![0u8; nbytes as usize];
     file.read_exact(&mut res)?;
@@ -26,7 +38,7 @@ pub struct FileBlock {
     pub len: u64,
     pub block_type: String,
     pub data_raw: Vec<u8>,
-    pub is_comp: bool,
+    pub compression_type: CompressionType,
 }
 impl FileBlock {
     pub fn new() -> FileBlock {
@@ -35,21 +47,33 @@ impl FileBlock {
             len: 0,
             block_type: String::new(),
             data_raw: Vec::new(),
-            is_comp: false,
+            compression_type: CompressionType::Uncompressed,
         }
     }
 
     pub fn data(&self) -> Vec<u8> {
-        if !self.is_comp {
-            return self.data_raw.clone();
-        }
 
+        match self.compression_type {
+            CompressionType::Uncompressed => self.data_raw.clone(),
+            CompressionType::Zlib => self.read_data_zlib(),
+            CompressionType::Brotli => self.read_data_brotli()
+        }
+    }
+    
+    fn read_data_zlib(&self) -> Vec<u8> {
         let mut comp = Vec::new();
         let mut xx = ZlibDecoder::new(&self.data_raw[..]);
         
         xx.read_to_end(&mut comp).expect(&format!("failed to decompress data at pos {}", self.pos));
         comp
     }
+
+    fn read_data_brotli(&self) -> Vec<u8> {
+
+        decompress_brotli(&self.data_raw[..]).expect(&format!("failed to decompress data at pos {}", self.pos))
+    }
+
+        
 }
 
 pub fn file_position<F: Seek>(file: &mut F) -> io::Result<u64> {
@@ -102,8 +126,15 @@ pub fn read_file_block_with_pos<F: Read>(
     for tg in spb::IterTags::new(&c) {
         match tg {
             spb::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
-            spb::PbfTag::Value(2, _) => fb.is_comp = true,
-            spb::PbfTag::Data(3, d) => fb.data_raw = d.to_vec(),
+            spb::PbfTag::Value(2, _) => {}//fb.is_comp = true,
+            spb::PbfTag::Data(3, d) => {
+                fb.compression_type = CompressionType::Zlib;
+                fb.data_raw = d.to_vec();
+            },
+            spb::PbfTag::Data(8, d) => {
+                fb.compression_type = CompressionType::Brotli;
+                fb.data_raw = d.to_vec();
+            },
             _ => { return Err(Error::new(ErrorKind::Other, format!("?? wrong tag @ {} {:?}", pos, tg))); },
         }
     }
@@ -116,19 +147,31 @@ pub fn unpack_file_block(pos: u64, data: &[u8]) -> io::Result<FileBlock> {
     Ok(s.1)
 }
 
-pub fn pack_file_block(blockname: &str, data: &[u8], compress: bool) -> io::Result<Vec<u8>> {
+pub fn pack_file_block(blockname: &str, data: &[u8], compression_type: &CompressionType) -> io::Result<Vec<u8>> {
     let mut body = Vec::new();
-    if compress {
-        let mut e = ZlibEncoder::new(Vec::new(), flate2::Compression::new(6));
-        e.write_all(&data[..])?;
+    match compression_type {
+        CompressionType::Zlib => {
+            let mut e = ZlibEncoder::new(Vec::new(), flate2::Compression::new(6));
+            e.write_all(&data[..])?;
 
-        let comp = e.finish()?;
-        body.reserve(comp.len() + 25);
-        spb::pack_value(&mut body, 2, data.len() as u64);
-        spb::pack_data(&mut body, 3, &comp[..]);
-    } else {
-        body.reserve(data.len() + 5);
-        spb::pack_data(&mut body, 1, &data[..]);
+            let comp = e.finish()?;
+            body.reserve(comp.len() + 25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 3, &comp[..]);
+        },
+        CompressionType::Uncompressed => {
+            body.reserve(data.len() + 5);
+            spb::pack_data(&mut body, 1, &data[..]);
+        },
+        CompressionType::Brotli => {
+
+            let comp = compress_brotli(data)?;
+            
+            body.reserve(comp.len()+25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 8, &comp[..]);
+        },  
+            
     }
 
     let mut head = Vec::with_capacity(25);
@@ -353,6 +396,32 @@ where
 
     read_all_blocks_prog_fpos(&mut fbuf, pp, pg)
 }
+
+pub fn read_all_blocks_vec_with_progbar<T, U>(fname: &str, mut pp: Box<T>, msg: &str) -> (U, f64)
+where
+    T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = U> + ?Sized,
+    U: Send + Sync + 'static,
+{
+    let fl = file_length(fname);
+    //let pb = ProgBarWrap::new_filebytes(fl);
+    //pb.set_message(msg);
+    let pg = progress_bytes!(msg, fl);
+
+    let fobj = File::open(fname).expect("failed to open file");
+    let mut fbuf = BufReader::new(fobj);
+
+    let ct = Timer::new();
+
+    for (i, fb) in ReadFileBlocks::new_at_start(&mut fbuf).enumerate() {
+        
+        pg.progress_bytes(fb.pos);
+        pp.call((i, vec![fb]));
+    }
+    
+    pg.finish();
+    (pp.finish().expect("finish failed"), ct.since())
+}
+
 
 pub fn read_all_blocks_with_progbar_stop<T, U>(
     fname: &str,

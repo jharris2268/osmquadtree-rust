@@ -7,7 +7,7 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, Me
 use crate::elements::{MinimalBlock, Quadtree};
 use crate::pbfformat::{
     pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock, FileLocs,
-    HeaderType, WriteFile,
+    HeaderType, WriteFile,CompressionType
 };
 
 use crate::utils::ThreadTimer;
@@ -273,7 +273,7 @@ where
         tm.add("WriteWayNodeTemp", a);
         tm.add_other(
             "waynodes",
-            OtherData::PackedWayNodes(WayNodeVals::TempFile(std::mem::take(&mut self.fname), b)),
+            OtherData::PackedWayNodes(WayNodeVals::FileBlocks(self.fname.clone(), b)),
         );
         Ok(tm)
     }
@@ -363,7 +363,7 @@ impl RelMems {
 
         let p = self.pack();
         self.packed
-            .push(pack_file_block("RelMems", &p, true).expect("?"));
+            .push(pack_file_block("RelMems", &p, &CompressionType::Zlib).expect("?"));
         self.clear();
     }
 
@@ -482,13 +482,14 @@ pub struct PackWayNodes<T> {
     first_waytile_pos: Option<u64>,
     relmems: Option<RelMems>,
     pack_rels: bool,
+    max_timestamp: i64,
     tm: f64,
 }
 
 fn pack_and_clear_pending(tt: &mut Box<WayNodeTile>) -> Vec<u8> {
     tt.sort();
     let p = tt.pack();
-    let mut p2 = pack_file_block("WayNodes", &p, true).unwrap();
+    let mut p2 = pack_file_block("WayNodes", &p, &CompressionType::Zlib).unwrap();
     tt.clear();
     p2.shrink_to_fit();
     p2
@@ -507,6 +508,7 @@ where
             first_waytile_pos: None,
             relmems: Some(RelMems::new()),
             pack_rels: pack_rels,
+            max_timestamp: 0,
             tm: 0.0,
         }
     }
@@ -552,6 +554,9 @@ where
             }
 
             for w in mb.ways {
+                if w.timestamp > self.max_timestamp {
+                    self.max_timestamp = w.timestamp; 
+                }
                 for n in DeltaPackedInt::new(&w.refs_data) {
                     match self.add(n, w.id) {
                         Some(bl) => {
@@ -563,6 +568,10 @@ where
             }
             let rm = self.relmems.as_mut().unwrap();
             for r in mb.relations {
+                if r.timestamp > self.max_timestamp {
+                    self.max_timestamp = r.timestamp; 
+                }
+                
                 if r.refs_data.is_empty() {
                     rm.empty_rels.push(r.id);
                 } else {
@@ -643,14 +652,16 @@ where
                 timings.add_other("first_waytile_pos", OtherData::FirstWayTile(p));
             }
         }
+        timings.add_other("max_timestamp", OtherData::MaxTimestamp(self.max_timestamp));
         Ok(timings)
     }
 }
 
-fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals, u64) {
+fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals, u64, i64) {
     let mut r = RelMems::new();
     let mut w: Option<WayNodeVals> = None;
     let mut first_waytile_pos = u64::MAX;
+    let mut max_timestamp = 0;
     for (_, b) in std::mem::take(&mut tt.others) {
         match b {
             OtherData::RelMems(rx) => r.extend(rx),
@@ -671,14 +682,19 @@ fn get_relmems_waynodes(mut tt: Timings) -> (RelMems, WayNodeVals, u64) {
                 if p < first_waytile_pos {
                     first_waytile_pos = p;
                 }
-            }
+            },
+            OtherData::MaxTimestamp(ts) => {
+                if ts > max_timestamp {
+                    max_timestamp = ts;
+                }
+            },
             _ => {}
         }
     }
-    return (r, w.unwrap(), first_waytile_pos);
+    return (r, w.unwrap(), first_waytile_pos, max_timestamp);
 }
 
-pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals, u64)> {
+pub fn prep_way_nodes(infn: &str, numchan: usize) -> Result<(RelMems, WayNodeVals, u64, i64)> {
     message!("prep_way_nodes({},{})", infn, numchan);
 
     let (split, limit) = (1 << 22, 1 << 14);
@@ -710,7 +726,7 @@ pub fn prep_way_nodes_tempfile(
     infn: &str,
     outfn: &str,
     numchan: usize,
-) -> Result<(RelMems, WayNodeVals, u64)> {
+) -> Result<(RelMems, WayNodeVals, u64, i64)> {
     message!("prep_way_nodes_tempfile({},{},{})", infn, outfn, numchan);
 
     let (split, limit) = (1 << 24, 1 << 16);

@@ -21,7 +21,7 @@ pub use crate::pbfformat::read_file_block::{
     read_all_blocks_parallel_prog, read_all_blocks_parallel_with_progbar, read_all_blocks_prog,
     read_all_blocks_prog_fpos, read_all_blocks_with_progbar, read_all_blocks_with_progbar_stop,
     read_file_block, read_file_block_with_pos, unpack_file_block, FileBlock,
-    ReadFileBlocks,
+    ReadFileBlocks, read_all_blocks_vec_with_progbar, CompressionType
 };
 
 

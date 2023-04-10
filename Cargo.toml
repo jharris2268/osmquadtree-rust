@@ -34,6 +34,8 @@ simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocol
 channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
 
 
+brotli = "3"
+
 [profile.release]
 #debug = true
 

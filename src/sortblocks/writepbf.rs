@@ -6,7 +6,7 @@ use std::io::Write;
 
 use channelled_callbacks::{CallFinish, CallAll};
 use crate::elements::{Bbox, Block, PrimitiveBlock, Quadtree};
-use crate::pbfformat::pack_file_block;
+use crate::pbfformat::{pack_file_block, CompressionType};
 use crate::pbfformat::{make_header_block_stored_locs, HeaderType};
 
 use crate::utils::{ThreadTimer};
@@ -26,6 +26,11 @@ impl WriteFile {
     pub fn with_bbox(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>) -> WriteFile {
         WriteFile {
             writefile: crate::pbfformat::WriteFile::with_bbox(outfn, header_type, bbox),
+        }
+    }
+    pub fn with_compression_type(outfn: &str, header_type: HeaderType, bbox: Option<&Bbox>, compression_type: CompressionType) -> WriteFile {
+        WriteFile {
+            writefile: crate::pbfformat::WriteFile::with_compression_type(outfn, header_type, bbox, compression_type),
         }
     }
 }
@@ -55,6 +60,7 @@ pub struct WriteFileInternalLocs {
     fname: String,
     ischange: bool,
     data: Vec<(Quadtree, Vec<u8>)>,
+    compression_type: CompressionType,
 }
 
 impl WriteFileInternalLocs {
@@ -63,6 +69,7 @@ impl WriteFileInternalLocs {
             fname: String::from(fname),
             ischange: ischange,
             data: Vec::new(),
+            compression_type: CompressionType::Zlib,
         }
     }
 }
@@ -86,7 +93,7 @@ impl CallFinish for WriteFileInternalLocs {
         let hb = pack_file_block(
             "OSMHeader",
             &make_header_block_stored_locs(self.ischange, locs),
-            true,
+            &self.compression_type,
         )
         .expect("?");
         let mut pos = hb.len() as u64;
@@ -111,13 +118,15 @@ pub fn make_packprimblock_qtindex<
 >(
     out: Box<T>,
     includeqts: bool,
+    compression_type: CompressionType
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
+    
     let conv = Box::new(move |bl: PrimitiveBlock| {
         if bl.len() == 0 {
             return vec![];
         }
         let xx = bl.pack(includeqts, false).expect("failed to pack");
-        let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
+        let ob = pack_file_block("OSMData", &xx, &compression_type).expect("failed to pack fb");
 
         vec![(bl.quadtree.as_int(), ob)]
     });
@@ -128,13 +137,16 @@ pub fn make_packprimblock_zeroindex<
 >(
     out: Box<T>,
     includeqts: bool,
+    compression_type: CompressionType
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
+
+    
     let conv = Box::new(move |bl: PrimitiveBlock| {
         if bl.len() == 0 {
             return vec![];
         }
         let xx = bl.pack(includeqts, false).expect("failed to pack");
-        let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
+        let ob = pack_file_block("OSMData", &xx, &compression_type).expect("failed to pack fb");
 
         vec![(0, ob)]
     });
@@ -146,13 +158,15 @@ pub fn make_packprimblock_many<
 >(
     out: Box<T>,
     includeqts: bool,
+    compression_type: CompressionType
 ) -> Box<impl CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>> {
+    
     let conv = Box::new(move |bls: Vec<(i64, PrimitiveBlock)>| {
         let mut res = Vec::new();
         for (i, bl) in bls {
             if bl.len() > 0 {
                 let xx = bl.pack(includeqts, false).expect("failed to pack");
-                let ob = pack_file_block("OSMData", &xx, true).expect("failed to pack fb");
+                let ob = pack_file_block("OSMData", &xx, &compression_type).expect("failed to pack fb");
 
                 res.push((i, ob));
             }

@@ -7,7 +7,7 @@ use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, Me
 use crate::elements::PrimitiveBlock;
 
 use crate::pbfformat::HeaderType;
-use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
+use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock, CompressionType};
 use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
@@ -95,17 +95,21 @@ fn get_blocks(
     Ok(blocks.unwrap())
 }
 
-fn write_blocks(
+
+pub fn write_blocks(
     outfn: &str,
     blocks: Vec<PrimitiveBlock>,
     numchan: usize,
     timestamp: i64,
+    compression_type: CompressionType,
 ) -> io::Result<()> {
-    let wf = Box::new(WriteFile::new(&outfn, HeaderType::ExternalLocs));
+    let wf = Box::new(WriteFile::with_compression_type(&outfn, HeaderType::ExternalLocs, None, compression_type));
+
+    
 
     let mut wq: Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> =
         if numchan == 0 {
-            make_packprimblock_qtindex(wf, true)
+            make_packprimblock_qtindex(wf, true, compression_type)
         } else {
             let wfs = CallbackSync::new(wf, numchan);
             let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
@@ -113,7 +117,7 @@ fn write_blocks(
             for w in wfs {
                 let w2 = Box::new(ReplaceNoneWithTimings::new(w));
                 wqs.push(Box::new(Callback::new(make_packprimblock_qtindex(
-                    w2, true,
+                    w2, true, compression_type
                 ))));
             }
             Box::new(CallbackMerge::new(wqs, Box::new(MergeTimings::new())))
@@ -134,6 +138,7 @@ pub fn sort_blocks_inmem(
     groups: Arc<QuadtreeTree>,
     numchan: usize,
     timestamp: i64,
+    compression_type: CompressionType,
     lt: &mut LogTimes,
 ) -> io::Result<()> {
     let groupsfn = format!("{}-groups.txt", outfn);
@@ -156,7 +161,7 @@ pub fn sort_blocks_inmem(
         timestamp
     );
     //Err(io::Error::new(io::ErrorKind::Other,"not impl"))
-    write_blocks(outfn, blocks, numchan, timestamp)?;
+    write_blocks(outfn, blocks, numchan, timestamp, compression_type)?;
     lt.add("write blocks");
     Ok(())
 }

@@ -3,7 +3,7 @@ use crate::elements::{Bbox, Block, IdSet, IdSetAll, PrimitiveBlock};
 use crate::mergechanges::filter_elements::{prep_bbox_filter, read_filter};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
 use crate::pbfformat::HeaderType;
-use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock};
+use crate::pbfformat::{read_all_blocks_parallel_prog, FileBlock, CompressionType};
 use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
 use crate::pbfformat::{get_file_locs, ParallelFileLocs};
 use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
@@ -170,14 +170,16 @@ pub fn make_write_file(
     outfn: &str,
     bbox: &Bbox,
     block_size: usize,
+    compression_type: CompressionType,
     numchan: usize,
 ) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>> {
-    let wf = Box::new(WriteFile::with_bbox(outfn, HeaderType::NoLocs, Some(bbox)));
+    let wf = Box::new(WriteFile::with_compression_type(
+        outfn, HeaderType::NoLocs, Some(bbox), compression_type));
 
     let pack: Box<
         dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>,
     > = if numchan == 0 {
-        make_packprimblock_zeroindex(wf, false)
+        make_packprimblock_zeroindex(wf, false, compression_type)
     } else {
         let wff = CallbackSync::new(wf, 4);
         let mut packs: Vec<
@@ -186,7 +188,7 @@ pub fn make_write_file(
         for w in wff {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
             packs.push(Box::new(Callback::new(make_packprimblock_zeroindex(
-                w2, false,
+                w2, false, compression_type.clone()
             ))));
         }
 
@@ -205,6 +207,7 @@ pub fn run_mergechanges_sort_inmem(
     timestamp: Option<&str>,
     numchan: usize,
     ram_gb: usize,
+    compression_type: CompressionType
 ) -> Result<()> {
     let mut tx = LogTimes::new();
     let (bbox, poly) = read_filter(filter)?;
@@ -244,7 +247,7 @@ pub fn run_mergechanges_sort_inmem(
             Arc::new(IdSetAll())
         };
     
-    call_mergechanges_sort_inmem(&mut pfilelocs, outfn, ids, &bbox, tx, numchan)
+    call_mergechanges_sort_inmem(&mut pfilelocs, outfn, ids, &bbox, compression_type, tx, numchan)
 }
 
 pub fn call_mergechanges_sort_inmem(
@@ -252,6 +255,7 @@ pub fn call_mergechanges_sort_inmem(
     outfn: &str,
     ids: Arc<dyn IdSet>,
     bbox: &Bbox,
+    compression_type: CompressionType,
     mut tx: LogTimes,
     numchan: usize) -> Result<()> {
 
@@ -264,7 +268,7 @@ pub fn call_mergechanges_sort_inmem(
         pb.relations.len()
     );
 
-    let mut gb = make_write_file(outfn, &bbox, 8000, numchan);
+    let mut gb = make_write_file(outfn, &bbox, 8000, compression_type, numchan);
     gb.call(pb);
     let tm = gb.finish()?;
     tx.add("write");

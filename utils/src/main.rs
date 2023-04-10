@@ -1,11 +1,13 @@
 extern crate clap;
+mod setup;
 
 use clap::{value_t, App, AppSettings, Arg, SubCommand};
+use sysinfo::{System,SystemExt};
 
 use osmquadtree::count::run_count;
 
 use osmquadtree::calcqts::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim};
-use osmquadtree::pbfformat::{file_length,read_filelist, write_filelist};
+use osmquadtree::pbfformat::{file_length,read_filelist, write_filelist, CompressionType};
 use osmquadtree::sortblocks::{find_groups, sort_blocks, sort_blocks_inmem, QuadtreeTree};
 use osmquadtree::update::{run_update, run_update_initial, write_index_file};
 use osmquadtree::utils::{parse_timestamp, LogTimes};
@@ -18,6 +20,8 @@ use osmquadtree::mergechanges::{
 };
 use osmquadtree::message;
 use osmquadtree::defaultlogger::register_messenger_default;
+
+//use crate::setup;
 
 use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
@@ -49,6 +53,7 @@ fn run_sortblocks(
     numchan: usize,
     ram_gb: usize,
     keep_temps: bool,
+    compression_type: CompressionType,
 ) -> Result<()> {
     let mut lt = LogTimes::new();
 
@@ -94,11 +99,11 @@ fn run_sortblocks(
         }
     }
     if use_inmem {
-        sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp, &mut lt)?;
+        sort_blocks_inmem(&infn, &qtsfn, &outfn, groups, numchan, timestamp, compression_type, &mut lt)?;
     } else {
         sort_blocks(
             &infn, &qtsfn, &outfn, groups, numchan, splitat, tempinmem, limit, /*write_at*/
-            timestamp, keep_temps, &mut lt,
+            timestamp, keep_temps, compression_type,&mut lt,
         )?;
     }
     message!("{}", lt);
@@ -155,6 +160,17 @@ fn main() {
     // basic app information
     register_messenger_default().expect("!!");
     let numchan_default = num_cpus::get();
+    let ram_gb_default = if System::IS_SUPPORTED {
+        let s = System::new_all();
+        let tm = f64::round((s.total_memory() as f64) / 1024.0/1024.0);
+        //message!("have {} mb total memory", tm);
+        
+        (tm/1024.0) as usize
+    } else {
+        RAM_GB_DEFAULT
+    };
+    //message!("ram_gb_default={}",ram_gb_default);    
+    
     
     let app = App::new("osmquadtree")
         .version("0.1")
@@ -172,6 +188,10 @@ fn main() {
                 
         )
         .subcommand(
+            SubCommand::with_name("setup")
+            .about("prepare an updatable osmquadtree instance")
+        )
+        .subcommand(
             SubCommand::with_name("calcqts")
                 .about("calculates quadtrees for each element of a planet or extract pbf file")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input file (or directory) to use"))
@@ -181,6 +201,7 @@ fn main() {
                 .arg(Arg::with_name("MODE").short("-m").long("--mode").takes_value(true).help("simplier implementation, suitable for files <8gb"))
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 18"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
+                .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
         )
         .subcommand(
@@ -216,6 +237,8 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+
         )
         .subcommand(
             SubCommand::with_name("sortblocks_inmem")
@@ -230,6 +253,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
         )
         .subcommand(
             SubCommand::with_name("update_initial")
@@ -237,7 +261,8 @@ fn main() {
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
                 .arg(Arg::with_name("INFN").required(true).short("-i").long("--infn").takes_value(true).help("specify filename of orig file"))
                 .arg(Arg::with_name("TIMESTAMP").required(true).short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
-                .arg(Arg::with_name("INITIAL_STATE").required(true).short("-s").long("--state_initial").takes_value(true).help("initial state"))
+                .arg(Arg::with_name("INITIAL_STATE").short("-s").long("--state_initial").takes_value(true).help("initial state, if not specified will determine"))
+                .arg(Arg::with_name("DIFFS_SOURCE").short("-x").long("--diffs_source").takes_value(true).help("source for diffs to download, default planet.openstreetmap.org/replication/day/"))
                 .arg(Arg::with_name("DIFFS_LOCATION").required(true).short("-d").long("--diffs_location").takes_value(true).help("directory for downloaded osc.gz files"))
                 .arg(Arg::with_name("QT_LEVEL").short("-l").long("--qt_level").takes_value(true).help("maximum qt level, defaults to 18"))
                 .arg(Arg::with_name("QT_BUFFER").short("-b").long("--qt_buffer").takes_value(true).help("qt buffer, defaults to 0.05"))
@@ -285,6 +310,7 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
 
         )
         .subcommand(
@@ -300,6 +326,7 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
                 .arg(Arg::with_name("SINGLETEMPFILE").short("-S").long("--single_temp_file").help("write temp data to one file"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges_sort_from_existing")
@@ -308,6 +335,7 @@ fn main() {
                 .arg(Arg::with_name("TEMPFN").short("-T").long("--tempfn").required(true).takes_value(true).help("temp filename, defaults to OUTFN-temp.pbf"))
                 .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
                 
         )
         .subcommand(
@@ -319,6 +347,7 @@ fn main() {
                 .arg(Arg::with_name("FILTEROBJS").short("-F").long("--filterobjs").help("filter objects within blocks"))
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
+                .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
                 
         )
         /*.subcommand(
@@ -443,6 +472,7 @@ fn main() {
             count.value_of("FILTER"),
             count.value_of("TIMESTAMP"),
         ),
+        ("setup", Some(_)) => setup::run(ram_gb_default, numchan_default),
         ("calcqts", Some(calcqts)) => {
             match run_calcqts(
                 calcqts.value_of("INPUT").unwrap(),
@@ -452,10 +482,11 @@ fn main() {
                 calcqts.value_of("MODE"),
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
+                calcqts.is_present("KEEPTEMPS"),
                 value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
-                value_t!(calcqts, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+                value_t!(calcqts, "RAM_GB", usize).unwrap_or(ram_gb_default),
             ) {
-                Ok(lt) => { message!("{}", lt); Ok(()) },
+                Ok((_,lt,_)) => { message!("{}", lt); Ok(()) },
                 Err(e) => Err(e)
             }
         }
@@ -486,8 +517,9 @@ fn main() {
                 false, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
-                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(ram_gb_default),
                 sortblocks.is_present("KEEPTEMPS"),
+                if sortblocks.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
             )
         }
         ("sortblocks_inmem", Some(sortblocks)) => {
@@ -501,15 +533,20 @@ fn main() {
                 true, //use_inmem
                 sortblocks.value_of("TIMESTAMP"),
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
-                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+                value_t!(sortblocks, "RAM_GB", usize).unwrap_or(ram_gb_default),
                 false,
+                if sortblocks.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
             )
         }
         ("update_initial", Some(update)) => run_update_initial(
             update.value_of("INPUT").unwrap(),
             update.value_of("INFN").unwrap(),
             update.value_of("TIMESTAMP").unwrap(),
-            value_t!(update, "INITIAL_STATE", i64).unwrap_or(0),
+            match value_t!(update, "INITIAL_STATE", i64) {
+                Ok(v) => Some(v),
+                _ => None
+            },
+            update.value_of("DIFFS_SOURCE"),
             update.value_of("DIFFS_LOCATION").unwrap(),
             value_t!(update, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
             value_t!(update, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
@@ -544,7 +581,8 @@ fn main() {
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-            value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+            value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
+            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
         ),
         ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
             filter.value_of("INPUT").unwrap(),
@@ -554,16 +592,21 @@ fn main() {
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             filter.is_present("KEEPTEMPS"),
+            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-            value_t!(filter, "RAM_GB", usize).unwrap_or(RAM_GB_DEFAULT),
+            value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
             filter.is_present("SINGLETEMPFILE")
+
 
         ),
         ("mergechanges_sort_from_existing", Some(filter)) => run_mergechanges_sort_from_existing(
             filter.value_of("OUTFN").unwrap(),
             filter.value_of("TEMPFN").unwrap(),
             filter.is_present("ISSPLIT"),
+            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
+            
+
             
         ),
         ("mergechanges", Some(filter)) => run_mergechanges(
@@ -572,6 +615,7 @@ fn main() {
             filter.value_of("FILTER"),
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
+            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         /*("process_geometry_null", Some(geom)) => process_geometry(

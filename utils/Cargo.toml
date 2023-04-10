@@ -10,6 +10,10 @@ edition = "2021"
 [dependencies]
 clap="2"
 num_cpus = "*"
+dialoguer = "*"
+sysinfo = "*"
+console = "*"
+
 
 
 osmquadtree = { path = "../" }
