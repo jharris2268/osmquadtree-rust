@@ -2,12 +2,12 @@
 use brotli::{CompressorWriter, Decompressor};
 use std::io::{Result,Read,Write};
 
-pub fn compress_brotli(src: &[u8]) -> Result<Vec<u8>> {
+pub fn compress_brotli(src: &[u8], level: u32) -> Result<Vec<u8>> {
 
     let mut writer = CompressorWriter::new(
         Vec::new(),
         src.len(),
-        6,
+        level,
         22);
     writer.write_all(src)?;
     let r = writer.into_inner();

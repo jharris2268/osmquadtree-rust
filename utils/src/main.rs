@@ -40,6 +40,59 @@ fn process_geometry(
     Ok(())
 }
 */
+
+fn get_compression_type(f: &clap::ArgMatches) -> CompressionType {
+    let l = get_compression_type_int(f);
+    println!("compression_type={:?}", l);
+    return l;
+}
+
+fn get_compression_type_int(f: &clap::ArgMatches) -> CompressionType {
+
+    let level = value_t!(f, "COMPLEVEL", u32);
+
+    if f.is_present("BROTLI") {
+
+        //println!("brotli");
+        if let Ok(l) = level {
+            if l>11 {
+                panic!("max compression level for brotli is 11")
+            }
+            return CompressionType::BrotliLevel(l);
+        } else {
+            return CompressionType::Brotli;
+        }
+    } else if f.is_present("LZMA") {
+        //println!("lzma");
+        //return CompressionType::Lzma;
+        if let Ok(l) = level {
+            if l>9 {
+                panic!("max compression level for lzma is 9")
+            }
+            return CompressionType::LzmaLevel(l);
+        } else {
+            return CompressionType::Lzma;
+        }
+    } else if f.is_present("UNCOMPRESSED") {
+        //println!("uncompressed");
+        return CompressionType::Uncompressed;
+    }/* else if f.is_present("LZ4") {
+        println!("Lz4");
+        return CompressionType::Lz4;
+    }*/
+
+    
+    if let Ok(l) = level {
+        if l>11 {
+            panic!("max compression level for zlib is 9")
+        }
+        return CompressionType::ZlibLevel(l);
+    }
+    return CompressionType::Zlib;
+    
+    
+}
+
 fn run_sortblocks(
     infn: &str,
     qtsfn: Option<&str>,
@@ -238,6 +291,10 @@ fn main() {
                 .arg(Arg::with_name("KEEPTEMPS").short("-k").long("--keeptemps").help("keep temp files"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
 
         )
         .subcommand(
@@ -254,6 +311,10 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
         )
         .subcommand(
             SubCommand::with_name("update_initial")
@@ -311,7 +372,10 @@ fn main() {
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
-
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges_sort")
@@ -327,6 +391,10 @@ fn main() {
                 .arg(Arg::with_name("RAM_GB").short("-r").long("--ram").takes_value(true).help("can make use of RAM_GB gb memory"))
                 .arg(Arg::with_name("SINGLETEMPFILE").short("-S").long("--single_temp_file").help("write temp data to one file"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
         )
         .subcommand(
             SubCommand::with_name("mergechanges_sort_from_existing")
@@ -336,6 +404,10 @@ fn main() {
                 .arg(Arg::with_name("ISSPLIT").short("-s").long("--issplit").help("temp files were split"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
                 
         )
         .subcommand(
@@ -348,6 +420,10 @@ fn main() {
                 .arg(Arg::with_name("TIMESTAMP").short("-t").long("--timestamp").takes_value(true).help("timestamp for data"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
                 .arg(Arg::with_name("BROTLI").short("-B").long("--brotli").help("use brotli compression"))
+                .arg(Arg::with_name("LZMA").short("-L").long("--lzma").help("use lzma compression"))
+                .arg(Arg::with_name("UNCOMPRESSED").short("-U").long("--uncompressed").help("don't use any compression"))
+                //.arg(Arg::with_name("LZ4").short("-Z").long("--lz4").help("use lz4 compression"))
+                .arg(Arg::with_name("COMPLEVEL").short("-C").long("--compression_level").takes_value(true).help("compression level"))
                 
         )
         /*.subcommand(
@@ -519,7 +595,7 @@ fn main() {
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
                 value_t!(sortblocks, "RAM_GB", usize).unwrap_or(ram_gb_default),
                 sortblocks.is_present("KEEPTEMPS"),
-                if sortblocks.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
+                get_compression_type(sortblocks)
             )
         }
         ("sortblocks_inmem", Some(sortblocks)) => {
@@ -535,7 +611,7 @@ fn main() {
                 value_t!(sortblocks, "NUMCHAN", usize).unwrap_or(numchan_default),
                 value_t!(sortblocks, "RAM_GB", usize).unwrap_or(ram_gb_default),
                 false,
-                if sortblocks.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
+                get_compression_type(sortblocks)
             )
         }
         ("update_initial", Some(update)) => run_update_initial(
@@ -582,7 +658,7 @@ fn main() {
             filter.value_of("TIMESTAMP"),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
-            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib }
+            get_compression_type(filter)
         ),
         ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
             filter.value_of("INPUT").unwrap(),
@@ -592,7 +668,7 @@ fn main() {
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
             filter.is_present("KEEPTEMPS"),
-            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
+            get_compression_type(filter),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
             filter.is_present("SINGLETEMPFILE")
@@ -603,7 +679,7 @@ fn main() {
             filter.value_of("OUTFN").unwrap(),
             filter.value_of("TEMPFN").unwrap(),
             filter.is_present("ISSPLIT"),
-            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
+            get_compression_type(filter),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
             
 
@@ -615,7 +691,7 @@ fn main() {
             filter.value_of("FILTER"),
             filter.is_present("FILTEROBJS"),
             filter.value_of("TIMESTAMP"),
-            if filter.is_present("BROTLI") { CompressionType::Brotli } else { CompressionType::Zlib },
+            get_compression_type(filter),
             value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
         /*("process_geometry_null", Some(geom)) => process_geometry(

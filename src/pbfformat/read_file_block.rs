@@ -14,15 +14,23 @@ use crate::logging::{ProgressPercent,ProgressBytes};
 use crate::{progress_bytes};
 //use indicatif::{ProgressBar, ProgressStyle};
 
-
+//extern crate lzma_rs;
+//extern crate lz4_flex;
+extern crate lzma;
 use crate::brotli_compression::{compress_brotli, decompress_brotli};
 
+const LZMA_PRESET: u32 = 3;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CompressionType {
     Uncompressed,
     Zlib,
-    Brotli
+    Brotli,
+    Lzma,
+    ZlibLevel(u32),
+    BrotliLevel(u32),
+    LzmaLevel(u32),
+    //Lz4
 }
 
 
@@ -38,6 +46,7 @@ pub struct FileBlock {
     pub len: u64,
     pub block_type: String,
     pub data_raw: Vec<u8>,
+    pub data_len: u64,
     pub compression_type: CompressionType,
 }
 impl FileBlock {
@@ -47,6 +56,7 @@ impl FileBlock {
             len: 0,
             block_type: String::new(),
             data_raw: Vec::new(),
+            data_len: 0,
             compression_type: CompressionType::Uncompressed,
         }
     }
@@ -55,8 +65,10 @@ impl FileBlock {
 
         match self.compression_type {
             CompressionType::Uncompressed => self.data_raw.clone(),
-            CompressionType::Zlib => self.read_data_zlib(),
-            CompressionType::Brotli => self.read_data_brotli()
+            CompressionType::Zlib | CompressionType::ZlibLevel(_) => self.read_data_zlib(),
+            CompressionType::Brotli | CompressionType::BrotliLevel(_)=> self.read_data_brotli(),
+            CompressionType::Lzma | CompressionType::LzmaLevel(_)=> self.read_data_lzma(),
+            //CompressionType::Lz4 => self.read_data_lz4(),
         }
     }
     
@@ -73,6 +85,15 @@ impl FileBlock {
         decompress_brotli(&self.data_raw[..]).expect(&format!("failed to decompress data at pos {}", self.pos))
     }
 
+    fn read_data_lzma(&self) -> Vec<u8> {
+        //let mut bf = std::io::BufReader::new(&self.data_raw[..]);
+        lzma::decompress(&self.data_raw[..]).unwrap()
+        
+    }
+    /*
+    fn read_data_lz4(&self) -> Vec<u8> {
+        lz4_flex::decompress_size_prepended(&self.data_raw[..]).unwrap()//, self.data_len as usize).unwrap()
+    }*/
         
 }
 
@@ -126,11 +147,19 @@ pub fn read_file_block_with_pos<F: Read>(
     for tg in spb::IterTags::new(&c) {
         match tg {
             spb::PbfTag::Data(1, d) => fb.data_raw = d.to_vec(),
-            spb::PbfTag::Value(2, _) => {}//fb.is_comp = true,
+            spb::PbfTag::Value(2, v) => {fb.data_len = v; }//fb.is_comp = true,
             spb::PbfTag::Data(3, d) => {
                 fb.compression_type = CompressionType::Zlib;
                 fb.data_raw = d.to_vec();
             },
+            spb::PbfTag::Data(4, d) => {
+                fb.compression_type = CompressionType::Lzma;
+                fb.data_raw = d.to_vec();
+            },
+            /*spb::PbfTag::Data(6, d) => {
+                fb.compression_type = CompressionType::Lz4;
+                fb.data_raw = d.to_vec();
+            },*/
             spb::PbfTag::Data(8, d) => {
                 fb.compression_type = CompressionType::Brotli;
                 fb.data_raw = d.to_vec();
@@ -159,19 +188,66 @@ pub fn pack_file_block(blockname: &str, data: &[u8], compression_type: &Compress
             spb::pack_value(&mut body, 2, data.len() as u64);
             spb::pack_data(&mut body, 3, &comp[..]);
         },
+        CompressionType::ZlibLevel(level) => {
+            let mut e = ZlibEncoder::new(Vec::new(), flate2::Compression::new(*level));
+            e.write_all(&data[..])?;
+
+            let comp = e.finish()?;
+            body.reserve(comp.len() + 25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 3, &comp[..]);
+        },
         CompressionType::Uncompressed => {
             body.reserve(data.len() + 5);
             spb::pack_data(&mut body, 1, &data[..]);
         },
         CompressionType::Brotli => {
 
-            let comp = compress_brotli(data)?;
+            let comp = compress_brotli(data, 6)?;
             
             body.reserve(comp.len()+25);
             spb::pack_value(&mut body, 2, data.len() as u64);
             spb::pack_data(&mut body, 8, &comp[..]);
-        },  
+        },
+        CompressionType::BrotliLevel(level) => {
+
+            let comp = compress_brotli(data, *level)?;
             
+            body.reserve(comp.len()+25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 8, &comp[..]);
+        },
+        CompressionType::Lzma => {
+            let comp = match lzma::compress(data, LZMA_PRESET) {
+                Ok(r) => r,
+                Err(e) => {return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); },
+            };
+            body.reserve(comp.len()+25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 4, &comp[..]);
+        },
+        CompressionType::LzmaLevel(level) => {
+            let comp = match lzma::compress(data, *level) {
+                Ok(r) => r,
+                Err(e) => {return Err(Error::new(ErrorKind::Other, format!("{:?}", e))); },
+            };
+            /*
+
+            let mut bf = std::io::BufReader::new(data);
+            let mut comp: Vec<u8> = Vec::new();
+            lzma_rs::lzma_compress(&mut bf, &mut comp)?;*/
+            body.reserve(comp.len()+25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 4, &comp[..]);
+        },
+        /*
+        CompressionType::Lz4 => {
+            let comp = lz4_flex::compress_prepend_size(&data[..]);
+            
+            body.reserve(comp.len()+25);
+            spb::pack_value(&mut body, 2, data.len() as u64);
+            spb::pack_data(&mut body, 6, &comp[..]);
+        },*/
     }
 
     let mut head = Vec::with_capacity(25);
@@ -184,6 +260,7 @@ pub fn pack_file_block(blockname: &str, data: &[u8], compression_type: &Compress
     result.extend(body);
 
     Ok(result)
+        
 }
 
 pub struct ReadFileBlocks<'a, R: Read> {

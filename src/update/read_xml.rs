@@ -26,14 +26,23 @@ fn read_timestamp(ts: &str) -> Result<i64> {
 
 }
 
+
+fn get_key<'a>(kv: &quick_xml::events::attributes::Attribute<'a>) -> String {
+    String::from(std::str::from_utf8(kv.key.as_ref()).expect("?"))
+}
+fn get_value<'a>(kv: &quick_xml::events::attributes::Attribute<'a>) -> String {
+    String::from(kv.unescape_value().as_ref().expect("?").as_ref())
+}
+
+
 fn ele_str(w: &str, e: &BytesStart) -> quick_xml::Result<String> {
-    let n = std::str::from_utf8(e.name())?;
+    let n = String::from(std::str::from_utf8(e.name().as_ref())?);
     let mut sl: Vec<String> = Vec::new();
     for a in e.attributes() {
         sl.push(format!(
             "{} = \"{}\"",
-            std::str::from_utf8(&a.as_ref().expect("?").key).expect("?"),
-            std::str::from_utf8(&a.as_ref().expect("?").unescaped_value()?).expect("?")
+            get_key(&a.as_ref().expect("?")),
+            get_value(&a.as_ref().expect("?"))
         ));
     }
     Ok(format!("{} {}: {}", w, n, sl.join("; ")))
@@ -66,10 +75,8 @@ fn read_node<T: BufRead>(
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"id" => {
                         n.id = val.parse().expect("not an int");
                     }
@@ -98,8 +105,8 @@ fn read_node<T: BufRead>(
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
-                                "unexpected attribute {} {}",
-                                std::str::from_utf8(k).expect("?"),
+                                "unexpected attribute {:?} {}",
+                                k,
                                 val
                             ),
                         ));
@@ -119,8 +126,8 @@ fn read_node<T: BufRead>(
     }
     if has_children {
         loop {
-            match reader.read_event(buf) {
-                Ok(Event::Empty(ref e)) => match e.name() {
+            match reader.read_event_into(buf) {
+                Ok(Event::Empty(ref e)) => match e.name().as_ref() {
                     b"tag" => {
                         n.tags.push(read_tag(e)?);
                     }
@@ -131,28 +138,29 @@ fn read_node<T: BufRead>(
                         ));
                     }
                 },
-                Ok(Event::End(ref e)) => match e.name() {
+                Ok(Event::End(ref e)) => match e.name().as_ref() {
                     b"node" => {
                         break;
                     }
-                    _ => {
+                    x => {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
                                 "unexpected end {}",
-                                std::str::from_utf8(e.name()).expect("?")
+                                std::str::from_utf8(x).expect("?")
                             ),
                         ));
                     }
                 },
                 Ok(Event::Text(e)) => {
-                    if !all_whitespace(e.escaped()) {
+                    if !all_whitespace(e.as_ref()) {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
-                                "unexpected text {}: {}",
+                                "unexpected text {}: {:?}",
                                 reader.buffer_position(),
-                                e.unescape_and_decode(&reader).unwrap()
+                                //e.unescape_and_decode(&reader).unwrap()
+                                e.unescape().unwrap()
                             ),
                         ));
                     }
@@ -183,10 +191,8 @@ fn read_tag(e: &BytesStart) -> Result<Tag> {
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"k" => {
                         k = Some(val);
                     }
@@ -231,10 +237,8 @@ fn read_ref(e: &BytesStart) -> Result<i64> {
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"ref" => {
                         return Ok(val.parse().expect("not an int"));
                     }
@@ -269,10 +273,8 @@ fn read_member(e: &BytesStart) -> Result<Member> {
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"role" => {
                         role = val;
                     }
@@ -337,10 +339,8 @@ fn read_way<T: BufRead>(
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"id" => {
                         w.id = val.parse().expect("not an int");
                     }
@@ -385,8 +385,8 @@ fn read_way<T: BufRead>(
     }
     if has_children {
         loop {
-            match reader.read_event(buf) {
-                Ok(Event::Empty(ref e)) => match e.name() {
+            match reader.read_event_into(buf) {
+                Ok(Event::Empty(ref e)) => match e.name().as_ref() {
                     b"tag" => {
                         w.tags.push(read_tag(e)?);
                     }
@@ -395,33 +395,28 @@ fn read_way<T: BufRead>(
                     }
                     n => {
                         return Err(Error::new(
-                            ErrorKind::Other,
-                            format!("unexpected empty {}", std::str::from_utf8(n).expect("?")),
+                            ErrorKind::Other, format!("unexpected empty {:?}",n)
                         ));
                     }
                 },
-                Ok(Event::End(ref e)) => match e.name() {
+                Ok(Event::End(ref e)) => match e.name().as_ref() {
                     b"way" => {
                         break;
                     }
-                    _ => {
+                    n => {
                         return Err(Error::new(
-                            ErrorKind::Other,
-                            format!(
-                                "unexpected end {}",
-                                std::str::from_utf8(e.name()).expect("?")
-                            ),
+                            ErrorKind::Other, format!("unexpected end {:?}", n)
                         ));
                     }
                 },
                 Ok(Event::Text(e)) => {
-                    if !all_whitespace(e.escaped()) {
+                    if !all_whitespace(e.as_ref()) {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
-                                "unexpected text {}: {}",
+                                "unexpected text {}: {:?}",
                                 reader.buffer_position(),
-                                e.unescape_and_decode(&reader).unwrap()
+                                e.unescape().unwrap()
                             ),
                         ));
                     }
@@ -463,10 +458,8 @@ fn read_relation<T: BufRead>(
     for a in e.attributes() {
         match a {
             Ok(kv) => {
-                let val = String::from(
-                    std::str::from_utf8(&kv.unescaped_value().expect("?")).expect("not a string"),
-                );
-                match kv.key {
+                let val = get_value(&kv);
+                match kv.key.as_ref() {
                     b"id" => {
                         r.id = val.parse().expect("not an int");
                     }
@@ -512,8 +505,8 @@ fn read_relation<T: BufRead>(
 
     if has_children {
         loop {
-            match reader.read_event(buf) {
-                Ok(Event::Empty(ref e)) => match e.name() {
+            match reader.read_event_into(buf) {
+                Ok(Event::Empty(ref e)) => match e.name().as_ref() {
                     b"tag" => {
                         r.tags.push(read_tag(e)?);
                     }
@@ -522,33 +515,28 @@ fn read_relation<T: BufRead>(
                     }
                     n => {
                         return Err(Error::new(
-                            ErrorKind::Other,
-                            format!("unexpected empty {}", std::str::from_utf8(n).expect("?")),
+                            ErrorKind::Other, format!("unexpected empty {:?}", n)
                         ));
                     }
                 },
-                Ok(Event::End(ref e)) => match e.name() {
+                Ok(Event::End(ref e)) => match e.name().as_ref() {
                     b"relation" => {
                         break;
                     }
-                    _ => {
+                    n => {
                         return Err(Error::new(
-                            ErrorKind::Other,
-                            format!(
-                                "unexpected end {}",
-                                std::str::from_utf8(e.name()).expect("?")
-                            ),
+                            ErrorKind::Other, format!("unexpected end {:?}", n)
                         ));
                     }
                 },
                 Ok(Event::Text(e)) => {
-                    if !all_whitespace(e.escaped()) {
+                    if !all_whitespace(e.as_ref()) {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
                                 "unexpected text {}: {}",
                                 reader.buffer_position(),
-                                e.unescape_and_decode(&reader).unwrap()
+                                e.unescape().unwrap()
                             ),
                         ));
                     }
@@ -637,7 +625,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
     let mut cktm = Checktime::new();
 
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 match cktm.checktime() {
                     Some(d) => {
@@ -650,7 +638,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                     }
                     None => {}
                 }
-                match e.name() {
+                match e.name().as_ref() {
                     b"osmChange" => {}
                     b"delete" => {
                         ct = Some(Changetype::Delete);
@@ -670,12 +658,12 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                     b"relation" => {
                         res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, true)?);
                     }
-                    _ => {
+                    n => {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
                                 "unexpected start tag {} {}",
-                                std::str::from_utf8(e.name()).expect("?"),
+                                std::str::from_utf8(n).expect("?"),
                                 reader.buffer_position()
                             ),
                         ));
@@ -694,7 +682,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                     }
                     None => {}
                 }
-                match e.name() {
+                match e.name().as_ref() {
                     b"node" => {
                         res.add_node(read_node(&mut reader, &mut buf2, e, ct, false)?);
                     }
@@ -704,19 +692,19 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                     b"relation" => {
                         res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, false)?);
                     }
-                    _ => {
+                    n => {
                         return Err(Error::new(
                             ErrorKind::Other,
                             format!(
                                 "unexpected empty tag {} {}",
-                                std::str::from_utf8(e.name()).expect("?"),
+                                std::str::from_utf8(n).expect("?"),
                                 reader.buffer_position()
                             ),
                         ));
                     }
                 }
             }
-            Ok(Event::End(ref e)) => match e.name() {
+            Ok(Event::End(ref e)) => match e.name().as_ref() {
                 b"osmChange" => {}
                 b"delete" => {
                     ct = None;
@@ -727,12 +715,12 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                 b"create" => {
                     ct = None;
                 }
-                _ => {
+                n => {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
                             "unexpected end tag {} {}",
-                            std::str::from_utf8(e.name()).expect("?"),
+                            std::str::from_utf8(n).expect("?"),
                             reader.buffer_position()
                         ),
                     ));
@@ -744,13 +732,13 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
             }
 
             Ok(Event::Text(e)) => {
-                if !all_whitespace(e.escaped()) {
+                if !all_whitespace(e.as_ref()) {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
                             "unexpected text {}: {}",
                             reader.buffer_position(),
-                            e.unescape_and_decode(&reader).unwrap()
+                            e.unescape().unwrap()
                         ),
                     ));
                 }
@@ -759,9 +747,9 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "unexpected cdata {}: {}",
+                        "unexpected cdata {}: {:?}",
                         reader.buffer_position(),
-                        e.unescape_and_decode(&reader).unwrap()
+                        e.as_ref()
                     ),
                 ));
             }
