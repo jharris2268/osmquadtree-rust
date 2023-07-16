@@ -53,6 +53,13 @@ where
             }
             set_messenger_error()
         }
+        2 => {
+            unsafe {
+                MESSENGER = make_logger();
+            }
+            STATE.store(2, Ordering::SeqCst);
+            Ok(())
+        }
         _ => set_messenger_error(),
     }
 }

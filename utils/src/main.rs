@@ -222,8 +222,8 @@ fn main() {
     } else {
         RAM_GB_DEFAULT
     };
-    //message!("ram_gb_default={}",ram_gb_default);    
-    
+    message!("ram_gb_default={}",ram_gb_default);    
+    register_messenger_default().expect("!!");
     
     let app = App::new("osmquadtree")
         .version("0.1")
