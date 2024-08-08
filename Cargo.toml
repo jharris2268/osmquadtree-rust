@@ -25,8 +25,8 @@ regex="1.4"
 ureq="2.0"
 
 simple-protocolbuffers = { git = "https://github.com/jharris2268/simple-protocolbuffers.git", branch = "main" }
-#channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
-channelled-callbacks = { path = "/home/james/rust/channelled-callbacks" }
+channelled-callbacks = { git = "https://github.com/jharris2268/channelled-callbacks.git", branch = "main" }
+
 
 
 brotli = "*"
