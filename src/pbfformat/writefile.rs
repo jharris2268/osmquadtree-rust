@@ -1,13 +1,13 @@
-use channelled_callbacks::CallFinish;
+use channelled_callbacks::{CallFinish, Result as ccResult};
 use crate::elements::Bbox;
 use crate::pbfformat::pack_file_block;
 use crate::pbfformat::{make_header_block, HeaderType, CompressionType};
-use crate::utils::ThreadTimer;
+use crate::utils::{ThreadTimer, Error};
 
 use serde_json;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 
 pub type FileLocs = Vec<(i64, Vec<(u64, u64)>)>;
 
@@ -90,6 +90,7 @@ impl WriteFile {
 impl CallFinish for WriteFile {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = (f64, FileLocs);
+    type ErrorType = Error;
 
     fn call(&mut self, bls: Vec<(i64, Vec<u8>)>) {
         let c = ThreadTimer::new();
@@ -105,7 +106,7 @@ impl CallFinish for WriteFile {
         self.tm += c.since();
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Error> {
         drop(self.outf.take());
 
         let mut ls = Vec::new();

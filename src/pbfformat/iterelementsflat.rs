@@ -1,10 +1,14 @@
 use crate::pbfformat::read_file_block::ReadFileBlocksOwn;
 use crate::pbfformat::{FileBlock,make_convert_primitive_block,/*file_length,*/read_all_blocks_with_progbar};
 use crate::elements::{Element,PrimitiveBlock};
-use channelled_callbacks::{Callback,CallbackMerge,CallbackSync,Timings,ReplaceNoneWithTimings,CallFinish,MergeTimings, ReverseCallback};
-//use crate::{progress_bytes,logging::ProgressBytes};
+use channelled_callbacks::{
+        Callback,   CallbackMerge,  CallbackSync,
+        Timings,    ReplaceNoneWithTimings, CallFinish,
+        MergeTimings, ReverseCallback
+    };
 
-use std::io::{Result};
+use crate::utils::{Error,Result};
+//use std::io::{Result};
 
 pub fn iter_elements_flat(fname: &str, numchan: usize) -> Result<Box<dyn Iterator<Item = Element>>> {
     
@@ -99,10 +103,10 @@ impl Iterator for ConvertPrimitiveBlocksLumps {
 
 
     
-fn prep_read_all_primitive(fname: String, numchan: usize, cb: Box<dyn CallFinish<CallType=PrimitiveBlock, ReturnType=Timings<()>>>) -> Result<Timings<()>> {
+fn prep_read_all_primitive(fname: String, numchan: usize, cb: Box<dyn CallFinish<CallType=PrimitiveBlock, ReturnType=Timings<()>, ErrorType=Error>>) -> Result<Timings<()>> {
     
     let cbs = CallbackSync::new(cb, numchan);
-    let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<()>>>> = Vec::new();
+    let mut convs: Vec<Box<dyn CallFinish<CallType=(usize,FileBlock),ReturnType=Timings<()>, ErrorType=Error>>> = Vec::new();
     for c in cbs {
         let c2 = Box::new(ReplaceNoneWithTimings::new(c));
         convs.push(Box::new(Callback::new(make_convert_primitive_block(false, c2))))

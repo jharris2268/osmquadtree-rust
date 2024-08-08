@@ -1,8 +1,9 @@
 extern crate clap;
 mod setup;
+mod error;
 
 use clap::{value_t, App, AppSettings, Arg, SubCommand};
-use sysinfo::{System,SystemExt};
+use sysinfo::{System};
 
 use osmquadtree::count::run_count;
 
@@ -23,7 +24,8 @@ use osmquadtree::defaultlogger::register_messenger_default;
 
 //use crate::setup;
 
-use std::io::{Error, ErrorKind, Result};
+//use std::io::{Error, ErrorKind, Result};
+use crate::error::{Error, Result};
 use std::sync::Arc;
 /*
 fn process_geometry(
@@ -166,9 +168,8 @@ fn run_sortblocks(
 fn run_update_droplast(prfx: &str) -> Result<()> {
     let mut fl = read_filelist(prfx);
     if fl.len() < 2 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("{}filelist.json only has {} entries", prfx, fl.len()),
+        return Err(Error::InvalidInputError(
+            format!("{}filelist.json only has {} entries", prfx, fl.len())
         ));
     }
     fl.pop();
@@ -213,8 +214,9 @@ fn main() {
     // basic app information
     register_messenger_default().expect("!!");
     let numchan_default = num_cpus::get();
-    let ram_gb_default = if System::IS_SUPPORTED {
-        let s = System::new_all();
+    let ram_gb_default = if sysinfo::IS_SUPPORTED_SYSTEM {
+        let mut s = System::new_all();
+        s.refresh_all();
         let tm = f64::round((s.total_memory() as f64) / 1024.0/1024.0);
         //message!("have {} mb total memory", tm);
         
@@ -540,14 +542,14 @@ fn main() {
     let mut help = Vec::new();
     app.write_help(&mut help).expect("?");
 
-    let res = match app.get_matches().subcommand() {
+    let res: Result<()> = match app.get_matches().subcommand() {
         ("count", Some(count)) => run_count(
-            count.value_of("INPUT").unwrap(),
-            count.is_present("PRIMITIVE"),
-            value_t!(count, "NUMCHAN", usize).unwrap_or(numchan_default),
-            count.value_of("FILTER"),
-            count.value_of("TIMESTAMP"),
-        ),
+                count.value_of("INPUT").unwrap(),
+                count.is_present("PRIMITIVE"),
+                value_t!(count, "NUMCHAN", usize).unwrap_or(numchan_default),
+                count.value_of("FILTER"),
+                count.value_of("TIMESTAMP")
+            ).or_else(|e| Err(Error::from(e))),
         ("setup", Some(_)) => setup::run(ram_gb_default, numchan_default),
         ("calcqts", Some(calcqts)) => {
             match run_calcqts(
@@ -563,14 +565,14 @@ fn main() {
                 value_t!(calcqts, "RAM_GB", usize).unwrap_or(ram_gb_default),
             ) {
                 Ok((_,lt,_)) => { message!("{}", lt); Ok(()) },
-                Err(e) => Err(e)
+                Err(e) => Err(Error::from(e))
             }
-        }
+        },
         ("calcqts_prelim", Some(calcqts)) => run_calcqts_prelim(
             calcqts.value_of("INPUT").unwrap(),
             calcqts.value_of("QTSFN"),
             value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
-        ),
+        ).or_else(|e| Err(Error::from(e))),
         ("calcqts_load_existing", Some(calcqts)) => run_calcqts_load_existing(
             calcqts.value_of("INPUT").unwrap(),
             calcqts.value_of("QTSFN"),
@@ -581,7 +583,7 @@ fn main() {
                 Err(_) => None,
             },
             value_t!(calcqts, "NUMCHAN", usize).unwrap_or(numchan_default),
-        ),
+        ).or_else(|e| Err(Error::from(e))),
         ("sortblocks", Some(sortblocks)) => {
             run_sortblocks(
                 sortblocks.value_of("INPUT").unwrap(),
@@ -614,27 +616,29 @@ fn main() {
                 get_compression_type(sortblocks)
             )
         }
-        ("update_initial", Some(update)) => run_update_initial(
-            update.value_of("INPUT").unwrap(),
-            update.value_of("INFN").unwrap(),
-            update.value_of("TIMESTAMP").unwrap(),
-            match value_t!(update, "INITIAL_STATE", i64) {
-                Ok(v) => Some(v),
-                _ => None
-            },
-            update.value_of("DIFFS_SOURCE"),
-            update.value_of("DIFFS_LOCATION").unwrap(),
-            value_t!(update, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
-            value_t!(update, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
-            value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
-        ),
+        ("update_initial", Some(update)) => {
+            run_update_initial(
+                update.value_of("INPUT").unwrap(),
+                update.value_of("INFN").unwrap(),
+                update.value_of("TIMESTAMP").unwrap(),
+                match value_t!(update, "INITIAL_STATE", i64) {
+                    Ok(v) => Some(v),
+                    _ => None
+                },
+                update.value_of("DIFFS_SOURCE"),
+                update.value_of("DIFFS_LOCATION").unwrap(),
+                value_t!(update, "QT_LEVEL", usize).unwrap_or(QT_MAX_LEVEL_DEFAULT),
+                value_t!(update, "QT_BUFFER", f64).unwrap_or(QT_BUFFER_DEFAULT),
+                value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
+            ).or_else(|e| Err(Error::from(e)))
+        },
         ("update", Some(update)) => {
             run_update(
                 update.value_of("INPUT").unwrap(),
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 false, //as_demo
                 value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
-            )
+            ).or_else(|e| Err(Error::from(e)))
         }
         ("update_demo", Some(update)) => {
             run_update(
@@ -642,7 +646,7 @@ fn main() {
                 value_t!(update, "LIMIT", usize).unwrap_or(0),
                 true, //as_demo
                 value_t!(update, "NUMCHAN", usize).unwrap_or(numchan_default),
-            )
+            ).or_else(|e| Err(Error::from(e)))
         }
         ("update_droplast", Some(update)) => run_update_droplast(update.value_of("INPUT").unwrap()),
         ("write_index_file", Some(write)) => write_index_file_w(
@@ -650,50 +654,53 @@ fn main() {
             write.value_of("OUTFN"),
             value_t!(write, "NUMCHAN", usize).unwrap_or(numchan_default),
         ),
-        ("mergechanges_sort_inmem", Some(filter)) => run_mergechanges_sort_inmem(
-            filter.value_of("INPUT").unwrap(),
-            filter.value_of("OUTFN").unwrap(),
-            filter.value_of("FILTER"),
-            filter.is_present("FILTEROBJS"),
-            filter.value_of("TIMESTAMP"),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-            value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
-            get_compression_type(filter)
-        ),
-        ("mergechanges_sort", Some(filter)) => run_mergechanges_sort(
-            filter.value_of("INPUT").unwrap(),
-            filter.value_of("OUTFN").unwrap(),
-            filter.value_of("TEMPFN"),
-            filter.value_of("FILTER"),
-            filter.is_present("FILTEROBJS"),
-            filter.value_of("TIMESTAMP"),
-            filter.is_present("KEEPTEMPS"),
-            get_compression_type(filter),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-            value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
-            filter.is_present("SINGLETEMPFILE")
-
-
-        ),
-        ("mergechanges_sort_from_existing", Some(filter)) => run_mergechanges_sort_from_existing(
-            filter.value_of("OUTFN").unwrap(),
-            filter.value_of("TEMPFN").unwrap(),
-            filter.is_present("ISSPLIT"),
-            get_compression_type(filter),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-            
-
-            
-        ),
-        ("mergechanges", Some(filter)) => run_mergechanges(
-            filter.value_of("INPUT").unwrap(),
-            filter.value_of("OUTFN").unwrap(),
-            filter.value_of("FILTER"),
-            filter.is_present("FILTEROBJS"),
-            filter.value_of("TIMESTAMP"),
-            get_compression_type(filter),
-            value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
-        ),
+        ("mergechanges_sort_inmem", Some(filter)) => {
+            run_mergechanges_sort_inmem(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("FILTER"),
+                filter.is_present("FILTEROBJS"),
+                filter.value_of("TIMESTAMP"),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
+                value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
+                get_compression_type(filter)
+            ).or_else(|e| Err(Error::from(e)))
+        },
+        ("mergechanges_sort", Some(filter)) => {
+            run_mergechanges_sort(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("TEMPFN"),
+                filter.value_of("FILTER"),
+                filter.is_present("FILTEROBJS"),
+                filter.value_of("TIMESTAMP"),
+                filter.is_present("KEEPTEMPS"),
+                get_compression_type(filter),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
+                value_t!(filter, "RAM_GB", usize).unwrap_or(ram_gb_default),
+                filter.is_present("SINGLETEMPFILE")
+            ).or_else(|e| Err(Error::from(e)))
+        },
+        ("mergechanges_sort_from_existing", Some(filter)) => {
+            run_mergechanges_sort_from_existing(
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("TEMPFN").unwrap(),
+                filter.is_present("ISSPLIT"),
+                get_compression_type(filter),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
+            ).or_else(|e| Err(Error::from(e)))
+        },
+        ("mergechanges", Some(filter)) => {
+            run_mergechanges(
+                filter.value_of("INPUT").unwrap(),
+                filter.value_of("OUTFN").unwrap(),
+                filter.value_of("FILTER"),
+                filter.is_present("FILTEROBJS"),
+                filter.value_of("TIMESTAMP"),
+                get_compression_type(filter),
+                value_t!(filter, "NUMCHAN", usize).unwrap_or(numchan_default),
+            ).or_else(|e| Err(Error::from(e)))
+        },
         /*("process_geometry_null", Some(geom)) => process_geometry(
             geom.value_of("INPUT").unwrap(),
             OutputType::None,
@@ -841,7 +848,7 @@ fn main() {
             })()
         },
         */
-        _ => Err(Error::new(ErrorKind::Other, "??")),
+        x => Err(Error::InvalidInputError(format!("?? {:?}", x))),
         
     };
 

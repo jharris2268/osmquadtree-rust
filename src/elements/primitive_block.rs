@@ -16,7 +16,7 @@ use crate::elements::common::PackStringTable;
 use crate::elements::dense::Dense;
 use crate::elements::traits::{Changetype, Element, ElementType, WithChangetype,WithQuadtree};
 
-use std::io::{Error, ErrorKind, Result};
+use crate::utils::{Error, Result};
 
 pub trait Block {
     type Element: WithQuadtree;
@@ -31,14 +31,14 @@ pub trait Block {
     fn add_object(&mut self, ele: Self::Element) -> Result<()>;
     fn sort(&mut self);
 }
-
+/*
 pub trait PackableBlock: Block {
     fn pack(&self) -> Result<Vec<u8>>;
     fn unpack(index: i64, data: &[u8]) -> Result<Self>
     where
         Self: Sized;
 }
-
+*/
 
 pub struct PrimitiveBlock {
     pub index: i64,
@@ -67,7 +67,7 @@ pub fn read_stringtable(data: &[u8]) -> Result<Vec<String>> {
                 res.push(s);
             }
 
-            _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
+            _ => return Err(Error::PbfDataError("unexpected item".to_string())),
         }
     }
     Ok(res)
@@ -219,6 +219,7 @@ impl Block for SortablePrimitiveBlock {
         self.0.sort();
     }
 }
+/*
 impl PackableBlock for SortablePrimitiveBlock {
     fn pack(&self) -> Result<Vec<u8>> {
         self.0.pack(true, true)
@@ -229,7 +230,7 @@ impl PackableBlock for SortablePrimitiveBlock {
             index, 0, data, false, false,
         )?))
     }
-}
+}*/
 
 impl PrimitiveBlock {
     pub fn new(index: i64, location: u64) -> PrimitiveBlock {
@@ -288,33 +289,33 @@ impl PrimitiveBlock {
                 
                 PbfTag::Value(17, granularity) => {
                     if granularity != 100 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected granuality [{}!=100]", granularity)));
+                        return Err(Error::PbfDataError(format!("unexpected granuality [{}!=100]", granularity)));
                     }
                 },
                 PbfTag::Value(18, date_granularity) => {
                     if date_granularity != 1000 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected date_granularity [{}!=1000]", date_granularity)));
+                        return Err(Error::PbfDataError(format!("unexpected date_granularity [{}!=1000]", date_granularity)));
                     }
                 },
                 PbfTag::Value(19, lat_offset) => {
                     if lat_offset != 0 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected lat_offset [{}!=0]", lat_offset)));
+                        return Err(Error::PbfDataError(format!("unexpected lat_offset [{}!=0]", lat_offset)));
                     }
                 },
                 PbfTag::Value(20, lon_offset) => {
                     if lon_offset != 0 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected lon_offset [{}!=0]", lon_offset)));
+                        return Err(Error::PbfDataError(format!("unexpected lon_offset [{}!=0]", lon_offset)));
                     }
                 },
                 
-                _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
+                _ => return Err(Error::PbfDataError("unexpected item".to_string())),
             }
         }
 
         for g in groups {
             let ct = PrimitiveBlock::find_changetype(&g, ischange);
             res.read_group(&strings, ct, &g, minimal, idset)?;
-            drop(g);
+            
         }
         drop(strings);
 
@@ -360,7 +361,7 @@ impl PrimitiveBlock {
                     count += self.read_relation(strings, changetype, &d, minimal, idset)?
                 }
                 PbfTag::Value(10, _) => {}
-                _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
+                _ => return Err(Error::PbfDataError("unexpected item".to_string())),
             }
         }
         Ok(count)

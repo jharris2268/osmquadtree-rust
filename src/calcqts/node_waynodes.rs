@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{MinimalBlock, MinimalNode};
 use crate::pbfformat::{
     file_length, make_convert_minimal_block_parts, pack_file_block,
@@ -7,11 +7,11 @@ use crate::pbfformat::{
     ReadFileBlocks, WriteFile, read_all_blocks_vec_with_progbar,CompressionType
 };
 use crate::{message,progress_percent};
-use crate::utils::{Timer};
+use crate::utils::{Timer, Error, Result};
 
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind, Result, Seek, SeekFrom};
+use std::io::{BufReader, Seek, SeekFrom};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -20,6 +20,7 @@ use crate::calcqts::write_quadtrees::WrapWriteFileVec;
 use crate::calcqts::{
     CallFinishFileBlocks, FileLocs, NodeWayNodes, /*OtherData,*/ Timings, WayNodeVals,
 };
+
 
 pub struct NodeWayNodeComb {
     pub id: i64,
@@ -96,7 +97,7 @@ pub fn write_waynode_sorted_resort(waynodevals: WayNodeVals, outfn: &str, numcha
             ))),
             numchan,
         );
-        let mut vv: Vec<Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>> =
+        let mut vv: Vec<Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType = Error>>> =
             Vec::new();
         for w in wv {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
@@ -116,7 +117,7 @@ pub fn write_waynode_sorted_resort(waynodevals: WayNodeVals, outfn: &str, numcha
     Ok(waynodesfn)
 }
 
-fn read_waynodevals<T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>(
+fn read_waynodevals<T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType = Error>>(
     waynodevals: WayNodeVals,
     mut vvm: Box<T>,
 ) -> Result<Timings> {
@@ -146,7 +147,10 @@ fn read_waynodevals<T: CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType
                 vvm.call((curr as usize, xx));
             }
             pg.finish();
-            vvm.finish()
+            match vvm.finish() {
+                Ok(t) => Ok(t),
+                Err(e) => Err(Error::from(e))
+            }
         }
         WayNodeVals::FileBlocks(fname, locs) => {
             let fobj = File::open(&fname)?;
@@ -198,8 +202,7 @@ fn read_way_node_tiles_vals_fb(
     let nv = vals.len();
     for (i, fb) in vals.iter().enumerate() {
         if fb.block_type != "WayNodes" {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("wrong block type {}", fb.block_type),
             ));
         }
@@ -229,8 +232,7 @@ fn read_way_node_tiles_vals_rf(
     for (i, v) in vals.iter().enumerate() {
         let fb = unpack_file_block(*pos, v)?;
         if fb.block_type != "WayNodes" {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("wrong block type {}", fb.block_type),
             ));
         }
@@ -295,11 +297,12 @@ where
 {
     type CallType = T;
     type ReturnType = Timings;
+    type ErrorType = Error;
     fn call(&mut self, t: T) {
         self.send.lock().unwrap().send(t).expect("send failed");
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         Ok(Timings::new())
     }
 }
@@ -544,11 +547,12 @@ where
 
 impl<T, U> CallFinish for CombineNodeWayNodeCB<T, U>
 where
-    T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings, ErrorType = Error>,
     U: Iterator<Item = (i64, i64)> + Sync + Send + 'static,
 {
     type CallType = MinimalBlock;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, mb: MinimalBlock) {
         let t = Timer::new();
@@ -564,7 +568,7 @@ where
         }
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = self.combined_cb.finish()?;
         t.add("combinenodewaynode", self.tm);
         Ok(t)
@@ -679,11 +683,8 @@ fn read_waynodeways_combined<
     }
 }
 */
-pub fn read_nodewaynodes/*read_waynodeways_inmem*/<T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings>>(
+pub fn read_nodewaynodes<T: CallFinish<CallType = Vec<NodeWayNodeComb>, ReturnType = Timings, ErrorType = Error>>(
     nodewaynodes: NodeWayNodes,
-/*  infn: &str,
-    stop_after: u64,
-    waynodevals: Arc<WayNodeVals>,*/
     eqt: Box<T>,
     minw: i64,
     maxw: i64,

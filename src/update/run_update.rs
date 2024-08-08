@@ -6,7 +6,8 @@ use crate::utils::{
 use crate::message;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::Write;
+use crate::utils::{Error,Result};
 
 
 const DEFAULT_SOURCE_PRFX: &'static str = "https://planet.openstreetmap.org/replication/day/";
@@ -93,8 +94,7 @@ fn fetch_diff(
         .output()?;
 
     if !output.status.success() {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::ExternalCallError(
             format!("wget -O {} {} failed", outfn, diff_url),
         ));
     }
@@ -130,7 +130,7 @@ fn get_diff_url(source_prfx: &str, state: i64) -> String {
 pub fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
     let state_url = get_diff_state_url(source_prfx, state);
 
-    let state_response = ureq::get(&state_url).call().into_string()?;
+    let state_response = ureq::get(&state_url).call()?.into_string()?;
 
     let mut seq_num: Option<i64> = None;
     let mut timestamp: Option<i64> = None;
@@ -142,7 +142,7 @@ pub fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
                     seq_num = Some(s);
                 }
                 Err(e) => {
-                    return Err(Error::new(ErrorKind::Other, format!("{:?}", e)));
+                    return Err(Error::UnexpectedResponseError(format!("{:?}", e)));
                 }
             }
         } else if l.starts_with("timestamp=") {
@@ -153,15 +153,11 @@ pub fn get_state(source_prfx: &str, state: Option<i64>) -> Result<(i64, i64)> {
     }
 
     if seq_num.is_none() {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("{} missing sequenceNumber?", state_url),
+        return Err(Error::UnexpectedResponseError(format!("{} missing sequenceNumber?", state_url),
         ));
     }
     if timestamp.is_none() {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("{} missing timestamp?", state_url),
+        return Err(Error::UnexpectedResponseError(format!("{} missing timestamp?", state_url),
         ));
     }
     Ok((seq_num.unwrap(), timestamp.unwrap()))
@@ -193,7 +189,7 @@ fn find_initial_state(source_prfx: Option<&str>, diffs_location: &str, timestamp
         
                 
     }
-    return Err(Error::new(ErrorKind::Other, "source file too old??"));
+    return Err(Error::UserSelectionError("source file too old??".to_string()));
 }
 
 

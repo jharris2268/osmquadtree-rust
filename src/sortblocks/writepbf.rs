@@ -1,15 +1,15 @@
 extern crate serde_json;
 
 use std::fs::File;
-use std::io;
+
 use std::io::Write;
 
-use channelled_callbacks::{CallFinish, CallAll};
+use channelled_callbacks::{CallFinish, CallAll, Result as ccResult};
 use crate::elements::{Bbox, Block, PrimitiveBlock, Quadtree};
 use crate::pbfformat::{pack_file_block, CompressionType};
 use crate::pbfformat::{make_header_block_stored_locs, HeaderType};
 
-use crate::utils::{ThreadTimer};
+use crate::utils::{ThreadTimer, Error};
 
 use crate::sortblocks::{OtherData, Timings};
 
@@ -38,12 +38,12 @@ impl WriteFile {
 impl CallFinish for WriteFile {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, x: Vec<(i64, Vec<u8>)>) {
         self.writefile.call(x);
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let (tm, ls) = self.writefile.finish()?;
 
         let mut o = Timings::new();
@@ -77,12 +77,12 @@ impl WriteFileInternalLocs {
 impl CallFinish for WriteFileInternalLocs {
     type CallType = (Quadtree, Vec<u8>);
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, q_d: Self::CallType) {
         self.data.push(q_d);
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let tx = ThreadTimer::new();
         self.data.sort_by_key(|p| p.0);
         let mut locs = Vec::with_capacity(self.data.len());
@@ -114,12 +114,12 @@ impl CallFinish for WriteFileInternalLocs {
 }
 
 pub fn make_packprimblock_qtindex<
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType=Error> + ?Sized,
 >(
     out: Box<T>,
     includeqts: bool,
     compression_type: CompressionType
-) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
+) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType=Error>> {
     
     let conv = Box::new(move |bl: PrimitiveBlock| {
         if bl.len() == 0 {
@@ -133,12 +133,12 @@ pub fn make_packprimblock_qtindex<
     return Box::new(CallAll::new(out, "pack", conv));
 }
 pub fn make_packprimblock_zeroindex<
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType=Error> + ?Sized,
 >(
     out: Box<T>,
     includeqts: bool,
     compression_type: CompressionType
-) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> {
+) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType=Error>> {
 
     
     let conv = Box::new(move |bl: PrimitiveBlock| {
@@ -154,12 +154,12 @@ pub fn make_packprimblock_zeroindex<
 }
 
 pub fn make_packprimblock_many<
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings> + ?Sized,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType=Error> + ?Sized,
 >(
     out: Box<T>,
     includeqts: bool,
     compression_type: CompressionType
-) -> Box<impl CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>> {
+) -> Box<impl CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings, ErrorType=Error>> {
     
     let conv = Box::new(move |bls: Vec<(i64, PrimitiveBlock)>| {
         let mut res = Vec::new();

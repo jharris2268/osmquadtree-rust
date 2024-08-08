@@ -1,18 +1,18 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{
     Bbox, ElementType, IdSet, IdSetAll, IdSetSet, IdSetBool, MinimalBlock, MinimalNode, MinimalRelation, MinimalWay,
 };
 use crate::pbfformat::{
     make_read_minimal_blocks_combine_call_all, read_all_blocks_parallel_with_progbar, FileBlock,ParallelFileLocs
 };
-use crate::utils::{as_int, ThreadTimer};
+use crate::utils::{as_int, ThreadTimer, Error, Result};
 use simple_protocolbuffers::{DeltaPackedInt, PackedInt};
 
 
 use crate::message;
 
 use std::fs::File;
-use std::io::{BufRead, /*Error,ErrorKind,*/ BufReader, Result};
+use std::io::{BufRead, /*Error,ErrorKind,*/ BufReader};
 use std::sync::Arc;
 
 type Timings = channelled_callbacks::Timings<Arc<dyn IdSet>>;
@@ -379,14 +379,14 @@ impl FilterObjs {
 impl CallFinish for FilterObjs {
     type CallType = MinimalBlock;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, mb: MinimalBlock) {
         let tx = ThreadTimer::new();
         self.check_block(mb);
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings,Error> {
         let mut tm = Timings::new();
         tm.add("FilterBBox::call", self.tm);
         let tx = ThreadTimer::new();
@@ -412,13 +412,13 @@ pub fn prep_bbox_filter(
 
     let fb = Box::new(FilterObjs::new(bbox, poly, pfilelocs.2 > 512*1024*1024));
 
-    let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
+    let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>> =
         if numchan == 0 {
             make_read_minimal_blocks_combine_call_all(fb)
         } else {
             let fbb = CallbackSync::new(fb, numchan);
             let mut convs: Vec<
-                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>,
+                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>>,
             > = Vec::new();
             for f in fbb {
                 let f2 = Box::new(ReplaceNoneWithTimings::new(f));

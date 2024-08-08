@@ -2,14 +2,14 @@ use crate::calcqts::node_waynodes::NodeWayNodeComb;
 use crate::calcqts::quadtree_store::{
     QuadtreeSimple, QuadtreeTileInt, WAY_SPLIT_MASK, WAY_SPLIT_SHIFT, WAY_SPLIT_VAL,
 };
-use channelled_callbacks::CallFinish;
-use crate::utils::Timer;
+use channelled_callbacks::{CallFinish, Result as ccResult};
+use crate::utils::{Timer,Error};
 
 use crate::calcqts::{OtherData, Timings};
 
 use crate::elements::{Bbox, Quadtree, QuadtreeBlock};
 use std::collections::BTreeMap;
-use std::io::Result;
+
 use crate::message;
 pub struct WayBoxesSimple {
     boxes: BTreeMap<i64, Bbox>,
@@ -55,6 +55,7 @@ impl WayBoxesSimple {
 impl CallFinish for WayBoxesSimple {
     type CallType = Vec<NodeWayNodeComb>;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, nodewaynodes: Vec<NodeWayNodeComb>) {
         let t = Timer::new();
@@ -66,7 +67,7 @@ impl CallFinish for WayBoxesSimple {
         self.tm += t.since();
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = Timings::new();
         t.add("wayboxessimple", self.tm);
         let tx = Timer::new();
@@ -231,7 +232,7 @@ impl WayBoxesSplit {
 impl CallFinish for WayBoxesSplit {
     type CallType = Vec<NodeWayNodeComb>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, nodewaynodes: Vec<NodeWayNodeComb>) {
         let tx = Timer::new();
         for n in nodewaynodes {
@@ -242,7 +243,7 @@ impl CallFinish for WayBoxesSplit {
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = Timings::new();
         t.add("expand boxes", self.tm);
 

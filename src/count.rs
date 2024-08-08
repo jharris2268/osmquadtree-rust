@@ -7,7 +7,7 @@ use crate::pbfformat::{
 
 use crate::update::{read_xml_change, ChangeBlock};
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings, Result as ccResult};
 use crate::pbfformat::{
     make_convert_minimal_block, make_convert_primitive_block,
     make_read_minimal_blocks_combine_call_all, make_read_primitive_blocks_combine_call_all,
@@ -20,11 +20,11 @@ use crate::elements::{
     Relation, Way,
 };
 use std::io::BufReader;
-use std::io::Result;
+
 
 use simple_protocolbuffers::read_delta_packed_int;
 
-use crate::utils::{parse_timestamp,timestamp_string};
+use crate::utils::{parse_timestamp,timestamp_string,Error,Result};
 
 use crate::message;
 
@@ -630,6 +630,7 @@ impl CountChangeMinimal {
 impl CallFinish for CountChangeMinimal {
     type CallType = MinimalBlock;
     type ReturnType = channelled_callbacks::Timings<CountChange>;
+    type ErrorType = Error;
 
     fn call(&mut self, bl: MinimalBlock) {
         let tx = ThreadTimer::new();
@@ -637,7 +638,7 @@ impl CallFinish for CountChangeMinimal {
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Self::ErrorType> {
         let mut tm = Self::ReturnType::new();
         tm.add("countchange", self.tm);
         tm.add_other("countchange", self.cc.take().unwrap());
@@ -662,14 +663,15 @@ impl CountPrim {
 impl CallFinish for CountPrim {
     type CallType = PrimitiveBlock;
     type ReturnType = channelled_callbacks::Timings<Count>;
-
+    type ErrorType = Error;
+    
     fn call(&mut self, bl: PrimitiveBlock) {
         let tx = ThreadTimer::new();
         self.cc.as_mut().unwrap().add_primitive(&bl);
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Self::ErrorType> {
         let mut tm = Self::ReturnType::new();
         tm.add("count", self.tm);
         tm.add_other("count", self.cc.take().unwrap());
@@ -694,14 +696,15 @@ impl CountMinimal {
 impl CallFinish for CountMinimal {
     type CallType = MinimalBlock;
     type ReturnType = channelled_callbacks::Timings<Count>;
-
+    type ErrorType = Error;
+    
     fn call(&mut self, bl: MinimalBlock) {
         let tx = ThreadTimer::new();
         self.cc.as_mut().unwrap().add_minimal(&bl);
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Self::ErrorType> {
         let mut tm = Self::ReturnType::new();
         tm.add("count", self.tm);
         tm.add_other("count", self.cc.take().unwrap());
@@ -813,6 +816,7 @@ pub fn call_count(fname: &str,
                     dyn CallFinish<
                         CallType = (usize, FileBlock),
                         ReturnType = channelled_callbacks::Timings<Count>,
+                        ErrorType = Error
                     >,
                 >,
             > = Vec::new();
@@ -865,6 +869,7 @@ pub fn call_count_combine(fname: &str, file_locs: ParallelFileLocs, use_primitiv
             dyn CallFinish<
                 CallType = (usize, Vec<FileBlock>),
                 ReturnType = channelled_callbacks::Timings<Count>,
+                ErrorType = Error
             >,
         >,
     > = Vec::new();

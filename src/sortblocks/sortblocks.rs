@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::Result;
+use crate::utils::Result;
 use std::sync::Arc;
 
 use crate::elements::{Block, Quadtree, WithQuadtree};

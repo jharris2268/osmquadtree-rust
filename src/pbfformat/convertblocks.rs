@@ -1,9 +1,9 @@
-use channelled_callbacks::{CallFinish,CallAll, Timings};
+use channelled_callbacks::{CallFinish,CallAll, Timings, Result as ccResult};
 use crate::elements::{apply_change_minimal, combine_block_minimal, MinimalBlock};
 use crate::elements::{apply_change_primitive, combine_block_primitive, IdSet, PrimitiveBlock};
 use crate::pbfformat::FileBlock;
-use crate::utils::{ThreadTimer};
-use std::io::Result;
+use crate::utils::{ThreadTimer,Error,Result};
+
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -45,10 +45,10 @@ fn wrap_read_primitive_blocks_combine(idx_blocks: (usize, Vec<FileBlock>)) -> Pr
 
 pub fn make_read_primitive_blocks_combine_call_all<
     V: Sync + Send + 'static,
-    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>>,
+    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>, ErrorType=Error>,
 >(
     out: Box<O>,
-) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>>> {
+) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>, ErrorType=Error>> {
     Box::new(CallAll::new(
         out,
         "read_primitive_blocks_combine",
@@ -77,11 +77,12 @@ impl<O, V> Rpbccai<O, V> {
 
 impl<O, V> CallFinish for Rpbccai<O, V>
 where
-    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>>,
+    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>, ErrorType=Error>,
     V: Sync + Send + 'static,
 {
     type CallType = (usize, Vec<FileBlock>);
     type ReturnType = Timings<V>;
+    type ErrorType = Error;
 
     fn call(&mut self, idx_blocks: (usize, Vec<FileBlock>)) {
         let tx = ThreadTimer::new();
@@ -100,7 +101,7 @@ where
         self.tm += tx.since();
         self.out.call(b);
     }
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings<V>, Error> {
         let mut tm = self.out.finish()?;
         tm.add("read_primitive_blocks_combine", self.tm);
         Ok(tm)
@@ -109,12 +110,12 @@ where
 
 pub fn make_read_primitive_blocks_combine_call_all_idset<
     V: Sync + Send + 'static,
-    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>>,
+    O: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<V>, ErrorType = Error>,
 >(
     out: Box<O>,
     idset: Arc<dyn IdSet>,
     filter_relations: bool,
-) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>>> {
+) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>, ErrorType=Error>> {
     //Box::new(CallAll::new(out, "read_primitive_blocks_combine_idset", Box::new(move |pp| { wrap_read_primitive_blocks_combine(pp, Some(idset)) })))
     Box::new(Rpbccai::new(out, idset, filter_relations))
 }
@@ -152,10 +153,10 @@ fn wrap_read_minimal_blocks_combine(idx_blocks: (usize, Vec<FileBlock>)) -> Mini
 
 pub fn make_read_minimal_blocks_combine_call_all<
     V: Sync + Send + 'static,
-    O: CallFinish<CallType = MinimalBlock, ReturnType = Timings<V>>,
+    O: CallFinish<CallType = MinimalBlock, ReturnType = Timings<V>, ErrorType=Error>,
 >(
     out: Box<O>,
-) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>>> {
+) -> Box<impl CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings<V>, ErrorType=Error>> {
     Box::new(CallAll::new(
         out,
         "read_minimal_blocks_combine",
@@ -164,12 +165,12 @@ pub fn make_read_minimal_blocks_combine_call_all<
 }
 
 pub fn make_convert_minimal_block<
-    T: CallFinish<CallType = MinimalBlock, ReturnType = Timings<U>>,
+    T: CallFinish<CallType = MinimalBlock, ReturnType = Timings<U>, ErrorType=Error>,
     U: Sync + Send + 'static,
 >(
     ischange: bool,
     out: Box<T>,
-) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>>> {
+) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>, ErrorType=Error>> {
     let convert_minimal = move |(i, fb): (usize, FileBlock)| -> MinimalBlock {
         if fb.block_type == "OSMData" {
             MinimalBlock::read(i as i64, fb.pos, &fb.data(), ischange)
@@ -187,7 +188,7 @@ pub fn make_convert_minimal_block<
 }
 
 pub fn make_convert_minimal_block_parts<
-    T: CallFinish<CallType = MinimalBlock, ReturnType = Timings<U>>,
+    T: CallFinish<CallType = MinimalBlock, ReturnType = Timings<U>, ErrorType=Error>,
     U: Sync + Send + 'static,
 >(
     ischange: bool,
@@ -195,7 +196,7 @@ pub fn make_convert_minimal_block_parts<
     readways: bool,
     readrelations: bool,
     out: Box<T>,
-) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>>> {
+) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>, ErrorType=Error>> {
     let convert_minimal = move |(i, fb): (usize, FileBlock)| -> MinimalBlock {
         if fb.block_type == "OSMData" {
             MinimalBlock::read_parts(
@@ -221,12 +222,12 @@ pub fn make_convert_minimal_block_parts<
 }
 
 pub fn make_convert_primitive_block<
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<U>>,
+    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings<U>, ErrorType=Error>,
     U: Sync + Send + 'static,
 >(
     ischange: bool,
     out: Box<T>,
-) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>>> {
+) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<U>, ErrorType=Error>> {
     let convert_minimal = move |(i, fb): (usize, FileBlock)| -> PrimitiveBlock {
         if fb.block_type == "OSMData" {
             PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), ischange, false).expect("?")

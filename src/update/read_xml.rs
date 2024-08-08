@@ -1,20 +1,22 @@
 use std::collections::BTreeMap;
-use std::io::{BufRead, Error, ErrorKind, Result};
+use std::io::BufRead;
+
 
 use crate::elements::{Changetype, ElementType, Info, Member, Node, Relation, Tag, Way};
-use crate::utils::{as_int, Checktime};
+use crate::utils::{as_int, Checktime, parse_timestamp, Error, Result};
 use crate::message;
-use chrono::NaiveDateTime;
+
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 
+/*
 const TIMEFORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
 
 fn read_timestamp(ts: &str) -> Result<i64> {
     //message!("ts: {}, TIMEFORMAT: {}, TIMEFORMAT_ALT: {}", ts, TIMEFORMAT, TIMEFORMAT_ALT);
-    match NaiveDateTime::parse_from_str(ts, TIMEFORMAT) {
+    match DateTime::parse_from_str(ts, TIMEFORMAT) {
         Ok(tm) => {
-            Ok(tm.timestamp())
+            Ok(tm.to_utc().timestamp())
         }
         Err(_) => {
             Err(Error::new(
@@ -25,7 +27,7 @@ fn read_timestamp(ts: &str) -> Result<i64> {
     }
 
 }
-
+*/
 
 fn get_key<'a>(kv: &quick_xml::events::attributes::Attribute<'a>) -> String {
     String::from(std::str::from_utf8(kv.key.as_ref()).expect("?"))
@@ -81,7 +83,7 @@ fn read_node<T: BufRead>(
                         n.id = val.parse().expect("not an int");
                     }
                     b"timestamp" => {
-                        info.timestamp = read_timestamp(&val)?;
+                        info.timestamp = parse_timestamp(&val)?;
                     }
                     b"changeset" => {
                         info.changeset = val.parse().expect("not an int");
@@ -102,8 +104,7 @@ fn read_node<T: BufRead>(
                         n.lat = as_int(val.parse().expect("not a float"));
                     }
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {:?} {}",
                                 k,
@@ -114,8 +115,7 @@ fn read_node<T: BufRead>(
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ));
             }
@@ -132,8 +132,7 @@ fn read_node<T: BufRead>(
                         n.tags.push(read_tag(e)?);
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!("unexpected empty {}", std::str::from_utf8(n).expect("?")),
                         ));
                     }
@@ -143,8 +142,7 @@ fn read_node<T: BufRead>(
                         break;
                     }
                     x => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected end {}",
                                 std::str::from_utf8(x).expect("?")
@@ -154,8 +152,7 @@ fn read_node<T: BufRead>(
                 },
                 Ok(Event::Text(e)) => {
                     if !all_whitespace(e.as_ref()) {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected text {}: {:?}",
                                 reader.buffer_position(),
@@ -166,14 +163,12 @@ fn read_node<T: BufRead>(
                     }
                 }
                 Ok(e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("unexpected tag {:?}", e),
                     ));
                 }
                 Err(_e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("failed to node children"),
                     ));
                 }
@@ -200,8 +195,7 @@ fn read_tag(e: &BytesStart) -> Result<Tag> {
                         v = Some(val);
                     }
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {} {}",
                                 std::str::from_utf8(k).expect("?"),
@@ -212,8 +206,7 @@ fn read_tag(e: &BytesStart) -> Result<Tag> {
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ));
             }
@@ -221,11 +214,10 @@ fn read_tag(e: &BytesStart) -> Result<Tag> {
     }
 
     if k == None {
-        return Err(Error::new(ErrorKind::Other, "tag missing key"));
+        return Err(Error::XmlDataError("tag missing key".to_string()));
     }
     if v == None {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::XmlDataError(
             format!("tag missing val [key={}]", k.unwrap()),
         ));
     }
@@ -243,8 +235,7 @@ fn read_ref(e: &BytesStart) -> Result<i64> {
                         return Ok(val.parse().expect("not an int"));
                     }
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {} {}",
                                 std::str::from_utf8(k).expect("?"),
@@ -255,14 +246,13 @@ fn read_ref(e: &BytesStart) -> Result<i64> {
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ));
             }
         }
     }
-    return Err(Error::new(ErrorKind::Other, "no ref attribute"));
+    return Err(Error::XmlDataError("no ref attribute".to_string()));
 }
 
 fn read_member(e: &BytesStart) -> Result<Member> {
@@ -292,15 +282,13 @@ fn read_member(e: &BytesStart) -> Result<Member> {
                             mem_type = ElementType::Relation;
                         }
                         t => {
-                            return Err(Error::new(
-                                ErrorKind::Other,
+                            return Err(Error::XmlDataError(
                                 format!("unexpected member type {}", t),
                             ));
                         }
                     },
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {} {}",
                                 std::str::from_utf8(k).expect("?"),
@@ -311,8 +299,7 @@ fn read_member(e: &BytesStart) -> Result<Member> {
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ));
             }
@@ -345,7 +332,7 @@ fn read_way<T: BufRead>(
                         w.id = val.parse().expect("not an int");
                     }
                     b"timestamp" => {
-                        info.timestamp = read_timestamp(&val)?;
+                        info.timestamp = parse_timestamp(&val)?;
                     }
                     b"changeset" => {
                         info.changeset = val.parse().expect("not an int");
@@ -361,8 +348,7 @@ fn read_way<T: BufRead>(
                     }
 
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {} {}",
                                 std::str::from_utf8(k).expect("?"),
@@ -373,8 +359,7 @@ fn read_way<T: BufRead>(
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ))
             }
@@ -394,8 +379,8 @@ fn read_way<T: BufRead>(
                         w.refs.push(read_ref(e)?);
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other, format!("unexpected empty {:?}",n)
+                        return Err(Error::XmlDataError(
+                            format!("unexpected empty {:?}",n)
                         ));
                     }
                 },
@@ -404,15 +389,14 @@ fn read_way<T: BufRead>(
                         break;
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other, format!("unexpected end {:?}", n)
+                        return Err(Error::XmlDataError(
+                            format!("unexpected end {:?}", n)
                         ));
                     }
                 },
                 Ok(Event::Text(e)) => {
                     if !all_whitespace(e.as_ref()) {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected text {}: {:?}",
                                 reader.buffer_position(),
@@ -422,14 +406,12 @@ fn read_way<T: BufRead>(
                     }
                 }
                 Ok(e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("unexpected tag {:?}", e),
                     ));
                 }
                 Err(_e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("failed to node children"),
                     ))
                 }
@@ -464,7 +446,7 @@ fn read_relation<T: BufRead>(
                         r.id = val.parse().expect("not an int");
                     }
                     b"timestamp" => {
-                        info.timestamp = read_timestamp(&val)?;
+                        info.timestamp = parse_timestamp(&val)?;
                     }
                     b"changeset" => {
                         info.changeset = val.parse().expect("not an int");
@@ -480,8 +462,7 @@ fn read_relation<T: BufRead>(
                     }
 
                     k => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected attribute {} {}",
                                 std::str::from_utf8(k).expect("?"),
@@ -492,8 +473,7 @@ fn read_relation<T: BufRead>(
                 }
             }
             Err(_e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("failed to read attribute"),
                 ))
             }
@@ -514,8 +494,8 @@ fn read_relation<T: BufRead>(
                         r.members.push(read_member(e)?);
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other, format!("unexpected empty {:?}", n)
+                        return Err(Error::XmlDataError(
+                            format!("unexpected empty {:?}", n)
                         ));
                     }
                 },
@@ -524,15 +504,14 @@ fn read_relation<T: BufRead>(
                         break;
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other, format!("unexpected end {:?}", n)
+                        return Err(Error::XmlDataError(
+                            format!("unexpected end {:?}", n)
                         ));
                     }
                 },
                 Ok(Event::Text(e)) => {
                     if !all_whitespace(e.as_ref()) {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected text {}: {}",
                                 reader.buffer_position(),
@@ -542,14 +521,12 @@ fn read_relation<T: BufRead>(
                     }
                 }
                 Ok(e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("unexpected tag {:?}", e),
                     ));
                 }
                 Err(_e) => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!("failed to node children"),
                     ))
                 }
@@ -659,8 +636,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                         res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, true)?);
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected start tag {} {}",
                                 std::str::from_utf8(n).expect("?"),
@@ -693,8 +669,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                         res.add_relation(read_relation(&mut reader, &mut buf2, e, ct, false)?);
                     }
                     n => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::XmlDataError(
                             format!(
                                 "unexpected empty tag {} {}",
                                 std::str::from_utf8(n).expect("?"),
@@ -716,8 +691,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                     ct = None;
                 }
                 n => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!(
                             "unexpected end tag {} {}",
                             std::str::from_utf8(n).expect("?"),
@@ -733,8 +707,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
 
             Ok(Event::Text(e)) => {
                 if !all_whitespace(e.as_ref()) {
-                    return Err(Error::new(
-                        ErrorKind::Other,
+                    return Err(Error::XmlDataError(
                         format!(
                             "unexpected text {}: {}",
                             reader.buffer_position(),
@@ -744,8 +717,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
                 }
             }
             Ok(Event::CData(e)) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!(
                         "unexpected cdata {}: {:?}",
                         reader.buffer_position(),
@@ -756,8 +728,7 @@ pub fn read_xml_change<T: BufRead>(inf: &mut T) -> Result<ChangeBlock> {
             Ok(_) => {}
 
             Err(e) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::XmlDataError(
                     format!("Error at position {}: {:?}", reader.buffer_position(), e),
                 ));
             }

@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll,MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll,MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{ElementType, IdSet, MinimalBlock, Quadtree};
 use crate::pbfformat::{
     file_length, pack_file_block, read_all_blocks, read_all_blocks_prog,
@@ -9,7 +9,7 @@ use simple_protocolbuffers::{
     pack_data, pack_delta_int, pack_value, un_zig_zag, zig_zag, DeltaPackedInt, IterTags, PbfTag,
 };
 
-use crate::utils::ThreadTimer;
+use crate::utils::{ThreadTimer, Error, Result};
 
 pub enum ResultType {
     NumTiles(usize),
@@ -18,10 +18,10 @@ pub enum ResultType {
 
 type Timings = channelled_callbacks::Timings<ResultType>;
 type CallFinishFileBlocks =
-    Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>;
+    Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType=Error>>;
 
 use std::fs::File;
-use std::io::{BufReader /*Error,ErrorKind*/, Result, Write};
+use std::io::{BufReader, Write};
 use std::sync::Arc;
 
 fn prep_index_block(mb: &MinimalBlock) -> Vec<u8> {
@@ -99,7 +99,7 @@ impl WF {
 impl CallFinish for WF {
     type CallType = Vec<u8>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, d: Vec<u8>) {
         if d.is_empty() {
             return;
@@ -110,7 +110,7 @@ impl CallFinish for WF {
         self.nt += 1;
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tms = Timings::new();
         tms.add("write", self.tm);
         tms.add_other("num_tiles", ResultType::NumTiles(self.nt));
@@ -137,7 +137,7 @@ pub fn write_index_file(infn: &str, outfn: &str, numchan: usize) -> usize {
         let wfs = CallbackSync::new(Box::new(WF::new(outfn)), numchan);
 
         let mut packs: Vec<
-            Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>,
+            Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType=Error>>,
         > = Vec::new();
 
         for wf in wfs {
@@ -182,7 +182,7 @@ impl CheckIndexFile {
 impl CallFinish for CheckIndexFile {
     type CallType = Vec<u8>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: Vec<u8>) {
         let tx = ThreadTimer::new();
         match check_index_block(bl, self.idset.as_ref()) {
@@ -194,7 +194,7 @@ impl CallFinish for CheckIndexFile {
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = Timings::new();
         t.add("check index", self.tm);
 

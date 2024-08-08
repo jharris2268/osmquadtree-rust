@@ -1,6 +1,6 @@
 use simple_protocolbuffers::{read_delta_packed_int, DeltaPackedInt, PackedInt};
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings, Result as ccResult};
 use crate::elements::{Bbox, ElementType, MinimalBlock, Quadtree, PrimitiveBlock, WithId, WithTimestamp, SetCommon};
 use crate::pbfformat::{make_convert_minimal_block_parts, make_convert_primitive_block};
 use crate::pbfformat::{file_length, read_all_blocks_with_progbar};
@@ -12,7 +12,8 @@ use crate::calcqts::write_quadtrees::{PackQuadtrees, WriteQuadTree};
 use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings};
 
 use std::collections::BTreeMap;
-use std::io::{Error, ErrorKind, Result};
+//use std::io::{Error, ErrorKind, Result};
+use crate::utils::{Error,Result};
 use crate::message;
 pub struct CollectedData {
     pub nodes: BTreeMap<i64, (i32, i32)>,
@@ -51,6 +52,7 @@ impl CollectTiles {
 impl CallFinish for CollectTiles {
     type CallType = MinimalBlock;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, bl: MinimalBlock) {
         let dx = self.data.as_mut().unwrap();
@@ -79,7 +81,7 @@ impl CallFinish for CollectTiles {
         }
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tm = Timings::new();
         tm.add_other("data", OtherData::CollectedData(self.data.take().unwrap()));
         tm.add_other("max_timestamp", OtherData::MaxTimestamp(self.max_timestamp));
@@ -107,6 +109,7 @@ impl CollectTilesPrimitive {
 impl CallFinish for CollectTilesPrimitive {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, bl: PrimitiveBlock) {
         let dx = self.data.as_mut().unwrap();
@@ -135,7 +138,7 @@ impl CallFinish for CollectTilesPrimitive {
         self.blocks.push(bl);
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tm = Timings::new();
         tm.add_other("data", OtherData::CollectedData(self.data.take().unwrap()));
                 
@@ -162,7 +165,7 @@ fn calc_collected_data_quadtrees(
                     bx.expand(*ln, *lt);
                 }
                 None => {
-                    return Err(Error::new(ErrorKind::Other, format!("missing node {}", r)));
+                    return Err(Error::MissingDataError(format!("missing node {}", r)));
                 }
             }
         }
@@ -330,9 +333,8 @@ pub fn run_calcqts_inmem(
     let outfn = &outfn_;
 
     if file_length(fname) > 1024 * 1024 * 1024 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "run_calcqts_inmem only suitable for pbf files smaller than 1gb",
+        return Err(Error::UserSelectionError(
+            "run_calcqts_inmem only suitable for pbf files smaller than 1gb".to_string()
         ));
     }
 
@@ -382,9 +384,8 @@ pub fn run_calcqts_addto_objs(
     
 
     if file_length(fname) > 128 * 1024 * 1024 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "run_calcqts_addto_objs only suitable for pbf files smaller than 128mb",
+        return Err(Error::UserSelectionError(
+            "run_calcqts_addto_objs only suitable for pbf files smaller than 128mb".to_string()
         ));
     }
 

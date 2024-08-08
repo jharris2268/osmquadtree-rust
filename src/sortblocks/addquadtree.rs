@@ -1,6 +1,6 @@
 use std::fs::File;
-use std::io;
-use std::io::{BufReader, Error, ErrorKind};
+
+use std::io::{BufReader};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -8,10 +8,10 @@ use std::thread;
 use crate::elements::PrimitiveBlock;
 use crate::pbfformat::{FileBlock, ReadFileBlocks};
 
-use channelled_callbacks::{CallFinish,CallAll};
+use channelled_callbacks::{CallFinish,CallAll, Result as ccResult, Error as ccError};
 use crate::elements::{ElementType, Quadtree, QuadtreeBlock};
 
-use crate::utils::ThreadTimer;
+use crate::utils::{ThreadTimer, Error};
 
 use crate::sortblocks::Timings;
 
@@ -129,10 +129,11 @@ where
 
 impl<T> CallFinish for AddQuadtree<T>
 where
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>,
+    T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType=Error>,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, mut bl: PrimitiveBlock) {
         let ct = ThreadTimer::new();
@@ -191,21 +192,21 @@ where
         self.out.call(bl);
     }
 
-    fn finish(&mut self) -> io::Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Self::ErrorType> {
         match self.curr {
             None => {
                 let mut x = self.out.finish()?;
                 x.add("add quadtrees", self.tot);
                 return Ok(x);
             }
-            Some(_) => Err(Error::new(ErrorKind::Other, "qts remaining...")),
+            Some(_) => Err(ccError::OtherError(Error::PbfDataError("qts remaining...".to_string()))),
         }
     }
 }
 
-pub fn make_unpackprimblock<T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>(
+pub fn make_unpackprimblock<T: CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType = Error>>(
     out: Box<T>,
-) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> {
+) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType=Error>> {
     let conv = Box::new(|(i, fb): (usize, FileBlock)| {
         if fb.block_type == "OSMData" {
             let mut pb = PrimitiveBlock::read(i as i64, fb.pos, &fb.data(), false, false)

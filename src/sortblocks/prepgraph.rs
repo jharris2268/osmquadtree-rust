@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::{Result,Error,ErrorKind};
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, CallAll, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::{read_all_blocks_with_progbar, FileBlock};
@@ -28,7 +28,7 @@ impl AddAll {
 impl CallFinish for AddAll {
     type CallType = PrepedBlock;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, mb: Self::CallType) {
         let tx = Timer::new();
         let groups = self.groups.as_mut().unwrap();
@@ -38,7 +38,7 @@ impl CallFinish for AddAll {
 
         self.tm += tx.since();
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = Timings::new();
         t.add("addall", self.tm);
         t.add_other(
@@ -84,10 +84,10 @@ fn prep_block(qb: QuadtreeBlock, maxdepth: usize) -> PrepedBlock {
     (qb.idx, qb.loc, t)
 }
 
-fn make_convertquadtreeblock<T: CallFinish<CallType = PrepedBlock, ReturnType = Timings>>(
+fn make_convertquadtreeblock<T: CallFinish<CallType = PrepedBlock, ReturnType = Timings, ErrorType = Error>>(
     out: Box<T>,
     maxdepth: usize,
-) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> {
+) -> Box<impl CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>> {
     let conv = Box::new(move |(i, fb): (usize, FileBlock)| {
         if fb.block_type == "OSMHeader" {
             (0, 0, BTreeMap::new())
@@ -122,11 +122,11 @@ pub fn find_groups(
 
 pub fn prepare_quadtree_tree(qtsfn: &str, numchan: usize, maxdepth: usize) -> Result<Box<QuadtreeTree>> {
     
-    let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
+    let cc: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType=Error>> = if numchan
         > 0
     {
         let aa = CallbackSync::new(Box::new(AddAll::new()), numchan);
-        let mut bb: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
+        let mut bb: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType=Error>>> =
             Vec::new();
         for a in aa {
             let a2 = Box::new(ReplaceNoneWithTimings::new(a));

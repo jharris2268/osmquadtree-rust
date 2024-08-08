@@ -10,7 +10,7 @@ pub use calcinmem::{run_calcqts_inmem,run_calcqts_addto_objs};
 pub use calculate::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim};
 
 use crate::pbfformat::{FileBlock, FileLocs};
-
+use crate::utils::Error;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -49,4 +49,4 @@ pub enum OtherData {
 pub type Timings = channelled_callbacks::Timings<OtherData>;
 
 pub type CallFinishFileBlocks =
-    Box<dyn channelled_callbacks::CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>;
+    Box<dyn channelled_callbacks::CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>>;

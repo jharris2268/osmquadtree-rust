@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io;
+
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::sync::Arc;
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{ PrimitiveBlock};
 
 
@@ -14,11 +14,11 @@ use crate::pbfformat::{
 };
 pub use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 pub use crate::sortblocks::writepbf::{
-    make_packprimblock_many, make_packprimblock_qtindex, WriteFile,
+    make_packprimblock_many, /*make_packprimblock_qtindex,*/ WriteFile,
 };
 use crate::sortblocks::{FileLocs, OtherData, QuadtreeTree, TempData, Timings};
 
-use crate::utils::{LogTimes, ThreadTimer, Timer};
+use crate::utils::{LogTimes, ThreadTimer, Timer, Error, Result};
 use crate::{message,progress_bytes};
 use crate::sortblocks::sortblocks::{SortBlocks,CollectTemp};
 use serde::{Deserialize, Serialize};
@@ -37,12 +37,12 @@ impl CallFinish for WriteTempNull {
     
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, _temps: Vec<(i64, Vec<u8>)>) {
         
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings,Error> {
         let mut tms = Timings::new();
         tms.add_other("tempdata", OtherData::TempData(TempData::Null));
         Ok(tms)
@@ -72,7 +72,7 @@ impl WriteTempData {
 impl CallFinish for WriteTempData {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, temps: Vec<(i64, Vec<u8>)>) {
         let tx = ThreadTimer::new();
         for (a, b) in temps {
@@ -88,7 +88,7 @@ impl CallFinish for WriteTempData {
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tms = Timings::new();
         tms.add("WriteTempData", self.tm);
         let mut td = Vec::new();
@@ -116,12 +116,12 @@ impl WriteTempFile {
 impl CallFinish for WriteTempFile {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: Self::CallType) {
         self.tempf.call(bl);
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = self.tempf.finish()?;
         let mut fl = match t.others.pop().unwrap().1 {
             OtherData::FileLocs(p) => p,
@@ -157,7 +157,7 @@ impl WriteTempFileSplit {
 impl CallFinish for WriteTempFileSplit {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: Self::CallType) {
         for (a, b) in bl {
             let k = a / self.splitat;
@@ -174,7 +174,7 @@ impl CallFinish for WriteTempFileSplit {
             }
         }
     }
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tm = Timings::new();
 
         let mut parts = Vec::new();
@@ -339,11 +339,11 @@ where
 
 impl<T> CallFinish for CollectTempBlocks<T>
 where
-    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings, ErrorType = Error>,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: PrimitiveBlock) {
         let tx = ThreadTimer::new();
         let mm = self.collect.add_all(bl.into_iter()).expect("?");
@@ -352,7 +352,7 @@ where
         self.out.call(mm);
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         /*let mut mm = Vec::new();
         for (_, b) in std::mem::take(&mut self.pending) {
             mm.push((b.index, b));
@@ -380,7 +380,7 @@ fn write_temp_blocks(
     splitat: i64,
     limit: usize,
     //write_at: usize
-) -> io::Result<TempData> {
+) -> Result<TempData> {
     let flen = file_length(&infn);
 
     /*let wt: Box<WriteTempWhich> = if tempfn == "NONE" {
@@ -395,7 +395,7 @@ fn write_temp_blocks(
         }
     };*/
     
-    let wt: Box<dyn CallFinish<CallType = Vec<(i64,Vec<u8>)>, ReturnType = Timings>> = 
+    let wt: Box<dyn CallFinish<CallType = Vec<(i64,Vec<u8>)>, ReturnType = Timings, ErrorType = Error>> = 
         if tempfn == "NONE" {
             Box::new(WriteTempData::new())
         } else if tempfn == "NULL" {
@@ -410,7 +410,7 @@ fn write_temp_blocks(
             }
         };
 
-    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
+    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>> = if numchan
         == 0
     {
         let pc = make_packprimblock_many(wt, true, CompressionType::Zlib);
@@ -420,7 +420,7 @@ fn write_temp_blocks(
     } else {
         let wts = CallbackSync::new(wt, numchan);
 
-        let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
+        let mut pcs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType = Error>>> =
             Vec::new();
 
         for wt in wts {
@@ -436,7 +436,7 @@ fn write_temp_blocks(
         let ccw = Box::new(CallbackMerge::new(pcs, Box::new(MergeTimings::new())));
 
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, ccw)), numchan);
-        let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
+        let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>>> =
             Vec::new();
         for aq in aqs {
             let aq2 = Box::new(ReplaceNoneWithTimings::new(aq));
@@ -523,10 +523,11 @@ fn pack_all(bls: Vec<PrimitiveBlock>, compression_type: &CompressionType) -> Vec
 
 impl<T> CallFinish for CollectBlocksTemp<T>
 where
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType = Error>,
 {
     type CallType = (i64, Vec<FileBlock>);
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, (_, bls): (i64, Vec<FileBlock>)) {
         let tx = Timer::new();
@@ -540,7 +541,7 @@ where
         self.out.call(tp);
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut r = self.out.finish()?;
         r.add("resortblocks", self.tm);
         r.add("packblocks", self.tm2);
@@ -549,17 +550,17 @@ where
     }
 }
 
-pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = channelled_callbacks::Timings<X>> + ?Sized, X: Sync+Send>(
+pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = channelled_callbacks::Timings<X>, ErrorType = Error> + ?Sized, X: Sync+Send>(
     xx: TempData,
     mut out: Box<T>,
     remove_files: bool,
-) -> io::Result<channelled_callbacks::Timings<X>> {
+) -> Result<channelled_callbacks::Timings<X>> {
     //let mut ct = Checktime::with_threshold(2.0);
 
     match xx {
         TempData::Null => {
             message!("nothing to read!");
-            out.finish()
+            Ok(out.finish()?)
         },
         
         TempData::TempBlocks(tb) => {
@@ -582,7 +583,7 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
                 out.call((a, mm));
             }
             prog.finish();
-            out.finish()
+            Ok(out.finish()?)
         }
         TempData::TempFile((fname, locs)) => {
             let tbl = file_length(&fname);
@@ -598,7 +599,7 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
             }
 
             prog.finish();
-            out.finish()
+            Ok(out.finish()?)
         }
         TempData::TempFileSplit(parts) => {
             let mut tbl = 0;
@@ -619,19 +620,19 @@ pub fn read_temp_data<T: CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType
             }
 
             prog.finish();
-            out.finish()
+            Ok(out.finish()?)
         }
     }
 }
 
-fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ ?Sized>(
+fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>), ErrorType = Error>+ ?Sized>(
     fbuf: &mut R,
     locs: Vec<(i64, Vec<(u64, u64)>)>,
     split_size: u64,
     tl: &mut u64,
     prog: &Box<dyn crate::logging::ProgressBytes>,
     out: &mut Box<T>,
-) -> io::Result<()> {
+) -> Result<()> {
     let mut curr = Vec::new();
     let mut curr_len = 0;
     for (a, b) in locs {
@@ -661,7 +662,7 @@ fn read_blocks<R: Read + Seek, T: CallFinish<CallType = (i64, Vec<FileBlock>)>+ 
 fn read_blocks_parts<R: Read + Seek>(
     fbuf: &mut R,
     curr: &Vec<(i64, Vec<(u64, u64)>)>,
-) -> io::Result<BTreeMap<i64, (Vec<FileBlock>, u64)>> {
+) -> Result<BTreeMap<i64, (Vec<FileBlock>, u64)>> {
     let mut curr_flat = Vec::new();
     for (a, b) in curr {
         for (p, q) in b {
@@ -695,7 +696,7 @@ fn write_blocks_from_temp(
     timestamp: i64,
     keep_temps: bool,
     compression_type: CompressionType,
-) -> io::Result<()> {
+) -> Result<()> {
     let wf = Box::new(WriteFile::with_compression_type(&outfn, HeaderType::ExternalLocs, None, compression_type));
 
     let t = if numchan == 0 {
@@ -705,7 +706,7 @@ fn write_blocks_from_temp(
     } else {
         let wfs = CallbackSync::new(wf, numchan);
         let mut cqs: Vec<
-            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>,
+            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings, ErrorType = Error>>,
         > = Vec::new();
         for w in wfs {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
@@ -733,7 +734,7 @@ struct TempFileLocs {
     locs: FileLocs,
 }
 
-pub fn write_tempfile_locs(tempfn: &str, locs: &FileLocs) -> io::Result<()> {
+pub fn write_tempfile_locs(tempfn: &str, locs: &FileLocs) -> Result<()> {
     serde_json::to_writer(
         std::fs::File::create(&format!("{}-locs.json", tempfn))?,
         &TempFileLocs {
@@ -744,7 +745,7 @@ pub fn write_tempfile_locs(tempfn: &str, locs: &FileLocs) -> io::Result<()> {
     Ok(())
 }
 
-pub fn read_tempfile_locs(tempfn: &str) -> io::Result<TempData> {
+pub fn read_tempfile_locs(tempfn: &str) -> Result<TempData> {
     let xx: TempFileLocs = serde_json::from_reader(BufReader::new(File::open(&format!(
         "{}-locs.json",
         tempfn
@@ -762,7 +763,7 @@ struct TempFileSplitLocs {
 pub fn write_tempfilesplit_locs(
     tempfn: &str,
     parts: &Vec<(i64, String, FileLocs)>,
-) -> io::Result<()> {
+) -> Result<()> {
     let mut rr = Vec::new();
     for (a, b, c) in parts {
         rr.push(TempFileSplitLocs {
@@ -778,7 +779,7 @@ pub fn write_tempfilesplit_locs(
     Ok(())
 }
 
-pub fn read_tempfilesplit_locs(tempfn: &str) -> io::Result<TempData> {
+pub fn read_tempfilesplit_locs(tempfn: &str) -> Result<TempData> {
     let xx: Vec<TempFileSplitLocs> = serde_json::from_reader(BufReader::new(File::open(
         &format!("{}-locs.json", tempfn),
     )?))?;
@@ -802,7 +803,7 @@ pub fn sort_blocks(
     keep_temps: bool,
     compression_type: CompressionType,
     lt: &mut LogTimes,
-) -> io::Result<()> {
+) -> Result<()> {
     message!(
         "sort_blocks({},{},{},{},{},{},{},{},{},{})",
         infn,

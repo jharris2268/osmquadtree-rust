@@ -1,9 +1,9 @@
 use std::fs::File;
-use std::io;
+
 use std::io::Write;
 use std::sync::Arc;
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings,ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings,ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::PrimitiveBlock;
 
 use crate::pbfformat::HeaderType;
@@ -12,7 +12,7 @@ use crate::sortblocks::addquadtree::{make_unpackprimblock, AddQuadtree};
 use crate::sortblocks::writepbf::{make_packprimblock_qtindex, WriteFile};
 use crate::sortblocks::{OtherData, QuadtreeTree, Timings};
 
-use crate::utils::{LogTimes, Timer};
+use crate::utils::{LogTimes, Timer, Error, Result};
 use crate::message;
 use crate::sortblocks::sortblocks::SortBlocks;
 
@@ -31,14 +31,14 @@ impl CollectBlocks {
 impl CallFinish for CollectBlocks {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: PrimitiveBlock) {
         let tx = Timer::new();
         self.sb.add_all(bl.into_iter()).expect("!");
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> io::Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut t = Timings::new();
         t.add("find blocks", self.tm);
         let bv = self.sb.finish();
@@ -55,8 +55,8 @@ fn get_blocks(
     qtsfn: &str,
     groups: Arc<QuadtreeTree>,
     numchan: usize,
-) -> io::Result<Vec<PrimitiveBlock>> {
-    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>> = if numchan
+) -> Result<Vec<PrimitiveBlock>> {
+    let pp: Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>> = if numchan
         == 0
     {
         let cc = Box::new(CollectBlocks::new(groups));
@@ -65,7 +65,7 @@ fn get_blocks(
     } else {
         let cc = Box::new(Callback::new(Box::new(CollectBlocks::new(groups))));
         let aqs = CallbackSync::new(Box::new(AddQuadtree::new(qtsfn, cc)), numchan);
-        let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings>>> =
+        let mut pps: Vec<Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings, ErrorType = Error>>> =
             Vec::new();
         for aq in aqs {
             let aq2 = Box::new(ReplaceNoneWithTimings::new(aq));
@@ -102,17 +102,17 @@ pub fn write_blocks(
     numchan: usize,
     timestamp: i64,
     compression_type: CompressionType,
-) -> io::Result<()> {
+) -> Result<()> {
     let wf = Box::new(WriteFile::with_compression_type(&outfn, HeaderType::ExternalLocs, None, compression_type));
 
     
 
-    let mut wq: Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>> =
+    let mut wq: Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType = Error>> =
         if numchan == 0 {
             make_packprimblock_qtindex(wf, true, compression_type)
         } else {
             let wfs = CallbackSync::new(wf, numchan);
-            let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings>>> =
+            let mut wqs: Vec<Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = Timings, ErrorType = Error>>> =
                 Vec::new();
             for w in wfs {
                 let w2 = Box::new(ReplaceNoneWithTimings::new(w));
@@ -140,7 +140,7 @@ pub fn sort_blocks_inmem(
     timestamp: i64,
     compression_type: CompressionType,
     lt: &mut LogTimes,
-) -> io::Result<()> {
+) -> Result<()> {
     let groupsfn = format!("{}-groups.txt", outfn);
     let outf = File::create(&groupsfn)?;
     for (_, g) in groups.iter() {

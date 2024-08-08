@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackSync, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackSync, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{Quadtree, QuadtreeBlock};
 use crate::pbfformat::WriteFile;
 use crate::pbfformat::{pack_file_block, HeaderType, CompressionType};
@@ -6,8 +6,9 @@ use crate::pbfformat::{pack_file_block, HeaderType, CompressionType};
 
 use crate::calcqts::{OtherData, Timings};
 use crate::message;
+use crate::utils::Error;
 
-use std::io::Result;
+
 
 pub struct WrapWriteFile {
     writefile: WriteFile,
@@ -20,11 +21,12 @@ impl WrapWriteFile {
 impl CallFinish for WrapWriteFile {
     type CallType = Vec<u8>;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, x: Vec<u8>) {
         self.writefile.call(vec![(0, x)]);
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let (t, _) = self.writefile.finish()?;
         let mut tm = Timings::new();
         tm.add("writefile", t);
@@ -45,11 +47,11 @@ pub struct WrapWriteFileVec {
 impl CallFinish for WrapWriteFileVec {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, x: Vec<(i64, Vec<u8>)>) {
         self.writefile.call(x);
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let (t, _) = self.writefile.finish()?;
         let mut tm = Timings::new();
         tm.add("writefile", t);
@@ -71,10 +73,11 @@ where
 
 impl<T> CallFinish for WriteQuadTreePack<T>
 where
-    T: CallFinish<CallType = Vec<u8>> + Sync + Send + 'static,
+    T: CallFinish<CallType = Vec<u8>, ErrorType = Error> + Sync + Send + 'static,
 {
     type CallType = Box<QuadtreeBlock>;
     type ReturnType = T::ReturnType;
+    type ErrorType = Error;
 
     fn call(&mut self, t: Self::CallType) {
         let mut t = t;
@@ -84,13 +87,13 @@ where
         self.out.call(b);
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<T::ReturnType, Error> {
         self.out.finish()
     }
 }
 
 pub struct WriteQuadTree {
-    packs: Vec<Box<Callback<Box<QuadtreeBlock>, Timings>>>,
+    packs: Vec<Box<Callback<Box<QuadtreeBlock>, Timings, Error>>>,
     numwritten: usize,
 }
 
@@ -120,18 +123,18 @@ impl WriteQuadTree {
 impl CallFinish for WriteQuadTree {
     type CallType = Box<QuadtreeBlock>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, t: Self::CallType) {
         let i = self.numwritten % 4;
         self.numwritten += 1;
 
         self.packs[i].call(t);
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut r = Timings::new();
         let mut byteswritten = 0;
         for p in self.packs.iter_mut() {
-            r.combine(p.finish().expect("finish failed"));
+            r.combine(p.finish()?); //.expect("finish failed")
         }
         for (_, b) in &r.others {
             match b {
@@ -148,14 +151,14 @@ impl CallFinish for WriteQuadTree {
 }
 
 pub struct PackQuadtrees {
-    out: Box<dyn CallFinish<CallType = Box<QuadtreeBlock>, ReturnType = Timings>>,
+    out: Box<dyn CallFinish<CallType = Box<QuadtreeBlock>, ReturnType = Timings, ErrorType=Error>>,
     limit: usize,
     curr: Box<QuadtreeBlock>,
 }
 
 impl PackQuadtrees {
     pub fn new(
-        out: Box<dyn CallFinish<CallType = Box<QuadtreeBlock>, ReturnType = Timings>>,
+        out: Box<dyn CallFinish<CallType = Box<QuadtreeBlock>, ReturnType = Timings, ErrorType=Error>>,
         limit: usize,
     ) -> PackQuadtrees {
         let curr = Box::new(QuadtreeBlock::with_capacity(limit));

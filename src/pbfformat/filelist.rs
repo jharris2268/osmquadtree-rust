@@ -8,7 +8,8 @@ use crate::utils::parse_timestamp;
 use crate::message;
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind, Result};
+use std::io::BufReader;
+use crate::utils::{Error, Result};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -69,7 +70,7 @@ pub fn get_file_locs_single_max_depth(infn: &str, filter: Option<Bbox>, max_dept
     let filepos = file_position(&mut fbuf)?;
     let head = HeaderBlock::read(filepos, &fb.data(), infn)?;
     if head.index.is_empty() {
-        return Err(Error::new(ErrorKind::Other, "no locations in header"));
+        return Err(Error::PbfDataError(format!("file {} has no locations in header", infn)));
     }
 
     let mut total_len = 0;
@@ -119,10 +120,9 @@ pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Opti
 
     if std::path::Path::new(prfx).is_file() {
         if !timestamp.is_none() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "can't specify timestamp with single file",
-            ));
+            return Err(
+                Error::UserSelectionError("can't specify timestamp with single file".to_string())
+            );
         }
         return get_file_locs_single_max_depth(prfx, filter, max_depth);
     }
@@ -153,9 +153,8 @@ pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Opti
         let head = HeaderBlock::read(filepos, &fb.data(), &fle_fn)?;
 
         if head.index.is_empty() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("no locations in header for {}", &fle_fn),
+            return Err(Error::PbfDataError(
+                format!("no locations in header for {}", &fle_fn)
             ));
         }
 

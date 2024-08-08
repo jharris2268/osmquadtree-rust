@@ -1,8 +1,8 @@
 
-
-use std::io::{Result,Error,ErrorKind};
+//use std::io::{Result,Error,ErrorKind};
 use std::sync::Arc;
 use std::path::{Path,PathBuf};
+
 
 //#[allow(unused_imports)]
 use {
@@ -17,6 +17,10 @@ use {
 
 use console::Style;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+
+use crate::error::{Error,Result};
+
+
 
 fn round_timestamp(ts: i64) -> i64 {
     (f64::round(ts as f64/(24.0*60.0*60.0)) as i64)*24*60*60
@@ -39,7 +43,7 @@ fn prepare_output_dir(dest_root: &str) -> Result<PathBuf> {
     let dest_path = Path::new(dest_root).to_owned();
     if dest_path.try_exists()? {
         if dest_path.is_file() {
-            return Err(Error::new(ErrorKind::Other, "specifed output exists and is a file?"));
+            return Err(Error::OutputFileExists("specifed output exists and is a file?".to_string()));
         } else {
             //nothing to do
         }
@@ -156,14 +160,15 @@ pub(crate) fn run(ram_gb_default: usize, numchan_default:usize) -> Result<()> {
                     .with_prompt("enter replication root:")
                     .interact_text()?
             },
-            _ => Err(Error::new(ErrorKind::Other, format!("wrong option?")))?
+            x => Err(Error::InvalidInputError(format!("invalid option selected {}", x)))?
         };
         
         //let mut current_state: Option<(i64,i64)> = None;
         match get_state(&replication_src, None) {
             Ok((a,b)) => { println!("replication source ok, current state {} [timestamp {}]",a,timestamp_string(b)); },
             Err(e) => {
-                return Err(Error::new(ErrorKind::Other, format!("replication src incorrect? {}state.txt not available [{}]", replication_src, e)));
+                return Err(Error::GetStateError(format!("replication src incorrect? {} state.txt not available [{}]", replication_src, e)));
+                //return Err(Error::new(ErrorKind::Other, format!("replication src incorrect? {} state.txt not available [{}]", replication_src, e)));
             }
         };
         

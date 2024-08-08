@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, CallAll};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, CallAll, Result as ccResult};
 use crate::elements::{
     Bbox, Block, IdSet, IdSetAll, Node, PrimitiveBlock, Quadtree, Relation, Way, WithId,
 };
@@ -20,8 +20,9 @@ use crate::utils::{
 use crate::message;
 
 use std::collections::BTreeMap;
-use std::io::{Error, ErrorKind, Result};
 use std::sync::Arc;
+
+use crate::utils::{Error, Result};
 
 struct CollectObj<T: WithId> {
     split: i64,
@@ -91,7 +92,7 @@ const MAX_WAY_ID: i64 = 2 << 30;
 
 impl<T> CollectTemp<T>
 where
-    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings, ErrorType=Error>,
 {
     pub fn new(
         out: Box<T>,
@@ -221,10 +222,11 @@ where
 
 impl<T> CallFinish for CollectTemp<T>
 where
-    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, PrimitiveBlock)>, ReturnType = Timings, ErrorType=Error>,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, pb: PrimitiveBlock) {
         let tx = ThreadTimer::new();
@@ -233,7 +235,7 @@ where
         self.out.call(res);
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings,Error> {
         let tx = ThreadTimer::new();
         let res = self.finish_all();
         let ftm = tx.since();
@@ -257,17 +259,17 @@ pub fn write_temp_blocks(
     fsplit: i64,
     numchan: usize,
 ) -> Result<TempData> {
-    let wt: Box<dyn CallFinish< CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>> = 
+    let wt: Box<dyn CallFinish< CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType=Error>> = 
         if tempfn == "NONE" {
             Box::new(WriteTempData::new())
         } else if tempfn == "NULL" {
             Box::new(WriteTempNull::new())
         } else {
             if fsplit == 0 {
-                Box::new(WriteTempFile::new(tempfn.clone()))
+                Box::new(WriteTempFile::new(tempfn))
             } else {
                 Box::new(WriteTempFileSplit::new(
-                    tempfn.clone(),
+                    tempfn,
                     fsplit,
                 ))
             }
@@ -280,7 +282,7 @@ pub fn write_temp_blocks(
         tempfn, numchan
     ));*/
 
-    let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
+    let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>> =
         if numchan == 0 {
             //let (mut res, d) = if numchan == 0 {
             let pc = make_packprimblock_many(wt, true, CompressionType::Zlib);
@@ -292,7 +294,7 @@ pub fn write_temp_blocks(
         } else {
             let wts = CallbackSync::new(wt, numchan);
             let mut pcs: Vec<
-                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>,
+                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>>,
             > = Vec::new();
             for wt in wts {
                 let wt2 = Box::new(ReplaceNoneWithTimings::new(wt));
@@ -326,7 +328,7 @@ pub fn write_temp_blocks(
         }
     }
 
-    Err(Error::new(ErrorKind::Other, "no temp data?"))
+    Err(Error::UserSelectionError("no temp data?".to_string()))
 }
 
 fn collect_blocks((k, fbs): (i64, Vec<FileBlock>)) -> PrimitiveBlock {
@@ -477,7 +479,7 @@ pub fn call_mergechanges_sort(
         )?
     } else {
         let mut ccs: Vec<
-            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>,
+            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>>,
         > = Vec::new();
         for wf in CallbackSync::new(wf, numchan) {
             let wf2 = Box::new(ReplaceNoneWithTimings::new(wf));
@@ -530,7 +532,7 @@ pub fn run_mergechanges_sort_from_existing(
         )?
     } else {
         let mut ccs: Vec<
-            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings>>,
+            Box<dyn CallFinish<CallType = (i64, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>>,
         > = Vec::new();
         for wf in CallbackSync::new(wf, numchan) {
             let wf2 = Box::new(ReplaceNoneWithTimings::new(wf));
@@ -606,14 +608,14 @@ pub fn call_mergechanges(
             &outfn, HeaderType::ExternalLocs, Some(bbox), compression_type
         ));
 
-    let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
+    let pp: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>> =
         if numchan == 0 {
             let pc = make_packprimblock_qtindex(wf, true, compression_type);
             make_read_primitive_blocks_combine_call_all_idset(pc, ids.clone(), true)
         } else {
             let wfs = CallbackSync::new(wf, numchan);
             let mut pps: Vec<
-                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>,
+                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType=Error>>,
             > = Vec::new();
             for w in wfs {
                 let w2 = Box::new(ReplaceNoneWithTimings::new(w));

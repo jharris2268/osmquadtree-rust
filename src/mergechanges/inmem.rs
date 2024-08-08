@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{Bbox, Block, IdSet, IdSetAll, PrimitiveBlock};
 use crate::mergechanges::filter_elements::{prep_bbox_filter, read_filter};
 use crate::pbfformat::make_read_primitive_blocks_combine_call_all_idset;
@@ -8,7 +8,7 @@ use crate::sortblocks::{make_packprimblock_zeroindex, WriteFile};
 use crate::pbfformat::{get_file_locs, ParallelFileLocs};
 use crate::utils::{parse_timestamp, LogTimes, ThreadTimer};
 use crate::{message,progress_percent};
-use std::io::{Result,Error,ErrorKind};
+use crate::utils::{Result,Error};
 use std::sync::Arc;
 
 type Timings = channelled_callbacks::Timings<PrimitiveBlock>;
@@ -30,7 +30,7 @@ impl CollectObjs {
 impl CallFinish for CollectObjs {
     type CallType = PrimitiveBlock;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, bl: PrimitiveBlock) {
         let tx = ThreadTimer::new();
         self.collected.as_mut().unwrap().nodes.extend(bl.nodes);
@@ -43,7 +43,7 @@ impl CallFinish for CollectObjs {
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings,Error> {
         let mut tm = Timings::new();
         tm.add("CollectObjs::call", self.tm);
         let tx = ThreadTimer::new();
@@ -63,13 +63,13 @@ pub fn collect_blocks_filtered(
 ) -> Result<PrimitiveBlock> {
     let pb = progress_percent!("merge blocks");
 
-    let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>> =
+    let conv: Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType = Error>> =
         if numchan == 0 {
             let co = Box::new(CollectObjs::new());
             make_read_primitive_blocks_combine_call_all_idset(co, ids.clone(), true)
         } else {
             let mut convs: Vec<
-                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings>>,
+                Box<dyn CallFinish<CallType = (usize, Vec<FileBlock>), ReturnType = Timings, ErrorType = Error>>,
             > = Vec::new();
             for _ in 0..numchan {
                 let co = Box::new(CollectObjs::new());
@@ -103,7 +103,7 @@ struct GroupBlocks<T: ?Sized> {
 
 impl<T> GroupBlocks<T>
 where
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings> + ?Sized,
+    T: CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings, ErrorType=Error> + ?Sized,
 {
     pub fn new(out: Box<T>, block_size: usize) -> GroupBlocks<T> {
         GroupBlocks {
@@ -117,11 +117,11 @@ where
 
 impl<T> CallFinish for GroupBlocks<T>
 where
-    T: CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings> + ?Sized,
+    T: CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings, ErrorType = Error> + ?Sized,
 {
     type CallType = PrimitiveBlock;
     type ReturnType = crate::sortblocks::Timings;
-
+    type ErrorType = Error;
     fn call(&mut self, pb: PrimitiveBlock) {
         let tx = ThreadTimer::new();
         for n in pb.nodes {
@@ -150,7 +150,7 @@ where
         self.tm += tx.since();
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType,Self::ErrorType> {
         let tx = ThreadTimer::new();
         if self.curr.len() > 0 {
             self.out
@@ -172,18 +172,18 @@ pub fn make_write_file(
     block_size: usize,
     compression_type: CompressionType,
     numchan: usize,
-) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>> {
+) -> Box<impl CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings, ErrorType=Error>> {
     let wf = Box::new(WriteFile::with_compression_type(
         outfn, HeaderType::NoLocs, Some(bbox), compression_type));
 
     let pack: Box<
-        dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>,
+        dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings, ErrorType = Error>,
     > = if numchan == 0 {
         make_packprimblock_zeroindex(wf, false, compression_type)
     } else {
         let wff = CallbackSync::new(wf, 4);
         let mut packs: Vec<
-            Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings>>,
+            Box<dyn CallFinish<CallType = PrimitiveBlock, ReturnType = crate::sortblocks::Timings, ErrorType = Error>>,
         > = Vec::new();
         for w in wff {
             let w2 = Box::new(ReplaceNoneWithTimings::new(w));
@@ -221,7 +221,7 @@ pub fn run_mergechanges_sort_inmem(
     tx.add("get_file_locs");
     
     if pfilelocs.2 > (ram_gb as u64)*32*1024*1024 {
-        return Err(Error::new(ErrorKind::Other, format!(
+        return Err(Error::UserSelectionError(format!(
             "extract too big to merge in memory ({:0.1}mb > {:0.1}mb)",
             (pfilelocs.2 as f64) / 1024.0 / 1024.0,
             (ram_gb as f64) * 32.0

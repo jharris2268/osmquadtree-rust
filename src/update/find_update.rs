@@ -1,4 +1,4 @@
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings, Timings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, MergeTimings, Timings, Result as ccResult};
 use crate::elements::{
     Bbox, Changetype, ElementType, IdSetSet, Node, PrimitiveBlock, Quadtree, Relation, Way,
 };
@@ -9,14 +9,15 @@ use crate::pbfformat::{
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock};
-use crate::utils::{ThreadTimer, Timer};
+use crate::utils::{ThreadTimer, Timer, Error, Result};
 use crate::{message,progress_percent};
 use crate::logging::{ProgressPercent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind};
+use std::io::{BufReader};
 use std::sync::Arc;
+
 
 pub struct OrigData {
     pub node_qts: BTreeMap<i64, (Quadtree, Quadtree)>,
@@ -215,7 +216,8 @@ impl ReadPB {
 
 impl CallFinish for ReadPB {
     type CallType = (usize, FileBlock);
-    type ReturnType = Timings<OrigData>;
+    type ReturnType = Timings<OrigData>;    
+    type ErrorType = Error;
 
     fn call(&mut self, idx_blocks: (usize, FileBlock)) {
         let tx = ThreadTimer::new();
@@ -233,7 +235,7 @@ impl CallFinish for ReadPB {
 
         self.tm += tx.since();
     }
-    fn finish(&mut self) -> std::io::Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Self::ErrorType> {
         let mut tm = Timings::new(); //self.out.finish()?;
         tm.add("read_primitive_blocks_combine", self.tm);
         tm.add_other("origdata", self.origdata.take().unwrap());
@@ -249,16 +251,16 @@ fn read_change_tiles(
     pb: &Box<dyn ProgressPercent>,
     start_percent: f64,
     end_percent: f64
-) -> std::io::Result<(OrigData, f64)> {
+) -> Result<(OrigData, f64)> {
     let ischange = fname.ends_with(".pbfc");
     let mut file = File::open(fname)?;
     let (p, fb) = read_file_block_with_pos(&mut file, 0)?;
     if fb.block_type != "OSMHeader" {
-        return Err(Error::new(ErrorKind::Other, "first block not an OSMHeader"));
+        return Err(Error::PbfDataError("first block not an OSMHeader".to_string()));
     }
     let head = HeaderBlock::read(p, &fb.data(), fname)?;
     if head.index.is_empty() {
-        return Err(Error::new(ErrorKind::Other, "no locs in header"));
+        return Err(Error::PbfDataError("no locs in header".to_string()));
     }
     let mut locs = Vec::new();
 
@@ -272,7 +274,7 @@ fn read_change_tiles(
         read_all_blocks_locs_prog(&mut file, fname, locs, convert, pb, start_percent, end_percent)
     } else {
         let mut convs: Vec<
-            Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<OrigData>>>,
+            Box<dyn CallFinish<CallType = (usize, FileBlock), ReturnType = Timings<OrigData>, ErrorType = Error>>,
         > = Vec::new();
         for _ in 0..numchan {
             convs.push(Box::new(Callback::new(Box::new(ReadPB::new(
@@ -296,7 +298,7 @@ fn collect_existing(
     filelist: &Vec<FilelistEntry>,
     idset: Arc<IdSetSet>,
     numchan: usize,
-) -> std::io::Result<(OrigData, f64, f64)> {
+) -> Result<(OrigData, f64, f64)> {
     let mut origdata = OrigData::new();
     let mut total_scan = 0.0;
     let mut total_read = 0.0;
@@ -415,7 +417,7 @@ fn calc_qts(
     buffer: f64,
     st: i64,
     et: i64,
-) -> std::io::Result<BTreeMap<Quadtree, PrimitiveBlock>> {
+) -> Result<BTreeMap<Quadtree, PrimitiveBlock>> {
     let mut nq = BTreeSet::new();
     let mut rel_rels = Vec::new();
     let mut missing_nodes = 0;
@@ -434,7 +436,7 @@ fn calc_qts(
                             );
                             missing_nodes += 1;
                             if missing_nodes > MISSING_NODES_LIMIT {
-                                return Err(Error::new(ErrorKind::Other, "too many missing nodes"));
+                                return Err(Error::PbfDataError("too many missing nodes".to_string()));
                             }
                         } else {
                             bbox.expand(n.lon, n.lat);
@@ -444,7 +446,7 @@ fn calc_qts(
                         message!("[{}] missing node {} from {:?}", missing_nodes, r, w);
                         missing_nodes += 1;
                         if missing_nodes > MISSING_NODES_LIMIT {
-                            return Err(Error::new(ErrorKind::Other, "too many missing nodes"));
+                            return Err(Error::PbfDataError("too many missing nodes".to_string()));
                         }
                     }
                 }
@@ -669,12 +671,12 @@ fn calc_qts(
     Ok(res.blocks)
 }
 
-fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> std::io::Result<QuadtreeTree> {
+fn prep_tree(prfx: &str, filelist: &Vec<FilelistEntry>) -> Result<QuadtreeTree> {
     let fname = format!("{}{}", prfx, filelist[0].filename);
     let mut fobj = File::open(&fname)?;
     let (x, fb) = read_file_block_with_pos(&mut fobj, 0)?;
     if fb.block_type != "OSMHeader" {
-        return Err(Error::new(ErrorKind::Other, "first block not an OSMHeader"));
+        return Err(Error::PbfDataError("first block not an OSMHeader".to_string()));
     }
     let head = HeaderBlock::read(x, &fb.data(), &fname)?;
 
@@ -735,7 +737,7 @@ pub fn find_update(
     qt_buffer: f64,
     fname: &str,
     numchan: usize,
-) -> std::io::Result<(f64, usize)> {
+) -> Result<(f64, usize)> {
     let mut chgf = BufReader::new(File::open(change_filename)?);
 
     let compression_type = CompressionType::Zlib;

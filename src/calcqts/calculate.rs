@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use std::io::{BufReader, Error, ErrorKind, Result};
+use std::io::BufReader;
 
 use std::collections::BTreeMap;
 
@@ -10,13 +10,13 @@ use simple_protocolbuffers::{un_zig_zag, IterTags, PbfTag};
 
 use crate::pbfformat::{file_length, pack_file_block, ReadFileBlocks,CompressionType};
 
-use channelled_callbacks::{CallFinish, Callback, CallbackSync, CallAll, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackSync, CallAll, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::Quadtree;
 use crate::elements::QuadtreeBlock;
 use crate::pbfformat::HeaderType;
 use crate::pbfformat::WriteFile;
 
-use crate::utils::{LogTimes, Timer};
+use crate::utils::{LogTimes, Timer, Error, Result};
 
 use crate::calcqts::expand_wayboxes::{WayBoxesSimple, WayBoxesSplit, WayBoxesVec};
 use crate::calcqts::node_waynodes::{
@@ -106,11 +106,12 @@ struct StoreQtTile {
 impl CallFinish for StoreQtTile {
     type CallType = Box<QuadtreeTileInt>;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, t: Box<QuadtreeTileInt>) {
         self.qts.lock().unwrap().add_tile(t);
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         Ok(Timings::new())
     }
 }
@@ -383,11 +384,12 @@ where
 
 impl<T> CallFinish for ExpandNodeQuadtree<T>
 where
-    T: CallFinish<CallType = Vec<Box<QuadtreeBlock>>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<Box<QuadtreeBlock>>, ReturnType = Timings, ErrorType = Error>,
 {
     type CallType = Vec<NodeWayNodeComb>;
     //type ReturnType = (T::ReturnType, Box<dyn QuadtreeGetSet>, QuadtreeSimple);
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, nn: Vec<NodeWayNodeComb>) {
         let tx = Timer::new();
@@ -436,7 +438,7 @@ where
         self.outb.call(bl);
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Self::ReturnType, Error> {
         self.outb.call(vec![std::mem::replace(
             &mut self.curr,
             Box::new(QuadtreeBlock::new()),
@@ -462,7 +464,7 @@ struct DontFinishArc<T> {
 
 impl<T> DontFinishArc<T>
 where
-    T: CallFinish<ReturnType = Timings>,
+    T: CallFinish<ReturnType = Timings, ErrorType = Error>,
 {
     pub fn new(t: Arc<Mutex<Box<T>>>) -> DontFinishArc<T> {
         DontFinishArc { t: t }
@@ -471,16 +473,17 @@ where
 
 impl<T> CallFinish for DontFinishArc<T>
 where
-    T: CallFinish<ReturnType = Timings>,
+    T: CallFinish<ReturnType = Timings, ErrorType=Error>,
 {
     type CallType = <T as CallFinish>::CallType;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, x: Self::CallType) {
         self.t.lock().unwrap().call(x);
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         Ok(Timings::new())
         //self.t.lock().unwrap().finish()
     }
@@ -499,12 +502,13 @@ impl DontFinish {
 impl CallFinish for DontFinish {
     type CallType = <WriteQuadTree as CallFinish>::CallType;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, x: Self::CallType) {
         self.t.as_mut().unwrap().call(x);
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let o = self.t.take().unwrap();
         let mut f = Timings::new();
         f.add_other("writequadtree", OtherData::WriteQuadTree(o));
@@ -534,18 +538,19 @@ where
 
 impl<T, U> CallFinish for FlattenCF<T, U>
 where
-    T: CallFinish<CallType = U, ReturnType = Timings>,
+    T: CallFinish<CallType = U, ReturnType = Timings, ErrorType=Error>,
     U: Sync + Send + 'static,
 {
     type CallType = Vec<U>;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, us: Vec<U>) {
         for u in us {
             self.out.call(u);
         }
     }
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         self.out.finish()
     }
 }
@@ -1012,8 +1017,7 @@ pub fn run_calcqts(
         }
         Some("FLATVEC") => {}
         Some(x) => {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::UserSelectionError(
                 format!("unexpected mode {}", x),
             ));
         }
@@ -1028,8 +1032,7 @@ pub fn run_calcqts(
     let outfn = &outfn_;
 
     if use_simple && fl > (ram_gb as u64)*1024 {
-        return Err(Error::new(
-            ErrorKind::Other,
+        return Err(Error::UserSelectionError(
             format!("run_calcqts mode = SIMPLE only suitable for pbf files smaller than {}gb",ram_gb),
         ));
     }

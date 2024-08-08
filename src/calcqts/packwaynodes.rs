@@ -3,21 +3,19 @@ use simple_protocolbuffers::{
     PackedInt, PbfTag,
 };
 
-use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings};
+use channelled_callbacks::{CallFinish, Callback, CallbackMerge, CallbackSync, MergeTimings, ReplaceNoneWithTimings, Result as ccResult};
 use crate::elements::{MinimalBlock, Quadtree};
 use crate::pbfformat::{
     pack_file_block, read_all_blocks_with_progbar, unpack_file_block, FileBlock, FileLocs,
     HeaderType, WriteFile,CompressionType
 };
 
-use crate::utils::ThreadTimer;
+use crate::utils::{ThreadTimer, Error, Result};
 use crate::message;
 use crate::calcqts::quadtree_store::{QuadtreeGetSet, QuadtreeSimple};
 use crate::calcqts::{CallFinishFileBlocks, OtherData, Timings, WayNodeVals};
 
 use std::fmt;
-use std::io::{Error, ErrorKind, Result};
-//use std::sync::Arc;
 
 pub struct WayNodeTile {
     key: i64,
@@ -100,7 +98,7 @@ impl WayNodeTile {
             match tg {
                 PbfTag::Value(1, k) => {
                     if self.key != 0 && un_zig_zag(k) != self.key {
-                        return Err(Error::new(ErrorKind::Other, "wrong key"));
+                        return Err(Error::PbfDataError("wrong key".to_string()));
                     }
                 }
                 PbfTag::Data(2, nn) => {
@@ -116,7 +114,7 @@ impl WayNodeTile {
                     self.vals.reserve(l as usize + ti);
                 }
                 _ => {
-                    return Err(Error::new(ErrorKind::Other, "unexpected tag"));
+                    return Err(Error::PbfDataError("unexpected tag".to_string()));
                 }
             };
         }
@@ -184,28 +182,17 @@ impl CollectTilesStore {
 impl CallFinish for CollectTilesStore /*<'_>*/ {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
-
+    type ErrorType = Error;
+    
     fn call(&mut self, p: Self::CallType) {
-        //let vals = self.vals.as_mut().unwrap();
+
         let tt = ThreadTimer::new();
-        //let vals = Arc::get_mut(&mut self.vals).unwrap();
-        /*for (qi, qd) in p {
-            let qv = qi as usize;
-
-            if qv >= self.vals.len() {
-                for i in self.vals.len()..qv + 1 {
-                    self.vals.push((i as i64, Vec::new()));
-                }
-            }
-            self.vals[qv].1.push(qd);
-        }*/
-
         self.vals.extend(p);
 
         self.tm += tt.since();
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let mut tt = Timings::new();
         self.vals.sort();
         tt.add("collecttilestore", self.tm);
@@ -226,7 +213,7 @@ struct WriteWayNodeTemp<T: ?Sized> {
 
 impl<T> WriteWayNodeTemp<T>
 where
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = (f64, FileLocs)> + ?Sized,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = (f64, FileLocs), ErrorType = Error> + ?Sized,
 {
     pub fn new(ww: Box<T>, fname: String, pending_size: usize) -> WriteWayNodeTemp<T> {
         WriteWayNodeTemp {
@@ -240,10 +227,11 @@ where
 
 impl<T> CallFinish for WriteWayNodeTemp<T>
 where
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = (f64, FileLocs)> + ?Sized,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = (f64, FileLocs), ErrorType = Error> + ?Sized,
 {
     type CallType = Vec<(i64, Vec<u8>)>;
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, bls: Self::CallType) {
         if self.pending_size == 0 {
@@ -260,7 +248,7 @@ where
         self.pending.extend(bls);
     }
 
-    fn finish(&mut self) -> Result<Timings> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         if !self.pending.is_empty() {
             let mut tt = std::mem::take(&mut self.pending);
             tt.sort();
@@ -620,11 +608,12 @@ where
 
 impl<T> CallFinish for PackWayNodes<T>
 where
-    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings>,
+    T: CallFinish<CallType = Vec<(i64, Vec<u8>)>, ReturnType = Timings, ErrorType = Error>,
 {
     type CallType = (usize, FileBlock);
     //type ReturnType=(RelMems,T::ReturnType);
     type ReturnType = Timings;
+    type ErrorType = Error;
 
     fn call(&mut self, fb: Self::CallType) {
         let tt = ThreadTimer::new();
@@ -633,7 +622,7 @@ where
         self.outcall.call(pp);
     }
 
-    fn finish(&mut self) -> Result<Self::ReturnType> {
+    fn finish(&mut self) -> ccResult<Timings, Error> {
         let tt = ThreadTimer::new();
         let pp = self.add_remaining();
         let x = tt.since();
@@ -734,7 +723,7 @@ pub fn prep_way_nodes_tempfile(
     let progmsg = format!("prep_way_nodes_tempfile for {}, numchan={}", infn, numchan);
     let tempfn = format!("{}-waynodestemp", outfn);
 
-    let ww: Box<dyn CallFinish<CallType=Vec<(i64,Vec<u8>)>,ReturnType=(f64,FileLocs)>> = //if numchan == 0 {
+    let ww: Box<dyn CallFinish<CallType=Vec<(i64,Vec<u8>)>,ReturnType=(f64,FileLocs), ErrorType = Error>> = //if numchan == 0 {
         Box::new(WriteFile::new(&tempfn, HeaderType::None));
     //} else {
     //    Box::new(Callback::new(Box::new(WriteFile::new(&tempfn, HeaderType::None))))

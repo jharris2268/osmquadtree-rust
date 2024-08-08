@@ -7,8 +7,7 @@ use simple_protocolbuffers::{
 };
 
 use std::cmp::Ordering;
-use std::io;
-use std::io::{Error, ErrorKind};
+use crate::utils::{Error, Result};
 
 #[derive(Debug, Clone, Eq)]
 pub struct MinimalNode {
@@ -280,7 +279,7 @@ impl MinimalBlock {
         location: u64,
         data: &[u8],
         ischange: bool,
-    ) -> Result<MinimalBlock, Error> {
+    ) -> Result<MinimalBlock> {
         MinimalBlock::read_parts(index, location, data, ischange, true, true, true)
     }
 
@@ -295,7 +294,7 @@ impl MinimalBlock {
         readnodes: bool,
         readways: bool,
         readrelations: bool,
-    ) -> Result<MinimalBlock, Error> {
+    ) -> Result<MinimalBlock> {
         let mut res = MinimalBlock::new();
         res.index = index;
         res.location = location;
@@ -313,33 +312,33 @@ impl MinimalBlock {
                 
                 PbfTag::Value(17, granularity) => {
                     if granularity != 100 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected granuality [{}!=100]", granularity)));
+                        return Err(Error::PbfDataError(format!("unexpected granuality [{}!=100]", granularity)));
                     }
                 },
                 PbfTag::Value(18, date_granularity) => {
                     if date_granularity != 1000 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected date_granularity [{}!=1000]", date_granularity)));
+                        return Err(Error::PbfDataError(format!("unexpected date_granularity [{}!=1000]", date_granularity)));
                     }
                 },
                 PbfTag::Value(19, lat_offset) => {
                     if lat_offset != 0 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected lat_offset [{}!=0]", lat_offset)));
+                        return Err(Error::PbfDataError(format!("unexpected lat_offset [{}!=0]", lat_offset)));
                     }
                 },
                 PbfTag::Value(20, lon_offset) => {
                     if lon_offset != 0 {
-                        return Err(Error::new(ErrorKind::Other, format!("unexpected lon_offset [{}!=0]", lon_offset)));
+                        return Err(Error::PbfDataError(format!("unexpected lon_offset [{}!=0]", lon_offset)));
                     }
                 },
                 
-                _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
+                _ => return Err(Error::PbfDataError("unexpected item".to_string())),
             }
         }
 
         for g in groups {
             let ct = MinimalBlock::find_changetype(&g, ischange);
             res.read_group(ct, &g, readnodes, readways, readrelations)?;
-            drop(g);
+            
         }
 
         Ok(res)
@@ -365,7 +364,7 @@ impl MinimalBlock {
         readnodes: bool,
         readways: bool,
         readrelations: bool,
-    ) -> Result<u64, Error> {
+    ) -> Result<u64> {
         let mut count = 0;
         for x in IterTags::new(&data) {
             match x {
@@ -390,13 +389,13 @@ impl MinimalBlock {
                     }
                 }
                 PbfTag::Value(10, _) => {}
-                _ => return Err(Error::new(ErrorKind::Other, "unexpected item")),
+                _ => return Err(Error::PbfDataError("unexpected item".to_string())),
             }
         }
         Ok(count)
     }
 
-    fn read_node(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
+    fn read_node(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64> {
         let mut nd = MinimalNode::new();
         nd.changetype = changetype;
         for x in IterTags::new(&data) {
@@ -421,7 +420,7 @@ impl MinimalBlock {
         self.nodes.push(nd);
         Ok(1)
     }
-    fn read_way(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
+    fn read_way(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64> {
         let mut wy = MinimalWay::new();
         wy.changetype = changetype;
         for x in IterTags::new(&data) {
@@ -445,7 +444,7 @@ impl MinimalBlock {
         self.ways.push(wy);
         Ok(1)
     }
-    fn read_relation(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
+    fn read_relation(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64> {
         let mut rl = MinimalRelation::new();
         rl.changetype = changetype;
         for x in IterTags::new(&data) {
@@ -470,7 +469,7 @@ impl MinimalBlock {
         self.relations.push(rl);
         Ok(1)
     }
-    fn read_dense(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64, Error> {
+    fn read_dense(&mut self, changetype: Changetype, data: &[u8]) -> Result<u64> {
         let mut ids = Vec::new();
         let mut lons = Vec::new();
         let mut lats = Vec::new();
@@ -504,34 +503,29 @@ impl MinimalBlock {
             return Ok(0);
         }
         if lats.len() > 0 && lats.len() != ids.len() {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("dense nodes: {} ids but {} lats", ids.len(), lats.len()),
             ));
         }
         if lons.len() > 0 && lons.len() != ids.len() {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("dense nodes: {} ids but {} lons", ids.len(), lons.len()),
             ));
         }
         if qts.len() > 0 && qts.len() != ids.len() {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("dense nodes: {} ids but {} qts", ids.len(), qts.len()),
             ));
         }
 
         if vs.len() > 0 && vs.len() != ids.len() {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::PbfDataError(
                 format!("dense nodes: {} ids but {} infos", ids.len(), vs.len()),
             ));
         }
         if ts.len() > 0 && ts.len() != ids.len() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("dense nodes: {} ids but {} timestamps", ids.len(), ts.len()),
+            return Err(Error::PbfDataError(
+                format!("dense nodes: {} ids but {} timestamps", ids.len(), ts.len())
             ));
         }
 
@@ -574,7 +568,7 @@ pub struct QuadtreeBlock {
     pub relations: Vec<(i64, Quadtree)>,
 }
 
-fn unpack_id_qt(data: &[u8]) -> io::Result<(i64, Quadtree)> {
+fn unpack_id_qt(data: &[u8]) -> Result<(i64, Quadtree)> {
     let mut i = 0;
     let mut qt = -1;
     for t in IterTags::new(data) {
@@ -589,15 +583,15 @@ fn unpack_id_qt(data: &[u8]) -> io::Result<(i64, Quadtree)> {
         }
     }
     if i == 0 {
-        return Err(Error::new(ErrorKind::Other, "no id"));
+        return Err(Error::PbfDataError("no id".to_string()));
     }
     if qt == -1 {
-        return Err(Error::new(ErrorKind::Other, "no qt"));
+        return Err(Error::PbfDataError("no qt".to_string()));
     }
     Ok((i, Quadtree::new(qt)))
 }
 
-fn unpack_dense(nodes: &mut Vec<(i64, Quadtree)>, data: &[u8]) -> io::Result<()> {
+fn unpack_dense(nodes: &mut Vec<(i64, Quadtree)>, data: &[u8]) -> Result<()> {
     let mut nn = Vec::new();
     let mut qq = Vec::new();
 
@@ -613,13 +607,13 @@ fn unpack_dense(nodes: &mut Vec<(i64, Quadtree)>, data: &[u8]) -> io::Result<()>
         }
     }
     if nn.is_empty() {
-        return Err(Error::new(ErrorKind::Other, "no id"));
+        return Err(Error::PbfDataError("no id".to_string()));
     }
     if qq.is_empty() {
-        return Err(Error::new(ErrorKind::Other, "no qt"));
+        return Err(Error::PbfDataError("no qt".to_string()));
     }
     if nn.len() != qq.len() {
-        return Err(Error::new(ErrorKind::Other, "id.len()!=qt.len()"));
+        return Err(Error::PbfDataError("id.len()!=qt.len()".to_string()));
     }
     nodes.reserve(nodes.len() + nn.len());
     nodes.extend(nn.iter().zip(qq).map(|(a, b)| (*a, Quadtree::new(b))));
@@ -664,7 +658,7 @@ impl QuadtreeBlock {
         self.relations.push((n, q));
     }
 
-    pub fn pack(&mut self) -> io::Result<Vec<u8>> {
+    pub fn pack(&mut self) -> Result<Vec<u8>> {
         let mut res = Vec::new();
         if !self.nodes.is_empty() {
             self.nodes.sort_by_key(|(x, _)| *x);
@@ -746,7 +740,7 @@ impl QuadtreeBlock {
         r2
     }
 
-    pub fn unpack(i: i64, loc: u64, data: &[u8]) -> io::Result<QuadtreeBlock> {
+    pub fn unpack(i: i64, loc: u64, data: &[u8]) -> Result<QuadtreeBlock> {
         let mut r = QuadtreeBlock {
             idx: i,
             loc: loc,

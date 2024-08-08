@@ -5,6 +5,85 @@ use std::sync::atomic::{AtomicUsize,Ordering};
 use std::io::{Error,ErrorKind};
 
 
+
+pub trait Messenger {
+    fn message(&self, message: &str);
+    
+    fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes>;
+    fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent>;
+    
+    fn start_task_sequence(&self, message: &str, num_tasks: usize) -> Box<dyn TaskSequence>;
+    
+}
+
+struct NopProgressBytes;
+
+impl ProgressBytes for NopProgressBytes {
+    fn change_message(&self, _new_message: &str) {}
+    fn progress_bytes(&self, _bytes: u64) {}
+    fn finish(&self) {}
+}
+
+struct NopProgressPercent;
+impl ProgressPercent for NopProgressPercent {
+    fn change_message(&self, _new_message: &str) {}
+    fn progress_percent(&self, _percent: f64) {}
+    fn finish(&self) {}
+}
+
+struct NopTaskSequence;
+impl TaskSequence for NopTaskSequence {
+    fn start_task(&self, _message: &str) {}
+    fn finish(&self) {}
+}
+
+
+    
+
+
+struct NopMessenger;
+impl Messenger for NopMessenger {
+    fn message(&self, _message: &str) {}
+    
+    fn start_progress_bytes(&self, _message: &str, _total_bytes: u64) -> Box<dyn ProgressBytes> {
+        Box::new(NopProgressBytes)
+    }
+    
+    fn start_progress_percent(&self, _message: &str)  -> Box<dyn ProgressPercent> {
+        Box::new(NopProgressPercent)
+    }
+    
+    fn start_task_sequence(&self, _message: &str, _num_tasks: usize) -> Box<dyn TaskSequence> {
+        Box::new(NopTaskSequence)
+    }
+    
+}
+
+/*
+
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref MESSENGER: Mutex<Vec<Box<dyn Messenger>>> = Mutex::new(vec![Box::new(NopMessenger{})]);
+}
+
+
+
+pub fn set_boxed_messenger(logger: Box<dyn Messenger>) -> std::io::Result<()> {
+    let mut x = MESSENGER.lock()?;
+
+    x.push(logger);
+    x.pop_first();
+
+    Ok(())
+}
+pub fn messenger() -> &'static dyn Messenger {
+
+    MESSENGER.lock().unwrap()
+}
+*/
+
 static mut MESSENGER: &dyn Messenger = &NopMessenger;
 
 static STATE: AtomicUsize = AtomicUsize::new(0);
@@ -63,6 +142,7 @@ where
         _ => set_messenger_error(),
     }
 }
+
 pub fn messenger() -> &'static dyn Messenger {
     if STATE.load(Ordering::SeqCst) != 2 {
         static NOP: NopMessenger = NopMessenger;
@@ -71,6 +151,8 @@ pub fn messenger() -> &'static dyn Messenger {
         unsafe { MESSENGER }
     }
 }
+
+
 
 pub trait ProgressBytes {
     fn change_message(&self, new_message: &str);
@@ -113,60 +195,6 @@ impl<'a, T> ProgressPercentPartial<'a, T>
     pub fn new(inner: &'a Box<T>, start: f64, end: f64) -> ProgressPercentPartial<'a, T> {
         ProgressPercentPartial{inner, start, end}
     }
-}
-
-
-pub trait Messenger {
-    fn message(&self, message: &str);
-    
-    fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes>;
-    fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent>;
-    
-    fn start_task_sequence(&self, message: &str, num_tasks: usize) -> Box<dyn TaskSequence>;
-    
-}
-
-struct NopProgressBytes;
-
-impl ProgressBytes for NopProgressBytes {
-    fn change_message(&self, _new_message: &str) {}
-    fn progress_bytes(&self, _bytes: u64) {}
-    fn finish(&self) {}
-}
-
-struct NopProgressPercent;
-impl ProgressPercent for NopProgressPercent {
-    fn change_message(&self, _new_message: &str) {}
-    fn progress_percent(&self, _percent: f64) {}
-    fn finish(&self) {}
-}
-
-struct NopTaskSequence;
-impl TaskSequence for NopTaskSequence {
-    fn start_task(&self, _message: &str) {}
-    fn finish(&self) {}
-}
-
-
-    
-
-
-struct NopMessenger;
-impl Messenger for NopMessenger {
-    fn message(&self, _message: &str) {}
-    
-    fn start_progress_bytes(&self, _message: &str, _total_bytes: u64) -> Box<dyn ProgressBytes> {
-        Box::new(NopProgressBytes)
-    }
-    
-    fn start_progress_percent(&self, _message: &str)  -> Box<dyn ProgressPercent> {
-        Box::new(NopProgressPercent)
-    }
-    
-    fn start_task_sequence(&self, _message: &str, _num_tasks: usize) -> Box<dyn TaskSequence> {
-        Box::new(NopTaskSequence)
-    }
-    
 }
 
 
