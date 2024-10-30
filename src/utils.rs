@@ -7,7 +7,10 @@ pub enum Error {
     Io(std::io::Error),
     Ureq(ureq::Error),
     SerdeJson(serde_json::Error),
+    QuickXml(quick_xml::Error),
     NotImplementedError,
+    
+    Utf8Error(std::str::Utf8Error),
     
     TimeFormatError(std::string::String),
     PbfDataError(std::string::String),
@@ -58,6 +61,16 @@ impl std::convert::From<channelled_callbacks::Error::<Error>> for Error {
         }
     }
 }
+impl std::convert::From<quick_xml::Error> for Error {
+    fn from(e: quick_xml::Error) -> Self {
+        return Error::QuickXml(e)
+    }
+}
+impl std::convert::From<std::str::Utf8Error> for Error {
+    fn from(e: std::str::Utf8Error) -> Self {
+        return Error::Utf8Error(e)
+    }
+}
 
 impl std::fmt::Display for Error {
     
@@ -66,6 +79,8 @@ impl std::fmt::Display for Error {
             Error::Io(e) => write!(f, "std::io::Error {}", e),
             Error::Ureq(e) => write!(f, "ureq::Error {}", e),
             Error::SerdeJson(e) => write!(f, "serde_json::Error {}", e),
+            Error::QuickXml(e) => write!(f, "quick_xml::Error {}", e),
+            Error::Utf8Error(e) => write!(f, "std::str::Utf8Error {}", e),
             Error::NotImplementedError => write!(f, "NotImplementedError"),
             Error::TimeFormatError(e) => write!(f, "TimeFormatError: {}", e),
             Error::PbfDataError(e) => write!(f, "PbfDataError: {}", e),

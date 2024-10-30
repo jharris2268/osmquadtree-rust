@@ -37,7 +37,7 @@ fn get_value<'a>(kv: &quick_xml::events::attributes::Attribute<'a>) -> String {
 }
 
 
-fn ele_str(w: &str, e: &BytesStart) -> quick_xml::Result<String> {
+fn ele_str(w: &str, e: &BytesStart) -> Result<String> {
     let n = String::from(std::str::from_utf8(e.name().as_ref())?);
     let mut sl: Vec<String> = Vec::new();
     for a in e.attributes() {
