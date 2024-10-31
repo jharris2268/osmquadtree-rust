@@ -57,7 +57,7 @@ pub fn make_read_primitive_blocks_combine_call_all<
 }
 
 struct Rpbccai<O, V> {
-    out: Box<O>,
+    out: Box<O>, 
     ids: Arc<dyn IdSet>,
     filter_relations: bool,
     x: PhantomData<V>,

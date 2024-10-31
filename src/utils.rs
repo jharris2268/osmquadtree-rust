@@ -20,6 +20,7 @@ pub enum Error {
     ExternalCallError(std::string::String),
     UnexpectedResponseError(std::string::String),
     ChannelledCallbackError(std::string::String),
+    InvalidDataError(std::string::String)
 }
 
 impl std::error::Error for Error {
@@ -90,6 +91,7 @@ impl std::fmt::Display for Error {
             Error::ExternalCallError(e) => write!(f, "ExternalCallError: {}", e),
             Error::UnexpectedResponseError(e) => write!(f, "UnexpectedResponseError: {}", e),
             Error::ChannelledCallbackError(e) => write!(f, "ChannelledCallbackError: {}", e),
+            Error::InvalidDataError(e) => write!(f, "InvalidDataError: {}", e),
         }
         
     }
