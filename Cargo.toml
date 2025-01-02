@@ -36,6 +36,11 @@ rust-lzma = "0.6"
 
 lazy_static="*"
 
+pyo3 = { version="0.23", optional = true}
+
+
 [profile.release]
 #debug = true
 
+[features]
+python=["dep:pyo3"]
