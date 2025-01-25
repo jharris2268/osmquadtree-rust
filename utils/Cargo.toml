@@ -16,6 +16,6 @@ console = "*"
 
 
 
-osmquadtree = { path = "../" }
-
+#osmquadtree = { path = "../" }
+osmquadtree = { git = "https://github.com/jharris2268/osmquadtree-rust.git", branch = "main" }
 
