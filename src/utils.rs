@@ -1,5 +1,10 @@
 use std::fmt;
+use std::io::Read;
 //use std::io::{Error, ErrorKind, Result};
+
+
+
+
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -96,6 +101,17 @@ impl std::fmt::Display for Error {
         
     }
 }
+
+#[cfg(feature = "python")]
+impl std::convert::From<Error> for pyo3::PyErr {
+    
+    fn from(err: Error) -> pyo3::PyErr {
+        pyo3::exceptions::PyOSError::new_err(format!("{}", err))
+    }
+}
+    
+    
+
     
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -298,3 +314,14 @@ pub fn as_int(v: f64) -> i32 {
     return ((v * 10000000.0) + 0.5) as i32;
 }
 
+
+pub fn at_end_of_file<R: Read>(f: &mut R) -> Result<bool> {
+    
+    let mut x: [u8;1] = [0];
+    
+    match f.read(&mut x) {
+        Ok(0) => Ok(true),
+        Ok(_) => Ok(false),
+        Err(e) => Err(Error::Io(e))
+    }
+}

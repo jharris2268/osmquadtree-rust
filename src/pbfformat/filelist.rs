@@ -9,7 +9,7 @@ use crate::message;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
-use crate::utils::{Error, Result};
+use crate::utils::{Error, Result, at_end_of_file};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -114,6 +114,10 @@ fn check_entry_depth(max_depth: &Option<usize>, test_depth: &usize) -> bool {
     }
 }
 
+
+
+    
+
 pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Option<i64>, max_depth: Option<usize>) -> Result<ParallelFileLocs> {
     
 
@@ -153,9 +157,15 @@ pub fn get_file_locs_max_depth(prfx: &str, filter: Option<Bbox>, timestamp: Opti
         let head = HeaderBlock::read(filepos, &fb.data(), &fle_fn)?;
 
         if head.index.is_empty() {
-            return Err(Error::PbfDataError(
-                format!("no locations in header for {}", &fle_fn)
-            ));
+            if at_end_of_file(&mut fbuf)? {
+                message!("filelist entry {} empty", fle.filename);
+                //continue
+            } else {
+            
+                return Err(Error::PbfDataError(
+                    format!("no locations in header for {}", &fle_fn)
+                ));
+            }
         }
 
         all_locs += head.index.len();

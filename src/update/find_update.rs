@@ -9,7 +9,7 @@ use crate::pbfformat::{
 use crate::sortblocks::{QuadtreeTree, WriteFileInternalLocs};
 
 use crate::update::{check_index_file, read_xml_change, ChangeBlock};
-use crate::utils::{ThreadTimer, Timer, Error, Result};
+use crate::utils::{ThreadTimer, Timer, Error, Result, at_end_of_file};
 use crate::{message,progress_percent};
 use crate::logging::{ProgressPercent};
 use std::collections::{BTreeMap, BTreeSet};
@@ -260,7 +260,11 @@ fn read_change_tiles(
     }
     let head = HeaderBlock::read(p, &fb.data(), fname)?;
     if head.index.is_empty() {
-        return Err(Error::PbfDataError("no locs in header".to_string()));
+        if at_end_of_file(&mut file)? {
+            message!("file {} empty", fname);
+        } else {
+            return Err(Error::PbfDataError(format!("file {} has no locs in header", fname)));
+        }
     }
     let mut locs = Vec::new();
 

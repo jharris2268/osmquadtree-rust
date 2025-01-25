@@ -459,6 +459,7 @@ pub struct Count {
     pub node: NodeCount,
     pub way: WayCount,
     pub relation: RelationCount,
+    pub num_blocks: i64,
 }
 impl Count {
     pub fn new() -> Count {
@@ -466,12 +467,14 @@ impl Count {
             node: NodeCount::new(),
             way: WayCount::new(),
             relation: RelationCount::new(),
+            num_blocks: 0
         }
     }
     pub fn add_other(&mut self, other: &Count) {
         self.node.add_other(&other.node);
         self.way.add_other(&other.way);
         self.relation.add_other(&other.relation);
+        self.num_blocks += other.num_blocks;
     }
 }
 impl CountBlocks for Count {
@@ -485,6 +488,7 @@ impl CountBlocks for Count {
         for rl in &bl.relations {
             self.relation.add(&rl);
         }
+        self.num_blocks+=1;
     }
 
     fn add_minimal(&mut self, mb: &MinimalBlock) {
@@ -497,6 +501,7 @@ impl CountBlocks for Count {
         for rl in &mb.relations {
             self.relation.add_minimal(&rl);
         }
+        self.num_blocks+=1;
     }
 }
 
@@ -515,6 +520,7 @@ pub struct CountChange {
     pub node: BTreeMap<Changetype, NodeCount>,
     pub way: BTreeMap<Changetype, WayCount>,
     pub relation: BTreeMap<Changetype, RelationCount>,
+    pub num_blocks: i64
 }
 impl CountChange {
     pub fn new() -> CountChange {
@@ -522,6 +528,7 @@ impl CountChange {
             node: BTreeMap::new(),
             way: BTreeMap::new(),
             relation: BTreeMap::new(),
+            num_blocks: 0,
         }
     }
     pub fn add_changeblock(&mut self, bl: &ChangeBlock) {
@@ -543,6 +550,7 @@ impl CountChange {
             }
             self.relation.get_mut(&rl.changetype).unwrap().add(&rl);
         }
+        
     }
 }
 impl CountBlocks for CountChange {
@@ -565,6 +573,7 @@ impl CountBlocks for CountChange {
             }
             self.relation.get_mut(&rl.changetype).unwrap().add(&rl);
         }
+        self.num_blocks+=1;
     }
 
     fn add_minimal(&mut self, bl: &MinimalBlock) {
@@ -590,6 +599,7 @@ impl CountBlocks for CountChange {
             }
             self.relation.get_mut(&ct).unwrap().add_minimal(&rl);
         }
+        self.num_blocks+=1;
     }
 }
 

@@ -1,4 +1,6 @@
-use std::io::{Error,ErrorKind,Result,Write};
+//use std::io::{Error,ErrorKind,Result,Write};
+use std::io::Write;
+use crate::utils::{Error, Result};
 use std::cmp::{Ordering};
 use crate::elements::{Element,Node,Way,Relation,Tag,Info,PrimitiveBlock};
 /*use crate::geometry::{
@@ -63,7 +65,7 @@ fn tags_different(left: &Vec<Tag>, right: &Vec<Tag>) -> bool {
 fn node_compare(left: Node, right: Node) -> Result<ElementCompare> {
     
     if left.id != right.id {
-        Err(Error::new(ErrorKind::Other, "different elements"))
+        Err(Error::InvalidDataError(format!("different elements")))
     } else if different_info(&left.info, &right.info) {
         Ok(ElementCompare::DifferentInfo(Element::Node(left), Element::Node(right)))
     } else if tags_different(&left.tags, &right.tags) {
@@ -90,7 +92,7 @@ fn way_compare(left: Way, right: Way) -> Result<ElementCompare> {
     
     
     if left.id != right.id {
-        Err(Error::new(ErrorKind::Other, "different elements"))
+        Err(Error::InvalidDataError(format!("different elements")))
     } else if different_info(&left.info, &right.info) {
         Ok(ElementCompare::DifferentInfo(Element::Way(left), Element::Way(right)))
     } else if tags_different(&left.tags, &right.tags) {
@@ -119,7 +121,7 @@ fn relation_compare(left: Relation, right: Relation) -> Result<ElementCompare> {
     
     
     if left.id != right.id {
-        Err(Error::new(ErrorKind::Other, "different elements"))
+        Err(Error::InvalidDataError(format!("different elements")))
     } else if different_info(&left.info, &right.info) {
         Ok(ElementCompare::DifferentInfo(Element::Relation(left), Element::Relation(right)))
     } else if tags_different(&left.tags, &right.tags) {
@@ -155,12 +157,12 @@ pub fn element_compare(left: Option<Element>, right: Option<Element>) -> Result<
                 (Element::LinestringGeometry(left), Element::LinestringGeometry(right)) => linestringgeometry_compare(left,right),
                 (Element::SimplePolygonGeometry(left), Element::SimplePolygonGeometry(right)) => simplepolygongeometry_compare(left,right),
                 (Element::ComplicatedPolygonGeometry(left), Element::ComplicatedPolygonGeometry(right)) => compliatedpolygongeometry_compare(left,right),*/
-                (_, _) => Err(Error::new(ErrorKind::Other, "different element types!!"))
+                (_, _) => Err(Error::InvalidDataError(format!("different element types!!")))
             }
         }
         (Some(left), None) => Ok(ElementCompare::OnlyLeft(left)),
         (None, Some(right)) => Ok(ElementCompare::OnlyRight(right)),
-        (None, None) => Err(Error::new(ErrorKind::Other, "no elements??"))
+        (None, None) => Err(Error::InvalidDataError(format!("no elements??")))
     }
 }
 
@@ -169,7 +171,7 @@ use std::collections::HashSet;
 
 fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Element>) -> Result<ElementCompare> {
     match (&left_ele, &right_ele) {
-        (None, None) => Err(Error::new(ErrorKind::Other, "??")),
+        (None, None) => Err(Error::InvalidDataError(format!("no data?"))),
         (Some(_), None) => Ok(ElementCompare::OnlyLeft(left_ele.take().unwrap())),
         (None, Some(_)) => Ok(ElementCompare::OnlyRight(right_ele.take().unwrap())),
         
@@ -179,7 +181,7 @@ fn check_left_right(left_ele: &mut Option<Element>, right_ele: &mut Option<Eleme
             
             match left.partial_cmp(&right) {
                 
-                None => { return Err(Error::new(ErrorKind::Other, format!("?? {:?} {:?}", left, right))); },
+                None => { return Err(Error::InvalidDataError(format!("?? {:?} {:?}", left, right))); },
                 Some(Ordering::Less) => {
                     Ok(ElementCompare::OnlyLeft(left_ele.take().unwrap()))
                     

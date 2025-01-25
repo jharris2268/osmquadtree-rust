@@ -336,7 +336,7 @@ fn main() {
             SubCommand::with_name("update")
                 .about("calculate update")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
+                .arg(Arg::with_name("LIMIT").short("-l").long("--limit").takes_value(true).help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
 
         )
@@ -344,7 +344,7 @@ fn main() {
             SubCommand::with_name("update_demo")
                 .about("calculate update")
                 .arg(Arg::with_name("INPUT").required(true).help("Sets the input directory to use"))
-                .arg(Arg::with_name("LIMIT").short("-l").long("--limit").help("only run LIMIT updates"))
+                .arg(Arg::with_name("LIMIT").short("-l").long("--limit").takes_value(true).help("only run LIMIT updates"))
                 .arg(Arg::with_name("NUMCHAN").short("-n").long("--numchan").takes_value(true).help("uses NUMCHAN parallel threads"))
 
         )
