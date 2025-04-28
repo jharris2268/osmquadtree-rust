@@ -5,6 +5,7 @@ authors = ["James Harris <jimbo.harris@gmail.com>"]
 edition = "2021"
 
 [workspace]
+members = ["gui"]
 
 [dependencies]
 
@@ -39,8 +40,10 @@ lazy_static="*"
 pyo3 = { version="0.23", optional = true}
 
 
+
 [profile.release]
 #debug = true
 
 [features]
 python=["dep:pyo3"]
+
