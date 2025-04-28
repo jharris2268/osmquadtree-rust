@@ -8,3 +8,5 @@ gtk = { version = "0.9.6", package = "gtk4", features = ["v4_6"] }
 
 clap="*"
 osmquadtree = { git = "https://github.com/jharris2268/osmquadtree-rust.git", branch = "main" }
+#osmquadtree_utils = {path = "../utils/" }
+osmquadtree-utils = { git = "https://github.com/jharris2268/osmquadtree-rust.git", branch = "main" }

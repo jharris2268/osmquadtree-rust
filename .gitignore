@@ -7,6 +7,6 @@ __pycache__/
 **/*filelocs.json
 **/*.pbf
 **/*.xml
-utils_main.rs_prev
+**/*.rs_prev
 gui_wxremote
 
