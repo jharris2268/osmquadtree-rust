@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+    <template class="MessagePanel" parent="GtkBox">
+        <property name="orientation">vertical</property>
+        <property name="hexpand">true</property>
+        <property name="vexpand">true</property>-->
+        <child>
+            <object class="GtkTextView" id="messages_text_view">
+                <property name="valign">end</property>
+                <property name="editable">false</property>
+                <property name="cursor-visible">false</property>
+                <property name="monospace">true</property>
+                <property name="hexpand">true</property>
+                <property name="height-request">250</property>
+            </object>
+        </child>
+                
+        <child>
+            <object class="GtkBox">
+                <property name="orientation">horizontal</property>
+                <child>
+                    <object class="GtkLabel" id="progress_label_left">
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>  
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkProgressBar" id="progress_bar">
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>  
+                    </object>
+                </child>
+                
+                <child>
+                    <object class="GtkLabel" id="progress_label_right">
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>  
+                    </object>
+                </child>
+            
+            </object>
+        </child>
+        <child>
+            <object class="GtkBox">
+                <property name="orientation">horizontal</property>
+            
+                <child>
+                    <object class="GtkButton" id="message_clear_button">
+                        <property name="label">Clear</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>  
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkButton" id="message_copy_button">
+                        <property name="label">Copy To Clipboard</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>  
+                    </object>
+                </child>
+            </object>
+        </child>
+    </template>
+</interface>
