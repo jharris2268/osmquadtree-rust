@@ -13,6 +13,9 @@ use glib::clone;
 
 const APP_ID: &str = "uk.me.jamesharris.OsmquadtreeGui";
 
+use std::sync::{Arc,Mutex};
+
+
 use clap::{Command,Arg};
 
 //use std::collections::{BTreeMap,VecDeque};
@@ -20,9 +23,13 @@ use clap::{Command,Arg};
 use crate::message_panel::MessagePanel;
 
 fn run_cmd<T: AsRef<std::ffi::OsStr> + std::fmt::Display >(cmd: &[T]) -> Result<()> {
-    
+    println!("called run_cmd");
     let app = make_app();
-    let xx = app.get_matches_from(cmd);
+    println!("made app");
+    
+    let xx = app.try_get_matches_from(cmd)?;
+    println!("got matches");
+    
     if let Some((a,b)) = xx.subcommand() {
         let defaults = Defaults::new();
         println!("call {} with {:?}", a, b);
@@ -168,7 +175,14 @@ fn is_entry(a: &Arg) -> bool {
     false
 }
 
-fn build_subcommand_page(cmd: &Command) -> impl IsA<Widget> {
+#[derive(PartialEq,Debug)]
+enum TaskStatus {
+    Running,
+    NotRunning
+}
+
+
+fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> impl IsA<Widget> {
     
     let mut entries = Vec::new();
     
@@ -243,19 +257,45 @@ fn build_subcommand_page(cmd: &Command) -> impl IsA<Widget> {
             .build();
         
     grid.attach(&run_button, 3, row_idx, 1, 1);
+    
+    
+    
+    
     run_button.connect_clicked(move |_| {
         
+          
+        match task_status.lock() {
+            Ok(mut t) => {
+                println!("TaskStatus: {:?}", t);
+                if *t == TaskStatus::Running {
+                    message!("task already running...");
+                    return;
+                } else {
+                    *t = TaskStatus::Running
+                }
+                println!("TaskStatus: {:?}", t);
+            },
+            Err(e) => {
+                message!("?? {:?}", e);
+                return;
+            }
+        }
+        println!("TaskStatus: {:?}", task_status.lock());
+        let task_status_clone = task_status.clone();
         let args = prep_args(&name, &entries);
-        
-        //println!("run {} {:?}", name, args);
-        gio::spawn_blocking(move || {
-            if let Err(e) = run_cmd(&args) { 
-                message!("run_cmd failed?? {:?}, {:?}", args, e);
-            }               
-            
-        });
+        gio::spawn_blocking(clone!(
+            move || {
+                if let Err(e) = run_cmd(&args) { 
+                    message!("run_cmd failed?? {:?}, {:?}", args, e);
+                }               
+                
+                *task_status_clone.lock().unwrap() = TaskStatus::NotRunning;
+            }
+        ));
         
     });   
+    
+    
     
     grid
     
@@ -264,25 +304,13 @@ fn build_subcommand_page(cmd: &Command) -> impl IsA<Widget> {
 
 
 fn add_subcommand_pages(stack: &Stack, cmd: &Command) {
-//fn add_subcommand_pages(notebook: &Notebook, cmd: &Command) {
-    /*
-    for i in 0..8 {
-        let name = format!("page {:02}", i);
-        let grid = Grid::builder()
-            .build();
-               
-        let name_label = Label::builder()
-            .use_markup(true)
-            .build();
-        name_label.set_markup(&format!("<span size=\"x-large\">{}</span>", &name));
-        grid.attach(&name_label, 0, 0, 4, 1);
-        add_notebook_page(notebook, &name, &grid);
-    }*/
-    
+
+    let task_status = Arc::new(Mutex::new(TaskStatus::NotRunning));
     
     if !(cmd.has_subcommands() && cmd.is_subcommand_required_set()) {
         
-        let page = build_subcommand_page(cmd);
+        let page = build_subcommand_page(cmd, task_status.clone());
+        
         let name = cmd.get_name();
         
         //add_notebook_page(notebook, name, &page);

@@ -5,6 +5,7 @@ pub enum Error {
     
     Dialoguer(dialoguer::Error),
     Io(std::io::Error),
+    Clap(clap::Error),
     Osmquadtree(osmquadtree::utils::Error),
     OutputFileExists(std::string::String),
     InvalidInputError(std::string::String),
@@ -17,6 +18,12 @@ impl std::error::Error for Error {}
 impl std::convert::From<dialoguer::Error> for Error {
     fn from(e: dialoguer::Error) -> Self {
         Error::Dialoguer(e)
+    }
+}
+
+impl std::convert::From<clap::Error> for Error {
+    fn from(e: clap::Error) -> Self {
+        Error::Clap(e)
     }
 }
 
