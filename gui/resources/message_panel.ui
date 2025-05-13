@@ -5,13 +5,21 @@
         <property name="hexpand">true</property>
         <property name="vexpand">true</property>-->
         <child>
-            <object class="GtkTextView" id="messages_text_view">
-                <property name="valign">end</property>
-                <property name="editable">false</property>
-                <property name="cursor-visible">false</property>
-                <property name="monospace">true</property>
-                <property name="hexpand">true</property>
-                <property name="height-request">250</property>
+            <object class="GtkScrolledWindow" id="scrolled_window">
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <child>
+                    <object class="GtkTextView" id="messages_text_view">
+                        <property name="valign">end</property>
+                        <property name="editable">false</property>
+                        <property name="cursor-visible">false</property>
+                        <property name="monospace">true</property>
+                        <property name="vexpand">false</property>
+                        <property name="height-request">250</property>
+                        <property name="hscroll-policy">minimum</property>
+                        <property name="vscroll-policy">minimum</property>
+                    </object>
+                </child>
             </object>
         </child>
                 
@@ -24,6 +32,7 @@
                         <property name="margin-bottom">12</property>
                         <property name="margin-start">12</property>
                         <property name="margin-end">12</property>  
+                        <property name="width-chars">40</property>
                     </object>
                 </child>
                 <child>
@@ -32,6 +41,7 @@
                         <property name="margin-bottom">12</property>
                         <property name="margin-start">12</property>
                         <property name="margin-end">12</property>  
+                        <property name="hexpand">true</property>
                     </object>
                 </child>
                 
@@ -40,7 +50,8 @@
                         <property name="margin-top">12</property>
                         <property name="margin-bottom">12</property>
                         <property name="margin-start">12</property>
-                        <property name="margin-end">12</property>  
+                        <property name="margin-end">12</property> 
+                        <property name="width-chars">80</property> 
                     </object>
                 </child>
             

@@ -9,7 +9,7 @@ edition = "2021"
 
 [dependencies]
 #clap="3"
-clap="*"
+clap={version="*", features = ["derive"] }
 num_cpus = "*"
 dialoguer = "*"
 sysinfo = "*"
@@ -29,3 +29,6 @@ name="oqt-dump-clap"
 path="src/oqt-dump-clap.rs"
 
 
+[[bin]]
+name="oqt-clap-new"
+path="src/clap_new.rs"

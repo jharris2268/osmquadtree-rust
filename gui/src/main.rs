@@ -1,14 +1,17 @@
 mod messages;
 mod message_panel;
 
-use osmquadtree_utils::clap::{make_app, run, Defaults};
+//use osmquadtree_utils::clap::{make_app, run, Defaults};
+
+use osmquadtree_utils::commands::{make_app, Defaults, run_app};
+
 use osmquadtree_utils::error::{Error, Result};
 use osmquadtree::message;
 
 use gtk::prelude::*;
 use gtk::{glib, gio, Application, ApplicationWindow, Box as GtkBox, Orientation, Label};
 use gtk::{Widget, ScrolledWindow, TextView, TextBuffer, Grid, Align, Stack, StackSidebar};
-use gtk::{Button, CheckButton, Entry};
+use gtk::{Button, CheckButton, Entry, FileDialog, ToggleButton};
 use glib::clone;
 
 const APP_ID: &str = "uk.me.jamesharris.OsmquadtreeGui";
@@ -16,13 +19,18 @@ const APP_ID: &str = "uk.me.jamesharris.OsmquadtreeGui";
 use std::sync::{Arc,Mutex};
 
 
-use clap::{Command,Arg};
+use clap::{Command,Arg,ValueHint};
 
 //use std::collections::{BTreeMap,VecDeque};
 //use messages::Message;
 use crate::message_panel::MessagePanel;
 
 fn run_cmd<T: AsRef<std::ffi::OsStr> + std::fmt::Display >(cmd: &[T]) -> Result<()> {
+    
+    let defaults = Defaults::new();
+    run_app(&defaults)
+    
+    /*
     println!("called run_cmd");
     let app = make_app();
     println!("made app");
@@ -36,7 +44,7 @@ fn run_cmd<T: AsRef<std::ffi::OsStr> + std::fmt::Display >(cmd: &[T]) -> Result<
         run(&defaults, a, b)
     } else {
         Err(Error::InvalidInputError(format!("{} invalid", cmd.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(" "))))
-    }
+    }*/
 }
 /*
 fn dump_cmd(lines: &mut Vec<String>, indent: usize, cmd: &clap::Command) {
@@ -182,7 +190,7 @@ enum TaskStatus {
 }
 
 
-fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> impl IsA<Widget> {
+fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win: &ApplicationWindow) -> impl IsA<Widget> {
     
     let mut entries = Vec::new();
     
@@ -204,16 +212,25 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> 
     
     for a in cmd.get_arguments() {
         
+        let mut tooltip = "".into();
+        if let Some(help) = a.get_help() {
+            tooltip = format!("{}", help);
+        }
+        
         let id_label = Label::builder()
             .label(&format!("{}", a.get_id()))
             .halign(Align::Start)
+            .tooltip_text(&tooltip)
             .build();
+        
+        
         grid.attach(&id_label, 0, row_idx, 1, 1);
         
         if let Some(s) = a.get_short() {
             let short_label = Label::builder()
                 .label(&format!("{}", s))
                 .halign(Align::Start)
+                .tooltip_text(&tooltip)
                 .build();
             grid.attach(&short_label, 1, row_idx, 1, 1);
         }
@@ -222,22 +239,157 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> 
             let long_label = Label::builder()
                 .label(&format!("{}", l))
                 .halign(Align::Start)
+                .tooltip_text(&tooltip)
                 .build();
             grid.attach(&long_label, 2, row_idx, 1, 1);
         }
         
+        
+        
         if is_entry(a) {
+            
+            let (entry_width, select_file, select_path) = match a.get_value_hint() {
+                
+                ValueHint::AnyPath => (1, true, true),
+                ValueHint::DirPath => (2, false, true),
+                ValueHint::FilePath => (2, true, false),
+                ValueHint::Unknown => (3,false,false),
+                x => {
+                    message!("unexpected value hint {:?} for arg {} of {}", x, a.get_id(), cmd.get_name());
+                    (3,false,false)
+                }
+            };
             
             let entry = Entry::builder()
                 .hexpand(true)
                 .build();
             
-            grid.attach(&entry, 3, row_idx, 1, 1);
+            grid.attach(&entry, 3, row_idx, entry_width, 1);
             let ss = match a.get_short() {
                 Some(s) => Some(format!("-{}", s)),
                 None => None
             };
-            entries.push((format!("{}",a.get_id()), ss, ParamWidget::Entry(entry)));
+            
+            
+            
+            if select_path {
+                
+                let arg_id = format!("{}",a.get_id());
+                let button = Button::builder()
+                    .label("path")
+                    .build();
+                
+                //let entry_clone = entry.clone();
+                //let win_clone = win.clone();
+                button.connect_clicked(clone!(
+                    #[weak] entry,
+                    #[weak] win,
+                    move |_| {
+                        println!("clicking button");
+                        let dialog = FileDialog::builder()
+                            .title(&format!("choose for {}", arg_id))
+                            //.application(&parent)
+                            .build();
+                        
+                        dialog.select_folder(
+                            Some(&win),
+                            gio::Cancellable::NONE,
+                            clone!(
+                                #[weak] entry,
+                                move |result| {
+                                    
+                                    match result {
+                                        Ok(fileobj) => {
+                                            match fileobj.path() {
+                                                Some(path) => {
+                                                    
+                                                    println!("choosen {:?}", path);
+                                                    match path.to_str() {
+                                                        Some(p) => {entry.set_text(p); },
+                                                        None => { println!("invalid?"); }
+                                                    }
+                                                },
+                                                None => {
+                                                    println!("choose NONE?");
+                                                }
+                                            }
+                                            
+                                        },
+                                        Err(e) => {
+                                            println!("failed {:?}", e);
+                                        }
+                                    }
+                                }
+                            )
+                            
+                        );
+                    })
+                );
+                
+                grid.attach(&button, if select_file { 4 } else { 5 }, row_idx, 1, 1);
+            }
+            if select_file {
+                let arg_id = format!("{}",a.get_id());
+                let button = Button::builder()
+                    .label("file")
+                    .build();
+                
+                //let entry_clone = entry.clone();
+                //let win_clone = win.clone();
+                button.connect_clicked(clone!(
+                    #[weak] entry,
+                    #[weak] win,
+                    move |_| {
+                        println!("clicking button");
+                        let dialog = FileDialog::builder()
+                            .title(&format!("choose for {}", arg_id))
+                            //.application(&parent)
+                            .build();
+                        
+                        dialog.open(
+                            Some(&win),
+                            gio::Cancellable::NONE,
+                            clone!(
+                                #[weak] entry,
+                                move |result| {
+                                    
+                                    match result {
+                                        Ok(fileobj) => {
+                                            match fileobj.path() {
+                                                Some(path) => {
+                                                    
+                                                    println!("choosen {:?}", path);
+                                                    match path.to_str() {
+                                                        Some(p) => {entry.set_text(p); },
+                                                        None => { println!("invalid?"); }
+                                                    }
+                                                },
+                                                None => {
+                                                    println!("choose NONE?");
+                                                }
+                                            }
+                                            
+                                        },
+                                        Err(e) => {
+                                            println!("failed {:?}", e);
+                                        }
+                                    }
+                                }
+                            )
+                            
+                        );
+                    })
+                );
+                
+                grid.attach(&button, 5, row_idx, 1, 1);
+            }
+                    
+            entries.push((format!("{}",a.get_id()), ss, ParamWidget::Entry(entry)));                
+                        
+                    
+                
+            
+            
         } else {
             let checkbutton = CheckButton::builder()
                 .build();
@@ -282,6 +434,7 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> 
         }
         println!("TaskStatus: {:?}", task_status.lock());
         let task_status_clone = task_status.clone();
+        println!("task_status_clone: {:?}",task_status_clone.lock());
         let args = prep_args(&name, &entries);
         gio::spawn_blocking(clone!(
             move || {
@@ -290,6 +443,7 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> 
                 }               
                 
                 *task_status_clone.lock().unwrap() = TaskStatus::NotRunning;
+                println!("task_status_clone: {:?}",task_status_clone.lock());
             }
         ));
         
@@ -303,13 +457,13 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>) -> 
 }
 
 
-fn add_subcommand_pages(stack: &Stack, cmd: &Command) {
+fn add_subcommand_pages(stack: &Stack, cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, parent: &ApplicationWindow) {
 
-    let task_status = Arc::new(Mutex::new(TaskStatus::NotRunning));
+    
     
     if !(cmd.has_subcommands() && cmd.is_subcommand_required_set()) {
         
-        let page = build_subcommand_page(cmd, task_status.clone());
+        let page = build_subcommand_page(cmd, task_status.clone(), parent);
         
         let name = cmd.get_name();
         
@@ -323,7 +477,7 @@ fn add_subcommand_pages(stack: &Stack, cmd: &Command) {
     if cmd.has_subcommands() {
         for subcommand in cmd.get_subcommands() {
             //add_subcommand_pages(notebook, subcommand);
-            add_subcommand_pages(stack, subcommand);
+            add_subcommand_pages(stack, subcommand, task_status.clone(), parent);
             
         }
     }
@@ -333,7 +487,7 @@ fn add_subcommand_pages(stack: &Stack, cmd: &Command) {
 
 fn build_ui(app: &Application) {
     
-    let receiver = messages::register_messenger_gui().unwrap();
+    let (receiver, cancel_set) = messages::register_messenger_gui().unwrap();
     /*
     let mut visible_messages = VecDeque::new();
     for _ in 0..10 {
@@ -357,6 +511,15 @@ fn build_ui(app: &Application) {
         .row_homogeneous(false)
         .build();
     
+    
+    let window = ApplicationWindow::builder()
+        .application(app)
+        .default_width(1200)
+        .default_height(950)
+        .child(&grid)
+        .build();
+    
+    
     let stack = Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -370,7 +533,9 @@ fn build_ui(app: &Application) {
     //add_notebook_page(&notebook, "Help", &help_page);
     stack.add_titled(&help_page, Some("Help"), "Help");
     //add_subcommand_pages(&notebook, &clap_app);
-    add_subcommand_pages(&stack, &clap_app);
+    
+    let task_status = Arc::new(Mutex::new(TaskStatus::NotRunning));
+    add_subcommand_pages(&stack, &clap_app, task_status, &window);
     
     
     let stack_sidebar = StackSidebar::builder()
@@ -431,8 +596,8 @@ fn build_ui(app: &Application) {
         }
     ));
     
-    let button = Button::builder()
-        .label("run")
+    let button = ToggleButton::builder()
+        .label("cancel")
         .margin_start(12)
         .margin_end(12)
         .margin_top(12)
@@ -441,6 +606,10 @@ fn build_ui(app: &Application) {
     
     //gtk_box.append(&button);
     grid.attach(&button, 2, 2, 1, 1);
+    
+    button.connect_toggled(move |b| {
+        cancel_set.store(b.is_active(), std::sync::atomic::Ordering::Relaxed);
+    });
     
     /*
     button.connect_clicked(clone!(
@@ -458,12 +627,7 @@ fn build_ui(app: &Application) {
         }
     ));*/
     
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .default_width(1200)
-        .default_height(950)
-        .child(&grid)
-        .build();
+    
     
     window.present();
 }

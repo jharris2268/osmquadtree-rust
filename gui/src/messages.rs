@@ -1,12 +1,15 @@
 use osmquadtree::logging::{Messenger, ProgressPercent,ProgressBytes,TaskSequence, set_boxed_messenger};
+use gtk::glib;
 
 //use std::sync::{Arc,Mutex, mpsc};
 
+const MESSAGE_INTEVAL: f64 = 0.1;
 
-
-//use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::cell::RefCell;
 use rand::Rng;
-/*
+
 use std::time::{SystemTime};
 
 fn elapsed(start: &SystemTime) -> f64 {
@@ -49,56 +52,90 @@ fn bytes_str(bytes: u64) -> String {
     }
     return format!("{:.1} gb", (bytes as f64)/1024.0/1024.0/1024.0);
 }
-*/
+
 struct GuiProgressBytes {
     sender: async_channel::Sender<Message>, //Arc<Mutex<mpsc::SyncSender<Message>>>,
-    key: String
+    cancel_set: Arc<AtomicBool>,
+    key: String,
+    start_time: SystemTime,
+    last_message: RefCell<Option<f64>>,
+    total_bytes: u64
 }
 impl GuiProgressBytes {
-    fn new(sender: async_channel::Sender<Message>, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
+    fn new(sender: async_channel::Sender<Message>, cancel_set: Arc<AtomicBool>, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
         let mut rng = rand::rng();
         let key = format!("ProgressBytes_{}", rng.random::<u64>());
-        send_message(sender.clone(), Message::StartProgressBytes(key.clone(), message.into(), total_bytes));
-        Box::new(GuiProgressBytes{sender: sender, key: key})
+        send_message(sender.clone(), cancel_set.clone(), Message::StartProgressBytes(key.clone(), message.into(), total_bytes));
+        let start_time = SystemTime::now();
+        let last_message = RefCell::new(None);
+        
+        Box::new(GuiProgressBytes{sender, cancel_set, key, start_time, last_message, total_bytes})
     }
 }
 
 impl ProgressBytes for GuiProgressBytes {
     fn change_message(&self, new_message: &str) {
-        send_message(self.sender.clone(), Message::ChangeProgressBytes(self.key.clone(), new_message.into()));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::ChangeProgressBytes(self.key.clone(), new_message.into()));
     }
     fn progress_bytes(&self, bytes: u64) {
-        
-        send_message(self.sender.clone(), Message::UpdateProgressBytes(self.key.clone(), bytes));
+        let t = elapsed(&self.start_time);
+        if let Some(lt) = *self.last_message.borrow() {
+            if (bytes < self.total_bytes) && (t - lt < MESSAGE_INTEVAL) {
+                return;
+            }
+        }
+        let eta = eta_bytes(t, bytes, self.total_bytes);
+        let tail = format!("{} {}: {} remaining", time_str(t), bytes_str(bytes), time_str(eta));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::UpdateProgressBytes(self.key.clone(), bytes, tail));
+        self.last_message.replace(Some(t));
     }
     fn finish(&self) {
-        send_message(self.sender.clone(), Message::FinishProgressBytes(self.key.clone()));
+        let t = elapsed(&self.start_time);
+        let tail = format!("{} {}: {} remaining", time_str(t), bytes_str(self.total_bytes), time_str(0.0));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::FinishProgressBytes(self.key.clone(), tail));
     }
 }
 
 struct GuiProgressPercent {
     sender: async_channel::Sender<Message>,
-    key: String
+    cancel_set: Arc<AtomicBool>,
+    key: String,
+    start_time: SystemTime,
+    last_message: RefCell<Option<f64>>
 
 }
 impl GuiProgressPercent {
-    fn new(sender: async_channel::Sender<Message>, message: &str) -> Box<dyn ProgressPercent> {
+    fn new(sender: async_channel::Sender<Message>, cancel_set: Arc<AtomicBool>,message: &str) -> Box<dyn ProgressPercent> {
         let mut rng = rand::rng();
         let key = format!("ProgressBytes_{}", rng.random::<u64>());
-        send_message(sender.clone(), Message::StartProgressPercent(key.clone(), message.into()));
-        Box::new(GuiProgressPercent{sender: sender, key: key})
+        send_message(sender.clone(), cancel_set.clone(), Message::StartProgressPercent(key.clone(), message.into()));
+        
+        let start_time = SystemTime::now();
+        let last_message = RefCell::new(None);
+        
+        Box::new(GuiProgressPercent{sender, cancel_set, key, start_time, last_message})
     }
 }
 impl ProgressPercent for GuiProgressPercent {
     fn change_message(&self, new_message: &str) {
-        send_message(self.sender.clone(), Message::ChangeProgressPercent(self.key.clone(), new_message.into()));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::ChangeProgressPercent(self.key.clone(), new_message.into()));
     }
     fn progress_percent(&self, percent: f64) {
-        
-        send_message(self.sender.clone(), Message::UpdateProgressPercent(self.key.clone(), percent));
+        let t = elapsed(&self.start_time);
+        if let Some(lt) = *self.last_message.borrow() {
+            if (percent < 100.0) && (t - lt < MESSAGE_INTEVAL) {
+                return;
+            }
+        }
+        let eta = eta_percent(t, percent);
+        let tail = format!("{} {:4.1}%: {} remaining", time_str(t), percent, time_str(eta));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::UpdateProgressPercent(self.key.clone(), percent, tail));
+        self.last_message.replace(Some(t));
     }
     fn finish(&self) {
-        send_message(self.sender.clone(), Message::FinishProgressPercent(self.key.clone()));
+        let t = elapsed(&self.start_time);
+        let tail = format!("{} {:4.1}%: {} remaining", time_str(t), 100.0, time_str(0.0));
+        send_message(self.sender.clone(), self.cancel_set.clone(), Message::FinishProgressPercent(self.key.clone(), tail));
     }
 }
 
@@ -113,35 +150,40 @@ pub enum Message {
     Message(String),
     StartProgressBytes(String,String, u64),
     ChangeProgressBytes(String,String),
-    UpdateProgressBytes(String,u64),
-    FinishProgressBytes(String),
+    UpdateProgressBytes(String,u64,String),
+    FinishProgressBytes(String,String),
     
     StartProgressPercent(String,String),
     ChangeProgressPercent(String,String),
-    UpdateProgressPercent(String,f64),
-    FinishProgressPercent(String),
+    UpdateProgressPercent(String,f64,String),
+    FinishProgressPercent(String,String),
 }
 
 
 
 pub struct GuiMessenger {
-    send: async_channel::Sender<Message>
+    send: async_channel::Sender<Message>,
+    cancel_set: Arc<AtomicBool>,
 }
     
 impl GuiMessenger {
     
-    pub fn new(send: async_channel::Sender<Message>) -> GuiMessenger {
-        GuiMessenger{send: send}
-        
+    pub fn new(send: async_channel::Sender<Message>, cancel_set: Arc<AtomicBool>) -> GuiMessenger {
+        GuiMessenger{send, cancel_set}
     }
     
     
 }
 
-fn send_message(sender: async_channel::Sender<Message>, msg: Message) {
+fn send_message(sender: async_channel::Sender<Message>, cancel_set: Arc<AtomicBool>, msg: Message) {
     
-    match sender.send_blocking(msg.clone()) {
-        Ok(_) => {},
+    if cancel_set.load(Ordering::Relaxed) {
+        panic!("cancel set..");
+    }
+    
+    match sender.force_send(msg.clone()) {
+        Ok(None) => {},
+        Ok(Some(x)) => { println!("dropped message {:?}", x); },
         Err(e) => {
             println!("failed to send message {:?} {:?}", msg, e);
         }
@@ -154,15 +196,15 @@ impl Messenger for GuiMessenger {
     
     
     fn message(&self, message: &str) {
-        send_message(self.send.clone(), Message::Message(message.into()));
+        send_message(self.send.clone(), self.cancel_set.clone(), Message::Message(message.into()));
     }
     
     fn start_progress_percent(&self, message: &str) -> Box<dyn ProgressPercent> {
-        GuiProgressPercent::new(self.send.clone(), message)
+        GuiProgressPercent::new(self.send.clone(), self.cancel_set.clone(), message)
     }
     fn start_progress_bytes(&self, message: &str, total_bytes: u64) -> Box<dyn ProgressBytes> {
         
-        GuiProgressBytes::new(self.send.clone(), message, total_bytes)
+        GuiProgressBytes::new(self.send.clone(), self.cancel_set.clone(), message, total_bytes)
     }
     
     fn start_task_sequence(&self, _message: &str, _num_tasks: usize) -> Box<dyn TaskSequence> {
@@ -172,10 +214,27 @@ impl Messenger for GuiMessenger {
 }
 
 
-pub fn register_messenger_gui() -> std::io::Result<async_channel::Receiver<Message>> {
-    let (send, recv) = async_channel::bounded(1);
-    let messenger = Box::new(GuiMessenger::new(send));
+pub fn register_messenger_gui() -> std::io::Result<(async_channel::Receiver<Message>, Arc<AtomicBool>)> {
+    let (send, recv) = async_channel::bounded(25);
+    //let (send_cancel, recv_cancel) = async_channel::unbounded();
+    let cancel_set = Arc::new(AtomicBool::new(false));
+    /*let cancel_set_clone = cancel_set.clone();
+    glib::spawn_future_local(
+        async move {
+            
+            //for message in receiver.iter() {
+            while let Ok(message) = recv_cancel.recv().await {
+                
+                cancel_set_clone.store(message, Ordering::Relaxed);
+            }
+            
+            
+            
+        }
+    );*/    
+    
+    let messenger = Box::new(GuiMessenger::new(send, cancel_set.clone()));
     set_boxed_messenger(messenger)?;
-    Ok(recv)
+    Ok((recv, cancel_set))
 }
 

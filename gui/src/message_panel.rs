@@ -11,7 +11,8 @@ mod imp {
     
     use crate::messages::Message;
     enum Progress {
-        Bytes(String, u64)
+        Bytes(String, u64),
+        Percent(String)
     }
     
     
@@ -106,31 +107,71 @@ mod imp {
                 },
                 
                 Message::StartProgressBytes(key, message, nbytes) => {
-                    self.progress_label_left.set_label(&message);
+                    self.progress_label_right.set_label(&message);
                     
                     
                     self.progress_track.borrow_mut().insert(key, Progress::Bytes(message,nbytes));
                 },
                 
-                Message::UpdateProgressBytes(key, bytes) => {
+                Message::UpdateProgressBytes(key, bytes, tail) => {
                     
                     if let Some(Progress::Bytes(_, nbytes)) = self.progress_track.borrow().get(&key) {
                         let pos = (bytes as f64)  / (*nbytes as f64);
                         self.progress_bar.set_fraction(pos);
+                        self.progress_label_left.set_label(&tail);
                     }
                 },                       
                 
-                Message::FinishProgressBytes(key) => {
+                Message::FinishProgressBytes(key, tail) => {
                     let mut pt = self.progress_track.borrow_mut();
                     if let Some(Progress::Bytes(msg, _)) = pt.get(&key) {
-                        self.append_message(&format!("{} [{}]", msg, "=".repeat(25)));
+                        self.append_message(&format!("{} [{}] {}", msg, "=".repeat(25), tail));
                         pt.remove(&key);
                     }
+                    self.progress_label_left.set_label(&tail);
+                    self.progress_bar.set_fraction(1.0);
                     
                 },
+                Message::StartProgressPercent(key, message) => {
+                    self.progress_label_right.set_label(&message);
+                    self.progress_track.borrow_mut().insert(key, Progress::Percent(message));
+                },
+                Message::UpdateProgressPercent(key, percent, tail) => {
+                    
+                    if let Some(Progress::Percent(_)) = self.progress_track.borrow().get(&key) {
+                        //let pos = (bytes as f64)  / (*nbytes as f64);
+                        let pos = percent / 100.0;
+                        self.progress_bar.set_fraction(pos);
+                        self.progress_label_left.set_label(&tail);
+                    }
+                },                       
+                
+                Message::FinishProgressPercent(key, tail) => {
+                    let mut pt = self.progress_track.borrow_mut();
+                    if let Some(Progress::Percent(msg)) = pt.get(&key) {
+                        self.append_message(&format!("{} [{}] {}", msg, "=".repeat(25), tail));
+                        pt.remove(&key);
+                    }
+                    self.progress_label_left.set_label(&tail);
+                    self.progress_bar.set_fraction(1.0);
+                    
+                },
+                Message::ChangeProgressBytes(key, message) => {
+                    let pt = self.progress_track.borrow_mut();
+                    if let Some(Progress::Bytes(_, _)) = pt.get(&key) {
+                        self.progress_label_right.set_label(&message);
+                    }
+                },
+                Message::ChangeProgressPercent(key, message) => {
+                    let pt = self.progress_track.borrow_mut();
+                    if let Some(Progress::Percent(_)) = pt.get(&key) {
+                        self.progress_label_right.set_label(&message);
+                    }
+                },
+                /*
                 o => {
                     println!("recieved {:?}", o);
-                }
+                }*/
             }   
         }
     }
