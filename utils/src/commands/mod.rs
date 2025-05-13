@@ -6,6 +6,7 @@ mod cli;
 use clap::{Command,CommandFactory,Parser};
 
 pub use count::Count;
+pub use calcqts::{Calcqts,CalcqtsPrelim,CalcqtsLoadExisting};
 pub use cli::{Commands,Cli};
 
 
@@ -15,8 +16,8 @@ use crate::error::Result;
 
 
 const RAM_GB_DEFAULT: usize= 8;
-const QT_MAX_LEVEL_DEFAULT: usize = 18;
-const QT_GRAPH_LEVEL_DEFAULT: usize = 17;
+const QT_MAX_LEVEL_DEFAULT: u16 = 18;
+const QT_GRAPH_LEVEL_DEFAULT: u16 = 17;
 const QT_BUFFER_DEFAULT: f64 = 0.05;
 
 pub struct Defaults {
