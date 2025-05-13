@@ -17,6 +17,7 @@ pub enum Commands {
     Count(Count),
     /// prepare an updatable osmquadtree instance
     Setup,
+    Calcqts(Calcqts),
 }
 
 impl RunCmd for Cli {
@@ -26,6 +27,7 @@ impl RunCmd for Cli {
             
             Commands::Count(count) => count.run(defaults),
             Commands::Setup => crate::setup::run(defaults.ram_gb_default, defaults.numchan_default),
+            Commands::Calcqts(calcqts) => calcqts.run(defaults),
         }
     }
 }

@@ -68,7 +68,7 @@
 */
 
 
-use osmquadtree::count::run_count;
+use osmquadtree::calcqts;
 use clap::{Args, Parser, Subcommand,ValueHint};
 use crate::commands::{RunCmd,Defaults};
 use crate::error::Result;
@@ -87,34 +87,30 @@ pub struct Calcqts {
         
     ///reads full primitiveblock data 
     #[arg(short)] #[arg(long)]
-    primitive: bool,
+    mode: calcqts::Mode,
     
     ///filters blocks by bbox FILTER
     #[arg(short)] #[arg(long)]
-    #[arg(allow_hyphen_values=true)]
-    filter: Option<String>,
+    #[arg(value_parser = clap::value_parser!(u16).range(0..18))]
+    qt_level: Option<u16>,
     
     ///includes updates up to timestamp
     #[arg(short)] #[arg(long)]
-    timestamp: Option<String>,
+    qt_buffer: Option<f64>,
+    
+    #[arg(short)] #[arg(long)]
+    keeptemps: bool,
     
     ///uses <NUMCHAN> parallel threads
     #[arg(short)] #[arg(long)]
-    #[arg(value_parser = clap::value_parser!(u16).range(0..24))]
-    numchan: Option<u16>
+    #[arg(value_parser = clap::value_parser!(u16).range(0..32))]
+    ram_gb: Option<u16>
 }
-impl RunCmd for Count {
+impl RunCmd for Calcqts {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
-        Ok(run_count(
-            &self.input,
-            self.primitive,
-            match self.numchan { None => defaults.numchan_default, Some(n) => n.into() },
-            self.filter.as_deref(),
-            self.timestamp.as_deref(),
-            
-        )?)
-        
+        println!("run calcqts: {:?}", self);
+        Ok(())
         
     }
 }        

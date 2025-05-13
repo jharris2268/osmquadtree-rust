@@ -8,6 +8,7 @@ use std::path::{Path,PathBuf};
 use {
     
     osmquadtree::elements::{WithQuadtree},
+    osmquadtree::calcqts,
     osmquadtree::calcqts::{run_calcqts, run_calcqts_addto_objs},
     osmquadtree::pbfformat::{file_length, CompressionType},
     osmquadtree::sortblocks::{find_groups, find_tree_groups, sort_blocks, sort_blocks_inmem, QuadtreeTree, SortBlocks, write_blocks},
@@ -241,7 +242,7 @@ pub(crate) fn run(ram_gb_default: usize, numchan_default:usize) -> Result<()> {
         
         let qtsfn_in = String::from(dest_path.join("qts.pbf").to_str().unwrap());
         
-        let (qts_filename, mut lt, max_timestamp) = run_calcqts(&src_filename, Some(&qtsfn_in), 17, 0.05, None, false, numchan, ram_gb)?;
+        let (qts_filename, mut lt, max_timestamp) = run_calcqts(&src_filename, Some(&qtsfn_in), 17, 0.05, calcqts::Mode::Choose, false, numchan, ram_gb)?;
         
         
         

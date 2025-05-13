@@ -986,6 +986,7 @@ pub fn run_calcqts_prelim(fname: &str, outfn: Option<&str>, numchan: usize) -> R
     Ok(())
 }
 
+#[derive(Debug, Clone)]
 pub enum Mode {
     Inmem,
     Simple,
