@@ -1017,7 +1017,7 @@ pub fn run_calcqts(
             }
         }
         //Some("INMEM") => {
-        Inmem =>
+        Inmem => {
             return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
         }
 
