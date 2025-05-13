@@ -7,7 +7,7 @@ mod quadtree_store;
 mod write_quadtrees;
 
 pub use calcinmem::{run_calcqts_inmem,run_calcqts_addto_objs};
-pub use calculate::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim};
+pub use calculate::{run_calcqts, run_calcqts_load_existing, run_calcqts_prelim, Mode};
 
 use crate::pbfformat::{FileBlock, FileLocs};
 use crate::utils::Error;

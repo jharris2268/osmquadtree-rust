@@ -986,12 +986,19 @@ pub fn run_calcqts_prelim(fname: &str, outfn: Option<&str>, numchan: usize) -> R
     Ok(())
 }
 
+pub enum Mode {
+    Inmem,
+    Simple,
+    Flatvec,
+    Choose
+}
+
 pub fn run_calcqts(
     fname: &str,
     outfn: Option<&str>,
     qt_level: usize,
     qt_buffer: f64,
-    mode: Option<&str>,
+    mode: Mode,
     //seperate: bool,
     //resort_waynodes: bool,
     keeptemps: bool,
@@ -1001,26 +1008,31 @@ pub fn run_calcqts(
     let mut use_simple = false;
     let fl = file_length(fname) / 1024 / 1024;
     match mode {
-        None => {
+        //None => {
+        Choose => {
             if fl < 512 {
                 return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
             } else if fl < 4096 {
                 use_simple = true;
             }
         }
-        Some("INMEM") => {
+        //Some("INMEM") => {
+        Inmem =>
             return run_calcqts_inmem(fname, outfn, qt_level, qt_buffer, numchan);
         }
 
-        Some("SIMPLE") => {
+        //Some("SIMPLE") => {
+        Simple => {
             use_simple = true;
         }
-        Some("FLATVEC") => {}
+        //Some("FLATVEC") => {}
+        Flatvec => {}
+/*    
         Some(x) => {
             return Err(Error::UserSelectionError(
                 format!("unexpected mode {}", x),
             ));
-        }
+        }*/
     }
 
     let mut lt = LogTimes::new();

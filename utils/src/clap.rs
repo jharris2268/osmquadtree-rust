@@ -232,6 +232,17 @@ impl Defaults {
     }
 }
 
+fn get_calcqts_mode(mode: Option<&str>) -> Result<osmquadtree::calcqts::Mode> {
+    match mode {
+        None => Ok(osmquadtree::calcqts::Mode::Choose),
+        Some("INMEM") => Ok(osmquadtree::calcqts::Mode::Inmem),
+        Some("SIMPLE") => Ok(osmquadtree::calcqts::Mode::Simple),
+        Some("FLATVEC") => Ok(osmquadtree::calcqts::Mode::Flatvec),
+        _ => Err(Error::InvalidInputError("expected INMEM, SIMPLE or FLATVEC".into()))
+    }
+}
+            
+
 pub fn run(defaults: &Defaults, subcommand: &str, args: &ArgMatches) -> Result<()> {
     match Some((subcommand, args))   {
         //Some(("gui", _)) => run_gui(defaults),
@@ -249,7 +260,8 @@ pub fn run(defaults: &Defaults, subcommand: &str, args: &ArgMatches) -> Result<(
                 calcqts.get_one::<String>("QTSFN").map(|x| x.as_str()),
                 *calcqts.get_one::<usize>("QT_LEVEL").unwrap_or(&QT_MAX_LEVEL_DEFAULT),
                 *calcqts.get_one::<f64>("QT_BUFFER").unwrap_or(&QT_BUFFER_DEFAULT),
-                calcqts.get_one::<String>("MODE").map(|x| x.as_str()),
+                get_calcqts_mode(calcqts.get_one::<String>("MODE").map(|x| x.as_str()))?,
+                //calcqts.get_one::<String>("MODE").map(|x| x.as_str()),
                 /* !calcqts.is_present("COMBINED"), //seperate
                 true,                            //resort_waynodes*/
                 calcqts.contains_id("KEEPTEMPS"),

@@ -15,6 +15,8 @@ pub struct Cli {
 pub enum Commands {
     /// uses osmquadtree to read an open street map pbf file and report basic information
     Count(Count),
+    /// prepare an updatable osmquadtree instance
+    Setup,
 }
 
 impl RunCmd for Cli {
@@ -23,6 +25,7 @@ impl RunCmd for Cli {
         match &self.command {
             
             Commands::Count(count) => count.run(defaults),
+            Commands::Setup => crate::setup::run(defaults.ram_gb_default, defaults.numchan_default),
         }
     }
 }

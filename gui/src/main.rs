@@ -28,7 +28,7 @@ use crate::message_panel::MessagePanel;
 fn run_cmd<T: AsRef<std::ffi::OsStr> + std::fmt::Display >(cmd: &[T]) -> Result<()> {
     
     let defaults = Defaults::new();
-    run_app(&defaults)
+    run_app(&defaults, cmd)
     
     /*
     println!("called run_cmd");
