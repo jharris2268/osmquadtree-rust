@@ -1,8 +1,7 @@
-use clap::{Args, Parser, Subcommand,ValueHint};
-use osmquadtree_utils::error::Result;
+use clap::Parser;
 use osmquadtree::{message, defaultlogger::register_messenger_default};
 
-use osmquadtree_utils::commands::{Cli,Commands,Defaults,RunCmd};
+use osmquadtree_utils::commands::{Cli,Defaults,RunCmd};
 
 
 

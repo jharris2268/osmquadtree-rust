@@ -1,5 +1,7 @@
 mod count;
 mod calcqts;
+mod sortblocks;
+mod run_sortblocks;
 mod cli;
 
 
@@ -7,6 +9,7 @@ use clap::{Command,CommandFactory,Parser};
 
 pub use count::Count;
 pub use calcqts::{Calcqts,CalcqtsPrelim,CalcqtsLoadExisting};
+pub use sortblocks::{Sortblocks,SortblocksInmem};
 pub use cli::{Commands,Cli};
 
 

@@ -1,6 +1,6 @@
-use clap::{Args, Parser, Subcommand,ValueHint};
+use clap::{Parser, Subcommand};
 
-use crate::commands::{Count,RunCmd,Defaults,Calcqts,CalcqtsPrelim,CalcqtsLoadExisting};
+use crate::commands::{Count,RunCmd,Defaults,Calcqts,CalcqtsPrelim,CalcqtsLoadExisting, Sortblocks, SortblocksInmem};
 use crate::error::Result;
 
 
@@ -26,6 +26,12 @@ pub enum Commands {
     
     /// calculates quadtrees for each element of a planet or extract pbf file, continuing from calcqts-prelim
     CalcqtsLoadExisting(CalcqtsLoadExisting),
+    
+    /// Incorporate quadtrees into planet file, sort by quadtree value into blocks
+    Sortblocks(Sortblocks),
+    
+    /// Incorporate quadtrees into planet file, sort by quadtree value into blocks. Run in memory.
+    SortblocksInmem(SortblocksInmem)
 }
 
 impl RunCmd for Cli {
@@ -38,6 +44,8 @@ impl RunCmd for Cli {
             Commands::Calcqts(calcqts) => calcqts.run(defaults),
             Commands::CalcqtsPrelim(calcqts_prelim) => calcqts_prelim.run(defaults),
             Commands::CalcqtsLoadExisting(calcqts_load_existing) => calcqts_load_existing.run(defaults),
+            Commands::Sortblocks(sortblocks) => sortblocks.run(defaults),
+            Commands::SortblocksInmem(sortblocks) => sortblocks.run(defaults),
         }
     }
 }
