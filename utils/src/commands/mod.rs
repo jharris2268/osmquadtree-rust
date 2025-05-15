@@ -2,6 +2,9 @@ mod count;
 mod calcqts;
 mod sortblocks;
 mod run_sortblocks;
+mod update;
+mod update_initial;
+mod mergechanges;
 mod cli;
 
 
@@ -10,6 +13,9 @@ use clap::{Command,CommandFactory,Parser};
 pub use count::Count;
 pub use calcqts::{Calcqts,CalcqtsPrelim,CalcqtsLoadExisting};
 pub use sortblocks::{Sortblocks,SortblocksInmem};
+pub use update::{Update,UpdateDemo,UpdateDropLast};
+pub use update_initial::{UpdateInitial, WriteIndexFile};
+pub use mergechanges::{Mergechanges, MergechangesSortInmem, MergechangesSort, MergechangesSortFromExisting};
 pub use cli::{Commands,Cli};
 
 

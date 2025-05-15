@@ -1,4 +1,5 @@
-use osmquadtree_utils::clap::{make_app, run, Defaults};
+//use osmquadtree_utils::clap::{make_app, run, Defaults};
+use osmquadtree_utils::commands::{make_app, run_app, Defaults};
 use osmquadtree::defaultlogger::register_messenger_default;
 
 fn main() {
@@ -7,21 +8,15 @@ fn main() {
     let cmd = make_app();
     dump_cmd(0, &cmd);
     
-    let cmd2 = make_app();
-    let aa = vec!["osmquadtree-utils", "count", "/home/james/data/planet-feb2025", "-f", "-1.5,49.5,2.5,54.0"];
-    let xx = cmd2.get_matches_from(&aa);
-    if let Some((a,b)) = xx.subcommand() {
-        let defaults = Defaults::new();
-        println!("call {} with {:?}", a, b);
-        match run(&defaults, a, b) {
-            Ok(_) => {},
-            Err(err) => {
-                println!("FAILED: {}", err);
-                
-            }
+    
+    let aa = vec!["osmquadtree-utils", "count", "/home/james/data/planet-feb2025/", "-f", "-1.5,49.5,2.5,54.0"];
+    let defaults = Defaults::new();
+    match run_app(&defaults, &aa) {
+        Ok(_) => {},
+        Err(err) => {
+            println!("FAILED: {}", err);
+            
         }
-    } else {
-        println!("?? {:?}", xx);
     }
 }
 

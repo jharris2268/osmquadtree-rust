@@ -1,6 +1,7 @@
 target/
 data/
 junk/
+utils/junk/
 Cargo.lock
 readpackedpbf.py
 __pycache__/

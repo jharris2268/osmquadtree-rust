@@ -1,6 +1,7 @@
 
 use crate::commands::{Defaults};
-use crate::commands::sortblocks::{SortblocksType, SortblocksCommon};
+use crate::commands::sortblocks::{SortblocksType, SortblocksCommon, CompressionType as ClapCompresstionType};
+
 use crate::error::Result;
 use osmquadtree::message;
 use osmquadtree::sortblocks::{sort_blocks, sort_blocks_inmem, find_groups, QuadtreeTree};
@@ -9,40 +10,40 @@ use osmquadtree::utils::{LogTimes,parse_timestamp};
 use std::sync::Arc;
 
 
-fn get_compression_type(sortblocks: &SortblocksCommon) -> CompressionType {
+pub(crate) fn get_compression_type(compression_type: &ClapCompresstionType, level: &Option<u32>) -> CompressionType {
 
-    let level = sortblocks.compression_level;
+    
 
-    if sortblocks.compression_type.brotli {
+    if compression_type.brotli {
         
         if let Some(l) = level {
-            if l>11 {
+            if *l>11 {
                 panic!("max compression level for brotli is 11")
             }
-            return CompressionType::BrotliLevel(l);
+            return CompressionType::BrotliLevel(*l);
         } else {
             return CompressionType::Brotli;
         }
-    } else if sortblocks.compression_type.lzma {
+    } else if compression_type.lzma {
         if let Some(l) = level {
-            if l>9 {
+            if *l>9 {
                 panic!("max compression level for lzma is 9")
             }
-            return CompressionType::LzmaLevel(l);
+            return CompressionType::LzmaLevel(*l);
         } else {
             return CompressionType::Lzma;
         }
-    } else if sortblocks.compression_type.uncompressed {
+    } else if compression_type.uncompressed {
         
         return CompressionType::Uncompressed;
     }
 
     
     if let Some(l) = level {
-        if l>9 {
+        if *l>9 {
             panic!("max compression level for zlib is 9")
         }
-        return CompressionType::ZlibLevel(l);
+        return CompressionType::ZlibLevel(*l);
     }
     return CompressionType::Zlib;
     
@@ -95,7 +96,7 @@ pub(crate) fn run_sortblocks(sortblocks: &SortblocksCommon, sortblocks_type: Sor
     
     
     
-    let compression_type = get_compression_type(sortblocks);
+    let compression_type = get_compression_type(&sortblocks.compression_type, &sortblocks.compression_level);
     
     
     match sortblocks_type {

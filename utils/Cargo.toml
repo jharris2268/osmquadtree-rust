@@ -20,15 +20,10 @@ rand="*"
 #osmquadtree = { path = "../" }
 osmquadtree = { git = "https://github.com/jharris2268/osmquadtree-rust.git", branch = "main" }
 
-#klask = "1.0.0"
-#klask =  { git = "https://github.com/MichalGniadek/klask.git", branch="master"}
-#egui = "0.18" #match klask
 
 [[bin]]
 name="oqt-dump-clap"
 path="src/oqt-dump-clap.rs"
 
 
-[[bin]]
-name="oqt-clap-new"
-path="src/clap_new.rs"
+

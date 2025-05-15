@@ -54,7 +54,7 @@ pub struct Calcqts {
     
     /// qtlevel
     #[arg(short='l', long, default_value_t = QT_MAX_LEVEL_DEFAULT)]
-    #[arg(value_parser = clap::value_parser!(u16).range(0..18))]
+    #[arg(value_parser = clap::value_parser!(u16).range(0..19))]
     qt_level: u16,
     
     /// qtbuffer
