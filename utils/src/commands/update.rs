@@ -1,7 +1,7 @@
 use osmquadtree::update::{run_update};
 use osmquadtree::pbfformat::{read_filelist, write_filelist};
 use clap::{Args,ValueHint};
-use crate::commands::{RunCmd,Defaults};
+use crate::commands::{RunCmd,Defaults, add_trailing_slash_to_directory};
 use crate::error::{Error, Result};
 
 
@@ -25,7 +25,7 @@ impl RunCmd for Update {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         Ok(run_update(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             match self.limit { None => 0, Some(l) => l.into() },
             false,
             match self.numchan { None => defaults.numchan_default, Some(n) => n.into() },
@@ -43,7 +43,7 @@ impl RunCmd for UpdateDemo {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         Ok(run_update(
-            &self.update.input,
+            &add_trailing_slash_to_directory(&self.update.input),
             match self.update.limit { None => 0, Some(l) => l.into() },
             true,
             match self.update.numchan { None => defaults.numchan_default, Some(n) => n.into() },
@@ -64,7 +64,9 @@ pub struct UpdateDropLast {
 impl RunCmd for UpdateDropLast {
     fn run(&self, _defaults: &Defaults) -> Result<()> {
         
-        let mut fl = read_filelist(&self.input);
+        let input = add_trailing_slash_to_directory(&self.input);
+        
+        let mut fl = read_filelist(&input);
         if fl.len() < 2 {
             return Err(Error::InvalidInputError(
                 format!("{}filelist.json only has {} entries", &self.input, fl.len())

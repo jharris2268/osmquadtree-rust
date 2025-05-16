@@ -67,6 +67,15 @@ pub fn run_app<T: AsRef<std::ffi::OsStr> + std::fmt::Display >(defaults: &Defaul
     
     cli.run(defaults)
 }
+
+pub fn add_trailing_slash_to_directory(input_path: &str) -> String {
+    if input_path.ends_with("/") {
+        return String::from(input_path);
+    }
     
-    
+    if std::path::Path::new(input_path).is_dir() {
+        return format!("{}/", input_path);
+    }
+    String::from(input_path)
+}
     

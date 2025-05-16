@@ -1,6 +1,6 @@
 use osmquadtree::update::{run_update_initial, write_index_file};
 use clap::{Args,ValueHint};
-use crate::commands::{RunCmd,Defaults, QT_MAX_LEVEL_DEFAULT, QT_BUFFER_DEFAULT};
+use crate::commands::{RunCmd,Defaults, QT_MAX_LEVEL_DEFAULT, QT_BUFFER_DEFAULT, add_trailing_slash_to_directory};
 use crate::error::Result;
 
 
@@ -49,7 +49,7 @@ impl RunCmd for UpdateInitial {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         Ok(run_update_initial(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             &self.infn,
             &self.timestamp,
             self.initial_state.clone(),
@@ -82,7 +82,7 @@ pub struct WriteIndexFile {
 impl RunCmd for WriteIndexFile {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         write_index_file(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             match &self.outfn { Some(o) => o, None => "" },
             match self.numchan { None => defaults.numchan_default, Some(n) => n.into() },
         );

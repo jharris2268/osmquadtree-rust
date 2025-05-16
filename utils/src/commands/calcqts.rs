@@ -1,7 +1,7 @@
 use osmquadtree::calcqts;
 use osmquadtree::calcqts::{run_calcqts, run_calcqts_prelim, run_calcqts_load_existing};
 use clap::{Args, ValueHint, ValueEnum};
-use crate::commands::{RunCmd,Defaults, QT_MAX_LEVEL_DEFAULT, QT_BUFFER_DEFAULT};
+use crate::commands::{RunCmd,Defaults, QT_MAX_LEVEL_DEFAULT, QT_BUFFER_DEFAULT,add_trailing_slash_to_directory};
 use crate::error::Result;
 use osmquadtree::message;
 
@@ -77,7 +77,7 @@ impl RunCmd for Calcqts {
         
         
         let (a,b,c) = run_calcqts(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             self.qtsfn.as_deref(),
             self.qt_level.into(),
             self.qt_buffer,
@@ -116,7 +116,7 @@ impl RunCmd for CalcqtsPrelim {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         run_calcqts_prelim(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             self.qtsfn.as_deref(),
             match self.numchan { Some(n) => n.into(), None => defaults.numchan_default},
         )?;
@@ -159,7 +159,7 @@ impl RunCmd for CalcqtsLoadExisting {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         run_calcqts_load_existing(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             self.qtsfn.as_deref(),
             self.qt_level.into(),
             self.qt_buffer,

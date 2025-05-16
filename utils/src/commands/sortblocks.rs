@@ -8,8 +8,8 @@ use crate::commands::run_sortblocks::run_sortblocks;
 
 #[derive(Args, Debug)]
 pub struct SortblocksCommon {
-    ///Sets the input file (or directory) to use
-    #[arg(value_hint=ValueHint::AnyPath)]
+    ///Sets the source planet pbf file.
+    #[arg(value_hint=ValueHint::FilePath)]
     pub(crate) input: String,
     
     /// specify input quadtrees filename, defaults to <INPUT>-qts.pbf. If not present call osmquadtree-utils calcqts first

@@ -1,6 +1,6 @@
 
 use clap::{Args,ValueHint};
-use crate::commands::{RunCmd,Defaults};
+use crate::commands::{RunCmd,Defaults, add_trailing_slash_to_directory};
 use crate::commands::sortblocks::CompressionType;
 use crate::commands::run_sortblocks::get_compression_type;
 use crate::error::Result;
@@ -61,7 +61,7 @@ pub struct MergechangesSortInmem {
 impl RunCmd for MergechangesSortInmem {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         Ok(run_mergechanges_sort_inmem(
-            &self.mergechanges.input, 
+            &add_trailing_slash_to_directory(&self.mergechanges.input), 
             &self.mergechanges.outfn,
             self.mergechanges.filter.as_deref(),
             self.mergechanges.filter_objs,
@@ -102,7 +102,7 @@ pub struct MergechangesSort {
 impl RunCmd for MergechangesSort {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         Ok(run_mergechanges_sort    (
-            &self.mergechanges.input, 
+            &add_trailing_slash_to_directory(&self.mergechanges.input),
             &self.mergechanges.outfn,
             self.tempfn.as_deref(),
             self.mergechanges.filter.as_deref(),
@@ -127,7 +127,7 @@ pub struct Mergechanges {
 impl RunCmd for Mergechanges {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         Ok(run_mergechanges(
-            &self.mergechanges.input, 
+            &add_trailing_slash_to_directory(&self.mergechanges.input), 
             &self.mergechanges.outfn,
             self.mergechanges.filter.as_deref(),
             self.mergechanges.filter_objs,

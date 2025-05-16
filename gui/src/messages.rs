@@ -1,5 +1,5 @@
 use osmquadtree::logging::{Messenger, ProgressPercent,ProgressBytes,TaskSequence, set_boxed_messenger};
-use gtk::glib;
+//use gtk::glib;
 
 //use std::sync::{Arc,Mutex, mpsc};
 

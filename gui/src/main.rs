@@ -19,7 +19,7 @@ const APP_ID: &str = "uk.me.jamesharris.OsmquadtreeGui";
 use std::sync::{Arc,Mutex};
 
 
-use clap::{Command,Arg,ValueHint};
+use clap::{Command,Arg,ValueHint,ArgAction};
 
 //use std::collections::{BTreeMap,VecDeque};
 //use messages::Message;
@@ -172,7 +172,7 @@ fn prep_args(command_name: &str, entries: &[(String, Option<String>, ParamWidget
                     
     
 
-
+/*
 fn is_entry(a: &Arg) -> bool {
     if a.get_num_args() == Some(1.into()) {
         return true;
@@ -181,13 +181,37 @@ fn is_entry(a: &Arg) -> bool {
         return true;
     }
     false
-}
+}*/
 
 #[derive(PartialEq,Debug)]
 enum TaskStatus {
     Running,
     NotRunning
 }
+
+
+#[derive(PartialEq,Debug)]
+enum ArgType {
+    Checkbox,
+    Entry,
+    EntryFile,
+    EntryPath,
+    EntryFilePath
+}
+
+fn get_arg_type(a: &Arg) -> Result<ArgType> {
+    
+    match (a.get_action(), a.get_value_hint()) {
+        
+        (ArgAction::SetTrue, _) => Ok(ArgType::Checkbox),
+        (ArgAction::Set, ValueHint::Unknown) => Ok(ArgType::Entry),
+        (ArgAction::Set, ValueHint::FilePath) => Ok(ArgType::EntryFile),
+        (ArgAction::Set, ValueHint::DirPath) => Ok(ArgType::EntryPath),
+        (ArgAction::Set, ValueHint::AnyPath) => Ok(ArgType::EntryFilePath),
+        (p,q) => Err(Error::InvalidInputError(format!("unexpected argument (action, value_hint) {:?} {:?}", p, q)))
+    }
+}
+
 
 
 fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win: &ApplicationWindow) -> impl IsA<Widget> {
@@ -246,161 +270,160 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win
         
         
         
-        if is_entry(a) {
+        match get_arg_type(a) {
             
-            let (entry_width, select_file, select_path) = match a.get_value_hint() {
+            Err(e) => { println!("{} {} ?? {:?}", cmd.get_name(), a.get_id(), e); },
+            Ok(ArgType::Checkbox) => {
+                let checkbutton = CheckButton::builder()
+                    .build();
+            
+                grid.attach(&checkbutton, 3, row_idx, 1, 1);
+                let ss = match a.get_short() {
+                    Some(s) => Some(format!("-{}", s)),
+                    None => None
+                };
+                entries.push((format!("{}",a.get_id()), ss, ParamWidget::CheckButton(checkbutton)));
+            },
+            Ok(arg_type) => {
+            
+                let (entry_width, select_file, select_path) = match arg_type {
+                    
+                    ArgType::Entry => (3,false,false),
+                    ArgType::EntryFile => (2, true, false),
+                    ArgType::EntryPath => (2, false, true),
+                    ArgType::EntryFilePath => (1, true, true),
+                    _ => unreachable!()
+                };
+                           
+                let entry = Entry::builder()
+                    .hexpand(true)
+                    .build();
                 
-                ValueHint::AnyPath => (1, true, true),
-                ValueHint::DirPath => (2, false, true),
-                ValueHint::FilePath => (2, true, false),
-                ValueHint::Unknown => (3,false,false),
-                x => {
-                    message!("unexpected value hint {:?} for arg {} of {}", x, a.get_id(), cmd.get_name());
-                    (3,false,false)
+                grid.attach(&entry, 3, row_idx, entry_width, 1);
+                let ss = match a.get_short() {
+                    Some(s) => Some(format!("-{}", s)),
+                    None => None
+                };
+                
+                
+                
+                if select_path {
+                    
+                    let arg_id = format!("{}",a.get_id());
+                    let button = Button::builder()
+                        .label("path")
+                        .build();
+                    
+                    //let entry_clone = entry.clone();
+                    //let win_clone = win.clone();
+                    button.connect_clicked(clone!(
+                        #[weak] entry,
+                        #[weak] win,
+                        move |_| {
+                            println!("clicking button");
+                            let dialog = FileDialog::builder()
+                                .title(&format!("choose for {}", arg_id))
+                                //.application(&parent)
+                                .build();
+                            
+                            dialog.select_folder(
+                                Some(&win),
+                                gio::Cancellable::NONE,
+                                clone!(
+                                    #[weak] entry,
+                                    move |result| {
+                                        
+                                        match result {
+                                            Ok(fileobj) => {
+                                                match fileobj.path() {
+                                                    Some(path) => {
+                                                        
+                                                        println!("choosen {:?}", path);
+                                                        match path.to_str() {
+                                                            Some(p) => {entry.set_text(p); },
+                                                            None => { println!("invalid?"); }
+                                                        }
+                                                    },
+                                                    None => {
+                                                        println!("choose NONE?");
+                                                    }
+                                                }
+                                                
+                                            },
+                                            Err(e) => {
+                                                println!("failed {:?}", e);
+                                            }
+                                        }
+                                    }
+                                )
+                                
+                            );
+                        })
+                    );
+                    
+                    grid.attach(&button, if select_file { 4 } else { 5 }, row_idx, 1, 1);
                 }
-            };
-            
-            let entry = Entry::builder()
-                .hexpand(true)
-                .build();
-            
-            grid.attach(&entry, 3, row_idx, entry_width, 1);
-            let ss = match a.get_short() {
-                Some(s) => Some(format!("-{}", s)),
-                None => None
-            };
-            
-            
-            
-            if select_path {
-                
-                let arg_id = format!("{}",a.get_id());
-                let button = Button::builder()
-                    .label("path")
-                    .build();
-                
-                //let entry_clone = entry.clone();
-                //let win_clone = win.clone();
-                button.connect_clicked(clone!(
-                    #[weak] entry,
-                    #[weak] win,
-                    move |_| {
-                        println!("clicking button");
-                        let dialog = FileDialog::builder()
-                            .title(&format!("choose for {}", arg_id))
-                            //.application(&parent)
-                            .build();
-                        
-                        dialog.select_folder(
-                            Some(&win),
-                            gio::Cancellable::NONE,
-                            clone!(
-                                #[weak] entry,
-                                move |result| {
-                                    
-                                    match result {
-                                        Ok(fileobj) => {
-                                            match fileobj.path() {
-                                                Some(path) => {
-                                                    
-                                                    println!("choosen {:?}", path);
-                                                    match path.to_str() {
-                                                        Some(p) => {entry.set_text(p); },
-                                                        None => { println!("invalid?"); }
+                if select_file {
+                    let arg_id = format!("{}",a.get_id());
+                    let button = Button::builder()
+                        .label("file")
+                        .build();
+                    
+                    //let entry_clone = entry.clone();
+                    //let win_clone = win.clone();
+                    button.connect_clicked(clone!(
+                        #[weak] entry,
+                        #[weak] win,
+                        move |_| {
+                            println!("clicking button");
+                            let dialog = FileDialog::builder()
+                                .title(&format!("choose for {}", arg_id))
+                                //.application(&parent)
+                                .build();
+                            
+                            dialog.open(
+                                Some(&win),
+                                gio::Cancellable::NONE,
+                                clone!(
+                                    #[weak] entry,
+                                    move |result| {
+                                        
+                                        match result {
+                                            Ok(fileobj) => {
+                                                match fileobj.path() {
+                                                    Some(path) => {
+                                                        
+                                                        println!("choosen {:?}", path);
+                                                        match path.to_str() {
+                                                            Some(p) => {entry.set_text(p); },
+                                                            None => { println!("invalid?"); }
+                                                        }
+                                                    },
+                                                    None => {
+                                                        println!("choose NONE?");
                                                     }
-                                                },
-                                                None => {
-                                                    println!("choose NONE?");
                                                 }
+                                                
+                                            },
+                                            Err(e) => {
+                                                println!("failed {:?}", e);
                                             }
-                                            
-                                        },
-                                        Err(e) => {
-                                            println!("failed {:?}", e);
                                         }
                                     }
-                                }
-                            )
-                            
-                        );
-                    })
-                );
-                
-                grid.attach(&button, if select_file { 4 } else { 5 }, row_idx, 1, 1);
-            }
-            if select_file {
-                let arg_id = format!("{}",a.get_id());
-                let button = Button::builder()
-                    .label("file")
-                    .build();
-                
-                //let entry_clone = entry.clone();
-                //let win_clone = win.clone();
-                button.connect_clicked(clone!(
-                    #[weak] entry,
-                    #[weak] win,
-                    move |_| {
-                        println!("clicking button");
-                        let dialog = FileDialog::builder()
-                            .title(&format!("choose for {}", arg_id))
-                            //.application(&parent)
-                            .build();
-                        
-                        dialog.open(
-                            Some(&win),
-                            gio::Cancellable::NONE,
-                            clone!(
-                                #[weak] entry,
-                                move |result| {
-                                    
-                                    match result {
-                                        Ok(fileobj) => {
-                                            match fileobj.path() {
-                                                Some(path) => {
-                                                    
-                                                    println!("choosen {:?}", path);
-                                                    match path.to_str() {
-                                                        Some(p) => {entry.set_text(p); },
-                                                        None => { println!("invalid?"); }
-                                                    }
-                                                },
-                                                None => {
-                                                    println!("choose NONE?");
-                                                }
-                                            }
-                                            
-                                        },
-                                        Err(e) => {
-                                            println!("failed {:?}", e);
-                                        }
-                                    }
-                                }
-                            )
-                            
-                        );
-                    })
-                );
-                
-                grid.attach(&button, 5, row_idx, 1, 1);
-            }
+                                )
+                                
+                            );
+                        })
+                    );
                     
-            entries.push((format!("{}",a.get_id()), ss, ParamWidget::Entry(entry)));                
+                    grid.attach(&button, 5, row_idx, 1, 1);
+                }
                         
-                    
-                
+                entries.push((format!("{}",a.get_id()), ss, ParamWidget::Entry(entry)));                
+            }
+             
+        } 
             
-            
-        } else {
-            let checkbutton = CheckButton::builder()
-                .build();
-            
-            grid.attach(&checkbutton, 3, row_idx, 1, 1);
-            let ss = match a.get_short() {
-                Some(s) => Some(format!("-{}", s)),
-                None => None
-            };
-            entries.push((format!("{}",a.get_id()), ss, ParamWidget::CheckButton(checkbutton)));
-        }
         row_idx+=1;
     }   
     
@@ -477,7 +500,11 @@ fn add_subcommand_pages(stack: &Stack, cmd: &Command, task_status: Arc<Mutex<Tas
     if cmd.has_subcommands() {
         for subcommand in cmd.get_subcommands() {
             //add_subcommand_pages(notebook, subcommand);
-            add_subcommand_pages(stack, subcommand, task_status.clone(), parent);
+            if subcommand.get_name() == "help" {
+                //pass
+            } else {
+                add_subcommand_pages(stack, subcommand, task_status.clone(), parent);
+            }
             
         }
     }

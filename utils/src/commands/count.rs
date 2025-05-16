@@ -1,6 +1,6 @@
 use osmquadtree::count::run_count;
 use clap::{Args,ValueHint};
-use crate::commands::{RunCmd,Defaults};
+use crate::commands::{RunCmd,Defaults,add_trailing_slash_to_directory};
 use crate::error::Result;
 
 
@@ -32,7 +32,7 @@ impl RunCmd for Count {
     fn run(&self, defaults: &Defaults) -> Result<()> {
         
         Ok(run_count(
-            &self.input,
+            &add_trailing_slash_to_directory(&self.input),
             self.primitive,
             match self.numchan { None => defaults.numchan_default, Some(n) => n.into() },
             self.filter.as_deref(),
