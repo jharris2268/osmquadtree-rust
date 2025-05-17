@@ -183,11 +183,7 @@ fn is_entry(a: &Arg) -> bool {
     false
 }*/
 
-#[derive(PartialEq,Debug)]
-enum TaskStatus {
-    Running,
-    NotRunning
-}
+
 
 
 #[derive(PartialEq,Debug)]
@@ -214,7 +210,7 @@ fn get_arg_type(a: &Arg) -> Result<ArgType> {
 
 
 
-fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win: &ApplicationWindow) -> impl IsA<Widget> {
+fn build_subcommand_page(cmd: &Command, run_command: RunCommand, win: &ApplicationWindow) -> impl IsA<Widget> {
     
     let mut entries = Vec::new();
     
@@ -435,11 +431,11 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win
     
     
     
-    
+    let run_command_clone=run_command.clone();
     run_button.connect_clicked(move |_| {
         
           
-        match task_status.lock() {
+        /*match task_status.lock() {
             Ok(mut t) => {
                 println!("TaskStatus: {:?}", t);
                 if *t == TaskStatus::Running {
@@ -457,9 +453,15 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win
         }
         println!("TaskStatus: {:?}", task_status.lock());
         let task_status_clone = task_status.clone();
-        println!("task_status_clone: {:?}",task_status_clone.lock());
+        println!("task_status_clone: {:?}",task_status_clone.lock());*/
         let args = prep_args(&name, &entries);
-        gio::spawn_blocking(clone!(
+        
+        if let Err(e) = run_command_clone.run(args) {
+            message!("run_command failed??");
+        }
+            
+        
+        /*gio::spawn_blocking(clone!(
             move || {
                 if let Err(e) = run_cmd(&args) { 
                     message!("run_cmd failed?? {:?}, {:?}", args, e);
@@ -468,7 +470,7 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win
                 *task_status_clone.lock().unwrap() = TaskStatus::NotRunning;
                 println!("task_status_clone: {:?}",task_status_clone.lock());
             }
-        ));
+        ));*/
         
     });   
     
@@ -479,14 +481,15 @@ fn build_subcommand_page(cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, win
     
 }
 
+//task_status: Arc<Mutex<TaskStatus>>
 
-fn add_subcommand_pages(stack: &Stack, cmd: &Command, task_status: Arc<Mutex<TaskStatus>>, parent: &ApplicationWindow) {
+fn add_subcommand_pages(stack: &Stack, cmd: &Command, run_command: RunCommand, parent: &ApplicationWindow) {
 
     
     
     if !(cmd.has_subcommands() && cmd.is_subcommand_required_set()) {
         
-        let page = build_subcommand_page(cmd, task_status.clone(), parent);
+        let page = build_subcommand_page(cmd, run_command.clone(), parent);
         
         let name = cmd.get_name();
         
@@ -503,13 +506,95 @@ fn add_subcommand_pages(stack: &Stack, cmd: &Command, task_status: Arc<Mutex<Tas
             if subcommand.get_name() == "help" {
                 //pass
             } else {
-                add_subcommand_pages(stack, subcommand, task_status.clone(), parent);
+                add_subcommand_pages(stack, subcommand, run_command.clone(), parent);
             }
             
         }
     }
     
 }
+
+/*
+#[derive(Debug)]
+enum TaskStatus {
+    Running(std::thread::JoinHandle<()>),
+    NotRunning
+}*/
+
+#[derive(Debug, Clone)]
+struct RunCommand {
+    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>
+}
+
+impl RunCommand {
+    
+    pub fn new() -> RunCommand {
+        RunCommand{thread: Arc::new(Mutex::new(None))}
+    }
+    
+    pub fn set_finished(&self) -> Result<()> {
+        match self.thread.try_lock() {
+            Err(e) => Err(Error::GetStateError("can't access thread".into())),
+            Ok(mut mutex) => {
+                *mutex = None;
+                Ok(())
+            }
+        }
+    }
+    
+    pub fn run(&self, args: Vec<String>) -> Result<()> {
+        
+        let rc = self.clone();
+        match self.thread.try_lock() {
+            Err(e) => Err(Error::GetStateError("can't access thread".into())),
+            Ok(mut mutex) => {
+                if let Some(_) = *mutex {
+                    return Err(Error::GetStateError("thread running".into() ));
+                }
+        
+                *mutex = Some(std::thread::spawn(
+                    move || {
+                        if let Err(e) = run_cmd(&args) { 
+                            message!("run_cmd failed?? {:?}, {:?}", args, e);
+                        }
+                        if let Err(e) = rc.set_finished() {
+                            message!("set TaskStatus::NotRunning failed");
+                        }
+                                   
+                    }
+                ));
+                Ok(())
+            }
+        }
+        
+    }
+    
+    pub fn join(&self) -> Result<()> {
+        match self.thread.try_lock() {
+            Err(e) => Err(Error::GetStateError("can't access thread".into())),
+            Ok(mut mutex) => {
+                
+                let mut handle_taken = mutex.take();
+                if let Some(mut handle) = handle_taken {
+                    
+                    
+                    let r = handle.join();
+                    println!("{:?}", r);
+                    println!("mutex is now {:?}", mutex);                    
+                    return Err(Error::GetStateError("xx".into() ));
+                }
+        
+                
+                Ok(())
+            }
+        }
+        
+    }
+    
+}
+        
+    
+    
 
 
 fn build_ui(app: &Application) {
@@ -561,8 +646,9 @@ fn build_ui(app: &Application) {
     stack.add_titled(&help_page, Some("Help"), "Help");
     //add_subcommand_pages(&notebook, &clap_app);
     
-    let task_status = Arc::new(Mutex::new(TaskStatus::NotRunning));
-    add_subcommand_pages(&stack, &clap_app, task_status, &window);
+    //let task_status = Arc::new(Mutex::new(TaskStatus::NotRunning));
+    let run_command = RunCommand::new();
+    add_subcommand_pages(&stack, &clap_app, run_command.clone(), &window);
     
     
     let stack_sidebar = StackSidebar::builder()
@@ -623,7 +709,7 @@ fn build_ui(app: &Application) {
         }
     ));
     
-    let button = ToggleButton::builder()
+    let button = Button::builder()
         .label("cancel")
         .margin_start(12)
         .margin_end(12)
@@ -634,8 +720,13 @@ fn build_ui(app: &Application) {
     //gtk_box.append(&button);
     grid.attach(&button, 2, 2, 1, 1);
     
-    button.connect_toggled(move |b| {
-        cancel_set.store(b.is_active(), std::sync::atomic::Ordering::Relaxed);
+    let run_command_clone = run_command.clone();
+    
+    button.connect_clicked(move |b| {
+        cancel_set.store(true, std::sync::atomic::Ordering::Relaxed);
+        run_command_clone.join();
+        println!("run_command cancelled");    
+        cancel_set.store(false, std::sync::atomic::Ordering::Relaxed);
     });
     
     /*
